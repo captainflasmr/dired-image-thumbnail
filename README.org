@@ -1,0 +1,232 @@
+#+TITLE: dired-image-thumbnail
+#+AUTHOR: James Dyer
+#+OPTIONS: toc:2 num:nil
+
+* Introduction
+
+=dired-image-thumbnail= is an Emacs package that extends =image-dired= with an enhanced workflow inspired by =dired-video-thumbnail=. It adds powerful sorting, filtering, recursive directory support, and flexible display options to the standard =image-dired= thumbnail viewer.
+
+* Features
+
+- *Sorting* - Sort thumbnails by name, date, size, or image dimensions
+- *Filtering* - Filter by name regexp, file size range, or dimension range
+- *Recursive directory support* - Browse images in subdirectories with a single command
+- *Auto-recursive* - Automatically searches subdirectories when the current directory has no images
+- *Wrap display mode* - Thumbnails flow naturally and wrap to window width
+- *Enhanced header line* - Shows current image info, dimensions, sort/filter status
+- *Local marks* - Mark files even when they're not visible in the Dired buffer
+- *Full integration* - Works seamlessly with existing =image-dired= functionality
+
+* Requirements
+
+- Emacs 28.1 or later
+- =image-dired= (built-in)
+
+* Installation
+
+** Manual
+
+Download =dired-image-thumbnail.el= and place it in your load-path:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "/path/to/dired-image-thumbnail/")
+(require 'dired-image-thumbnail)
+#+end_src
+
+** use-package
+
+#+begin_src emacs-lisp
+(use-package dired-image-thumbnail
+  :load-path "/path/to/dired-image-thumbnail/"
+  :after image-dired)
+#+end_src
+
+** straight.el
+
+#+begin_src emacs-lisp
+(straight-use-package
+ '(dired-image-thumbnail :type git :host github :repo "captainflasmr/dired-image-thumbnail"))
+#+end_src
+
+* Usage
+
+** Quick Start
+
+The simplest way to use =dired-image-thumbnail= is through its entry point:
+
+#+begin_src emacs-lisp
+M-x dired-image-thumbnail-show-all-from-dir RET /path/to/images RET
+#+end_src
+
+For recursive searching:
+
+#+begin_src emacs-lisp
+M-x dired-image-thumbnail-show-all-recursive RET /path/to/images RET
+#+end_src
+
+** From Dired
+
+You can also use the standard =image-dired= commands - =dired-image-thumbnail= automatically enhances the thumbnail buffer with new keybindings:
+
+1. Open a directory in Dired
+2. Mark some images (or don't, to view all)
+3. Run =C-t d= (=image-dired-display-thumbs=)
+4. Use the new keybindings for sorting, filtering, etc.
+
+* Keybindings
+
+In the =*image-dired*= thumbnail buffer, =dired-image-thumbnail= adds:
+
+** Sorting
+
+| Key   | Command                           | Description                     |
+|-------+-----------------------------------+---------------------------------|
+| =s n= | ~dired-image-thumbnail-sort-by-name~   | Sort by filename                |
+| =s d= | ~dired-image-thumbnail-sort-by-date~   | Sort by modification date       |
+| =s s= | ~dired-image-thumbnail-sort-by-size~   | Sort by file size               |
+| =s D= | ~dired-image-thumbnail-sort-by-dimensions~ | Sort by image dimensions (area) |
+| =s r= | ~dired-image-thumbnail-sort-reverse~   | Reverse sort order              |
+| =S=   | ~dired-image-thumbnail-sort~           | Interactive sort selection      |
+
+** Filtering
+
+| Key   | Command                              | Description                |
+|-------+--------------------------------------+----------------------------|
+| =/ n= | ~dired-image-thumbnail-filter-by-name~    | Filter by name regexp      |
+| =/ s= | ~dired-image-thumbnail-filter-by-size~    | Filter by file size range  |
+| =/ d= | ~dired-image-thumbnail-filter-by-dimensions~ | Filter by dimension range |
+| =/ /= | ~dired-image-thumbnail-filter-clear~      | Clear all filters          |
+| =/ c= | ~dired-image-thumbnail-filter-clear~      | Clear all filters          |
+| =\=   | ~dired-image-thumbnail-filter~            | Interactive filter selection |
+
+** Display
+
+| Key | Command                            | Description                     |
+|-----+------------------------------------+---------------------------------|
+| =R= | ~dired-image-thumbnail-toggle-recursive~ | Toggle recursive directory search |
+| =w= | ~dired-image-thumbnail-toggle-wrap~     | Toggle wrap display mode        |
+| =r= | ~dired-image-thumbnail-refresh~         | Refresh the display             |
+
+** Marking
+
+| Key | Command                            | Description        |
+|-----+------------------------------------+--------------------|
+| =M= | ~dired-image-thumbnail-mark-all~        | Mark all images    |
+| =t= | ~dired-image-thumbnail-toggle-all-marks~ | Toggle all marks   |
+
+Note: The standard =image-dired= marking keybindings (=m=, =u=, =U=, =d=) continue to work as expected.
+
+* Header Line
+
+The enhanced header line displays:
+
+- *Mark indicator* - A =*= if the current image is marked
+- *Filename* - Relative to source directory for recursive views
+- *Image count* - Current position / total (e.g., =23/156=)
+- *Dimensions* - Width × Height in pixels (e.g., =1920x1080=)
+- *File size* - Human-readable size (e.g., =2.4M=)
+- *Sort indicator* - Current sort field and direction (e.g., =[name ↑]=)
+- *Active filters* - Description of any active filters
+- *Recursive indicator* - =[recursive]= when viewing subdirectories
+
+* Customization
+
+All customisation options are in the =dired-image-thumbnail= group. Use =M-x customize-group RET dired-image-thumbnail RET= to browse them interactively.
+
+** Default Sort Settings
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-sort-by 'name)      ; 'name, 'date, 'size, or 'dimensions
+(setq dired-image-thumbnail-sort-order 'ascending) ; 'ascending or 'descending
+#+end_src
+
+** Recursive Behavior
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-recursive nil)      ; Always recursive by default
+(setq dired-image-thumbnail-auto-recursive t)   ; Auto-recursive when no images in current dir
+#+end_src
+
+** Display Options
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-wrap-display nil)   ; Enable wrap display by default
+#+end_src
+
+** Image Extensions
+
+Add or modify recognised image file extensions:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-image-extensions
+      '("jpg" "jpeg" "png" "gif" "bmp" "tiff" "tif" "webp" "svg" "ico" "heic" "heif"))
+#+end_src
+
+* Example Configuration
+
+#+begin_src emacs-lisp
+(use-package dired-image-thumbnail
+  :load-path "/path/to/dired-image-thumbnail/"
+  :after image-dired
+  :custom
+  (dired-image-thumbnail-sort-by 'date)
+  (dired-image-thumbnail-sort-order 'descending)
+  (dired-image-thumbnail-auto-recursive t)
+  (dired-image-thumbnail-wrap-display t)
+  :bind (:map dired-mode-map
+         ("C-t +" . dired-image-thumbnail-show-all-from-dir)
+         ("C-t *" . dired-image-thumbnail-show-all-recursive)))
+#+end_src
+
+* Workflow Examples
+
+** Reviewing a Photo Collection
+
+1. =M-x dired-image-thumbnail-show-all-from-dir RET ~/Photos RET=
+2. Press =R= to include subdirectories
+3. Press =s d= then =s r= to sort by date (newest first)
+4. Browse with =n= / =p= or arrow keys
+5. Mark keepers with =m=, switch to Dired with =TAB=
+
+** Finding Large Images
+
+1. Open thumbnail view
+2. Press =/ s= and enter =1M= for minimum, leave maximum empty
+3. Press =s s= then =s r= to sort by size (largest first)
+4. Review and mark images for deletion
+
+** Finding High-Resolution Images
+
+1. Open thumbnail view
+2. Press =/ d= and enter minimum width =1920=, minimum height =1080=
+3. Browse only HD+ images
+
+** Organizing by Date
+
+1. =M-x dired-image-thumbnail-show-all-recursive RET ~/Pictures RET=
+2. Press =s d= to sort by date
+3. Use the header line to see file dates as you browse
+
+* Comparison with Standard image-dired
+
+| Feature                | image-dired | dired-image-thumbnail |
+|------------------------+-------------+------------------|
+| Thumbnail display      | ✓           | ✓                |
+| Dired integration      | ✓           | ✓                |
+| Sorting                | ✗           | ✓ (4 criteria)   |
+| Filtering              | ✗           | ✓ (name, size, dims) |
+| Recursive directories  | ✗           | ✓                |
+| Auto-recursive         | ✗           | ✓                |
+| Wrap display           | ✗           | ✓                |
+| Enhanced header line   | Basic       | Enhanced         |
+| Local marks            | ✗           | ✓                |
+
+* Related Packages
+
+- [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Image_002dDired.html][image-dired]] - Built-in image thumbnail browser for dired (extended by this package)
+- [[https://github.com/captainflasmr/dired-video-thumbnail][dired-video-thumbnail]] - Video thumbnail browser (inspiration for this package)
+- [[https://github.com/alexluigit/dirvish][dirvish]] - A modern file manager for Emacs with preview support
+
+* License
+
+GPL-3.0-or-later
