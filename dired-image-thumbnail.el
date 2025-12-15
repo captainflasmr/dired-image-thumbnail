@@ -341,39 +341,40 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
 
 ;;; Header line
 
-(defun dired-image-thumbnail--header-line ()
-  "Generate enhanced header line."
-  (let* ((file (image-dired-original-file-name))
-         (recursive-info (if dired-image-thumbnail--recursive " [recursive]" ""))
-         (sort-info (format "[%s %s]"
-                            (or dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
-                            (if (eq (or dired-image-thumbnail--sort-order
-                                        dired-image-thumbnail-sort-order)
-                                    'ascending)
-                                "↑" "↓")))
-         (filter-info (dired-image-thumbnail--format-active-filters))
-         (showing (length dired-image-thumbnail--current-images))
-         (total (length dired-image-thumbnail--all-images)))
-    (if file
-        (let* ((rel-name (dired-image-thumbnail--relative-name file))
-               (size (dired-image-thumbnail--format-file-size file))
-               (image-count (format "%d/%d" (get-text-property (point) 'image-number) total)))
-          (concat
-           "  "
-           (propertize rel-name 'face 'image-dired-thumb-header-file-name)
-           "  "
-           (propertize image-count 'face 'image-dired-thumb-header-image-count)
-           "  "
-           (propertize size 'face 'image-dired-thumb-header-file-size)
-           "  "
-           sort-info
-           (if (string-empty-p filter-info) "" (format "  %s" filter-info))
-           recursive-info))
-      (format "Image-Dired+ | %d/%d images %s%s%s"
-              showing total
-              sort-info
-              (if (string-empty-p filter-info) "" (format " %s" filter-info))
-              recursive-info))))
+(defun dired-image-thumbnail--format-properties-string (orig-fun buf file image-count props comment)
+  "Advice around `image-dired-format-properties-string' for enhanced header line.
+ORIG-FUN is the original function.
+BUF, FILE, IMAGE-COUNT, PROPS, and COMMENT are passed to the original function.
+When `dired-image-thumbnail--all-images' is set, return our enhanced header line.
+Otherwise, fall back to the original function."
+  (if dired-image-thumbnail--all-images
+      ;; Use our enhanced header line
+      (let* ((recursive-info (if dired-image-thumbnail--recursive " [recursive]" ""))
+             (sort-info (format "[%s %s]"
+                                (or dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
+                                (if (eq (or dired-image-thumbnail--sort-order
+                                            dired-image-thumbnail-sort-order)
+                                        'ascending)
+                                    "↑" "↓")))
+             (filter-info (dired-image-thumbnail--format-active-filters))
+             (total (length dired-image-thumbnail--all-images))
+             (rel-name (dired-image-thumbnail--relative-name file))
+             (size (dired-image-thumbnail--format-file-size file)))
+        (concat
+         "  "
+         (propertize rel-name 'face 'image-dired-thumb-header-file-name)
+         "  "
+         (propertize image-count 'face 'image-dired-thumb-header-image-count)
+         "  "
+         (propertize size 'face 'image-dired-thumb-header-file-size)
+         "  "
+         sort-info
+         (if (string-empty-p filter-info) "" (format "  %s" filter-info))
+         recursive-info))
+    ;; Fall back to original function
+    (funcall orig-fun buf file image-count props comment)))
+
+(advice-add 'image-dired-format-properties-string :around #'dired-image-thumbnail--format-properties-string)
 
 ;;; Display functions
 
@@ -414,8 +415,7 @@ RECURSIVE indicates if images were found recursively."
               (setq-local word-wrap t)
               (setq-local truncate-lines nil))
           (image-dired--line-up-with-method))
-        ;; Set enhanced header line
-        ;; (setq-local header-line-format '(:eval (dired-image-thumbnail--header-line)))
+        ;; Set enhanced header line (done via mode hook)
         (goto-char (point-min))
         (image-dired-forward-image)))
     (pop-to-buffer buf)
@@ -471,8 +471,7 @@ RECURSIVE indicates if images were found recursively."
             (setq-local word-wrap t)
             (setq-local truncate-lines nil))
         (image-dired--line-up-with-method))
-      ;; Set header line
-      ;; (setq-local header-line-format '(:eval (dired-image-thumbnail--header-line)))
+      ;; Header line is set via mode hook
       ;; Restore position
       (goto-char (point-min))
       (when current-file
@@ -705,3 +704,5 @@ Accepts formats like: 100, 100K, 1M, 1G"
 
 (provide 'dired-image-thumbnail)
 ;;; dired-image-thumbnail.el ends here
+
+
