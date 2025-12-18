@@ -149,6 +149,9 @@ When nil, the standard `image-dired' line-up method is used."
 (defvar-local dired-image-thumbnail--display-size 128
   "Current display size for thumbnails (for zoom).")
 
+(defvar-local dired-image-thumbnail--dimension-cache (make-hash-table :test 'equal)
+  "Cache for image dimensions keyed by file name.")
+
 ;;; Thumbnail insertion with zoom support
 
 (defun dired-image-thumbnail--insert-thumbnail (thumb-file original-file dired-buf image-number)
@@ -280,6 +283,8 @@ Returns non-nil if the file can now be found in dired."
 
 (defun dired-image-thumbnail--format-image-dimensions (file)
   "Return formatted dimensions string for image FILE (e.g., \"1920x1080\")."
+  (message file)
+  (princ file)
   (let ((dims (dired-image-thumbnail--get-image-dimensions file)))
     (if (and dims (> (car dims) 0) (> (cdr dims) 0))
         (format "%dx%d" (car dims) (cdr dims))
@@ -325,11 +330,16 @@ Returns non-nil if the file can now be found in dired."
 (defun dired-image-thumbnail--get-image-dimensions (file)
   "Get dimensions of image FILE as (width . height).
 Returns (0 . 0) if dimensions cannot be determined."
-  (condition-case nil
-      (let* ((img (create-image file))
-             (size (image-size img t)))
-        (cons (car size) (cdr size)))
-    (error (cons 0 0))))
+  (or (gethash file dired-image-thumbnail--dimension-cache)
+      (let ((dims
+             (condition-case nil
+                 (let* ((img (create-image file)))
+                   (when img
+                     (let ((size (image-size img t)))
+                       (cons (car size) (cdr size)))))
+               (error (cons 0 0)))))
+        (puthash file dims dired-image-thumbnail--dimension-cache)
+        dims)))
 
 ;;; Filtering functions
 
@@ -420,12 +430,19 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
 
 ;;; Header line
 
+(defvar dired-image-thumbnail--format-properties-string-count 0
+  "Counter for how many times `dired-image-thumbnail--format-properties-string` is called.")
+
 (defun dired-image-thumbnail--format-properties-string (orig-fun buf file image-count props comment)
   "Advice around `image-dired-format-properties-string' for enhanced header line.
 ORIG-FUN is the original function.
 BUF, FILE, IMAGE-COUNT, PROPS, and COMMENT are passed to the original function.
 When `dired-image-thumbnail--all-images' is set, return our enhanced header line.
 Otherwise, fall back to the original function."
+  (setq dired-image-thumbnail--format-properties-string-count
+        (1+ dired-image-thumbnail--format-properties-string-count))
+  (message "dired-image-thumbnail--format-properties-string called %d times (file=%s)"
+           dired-image-thumbnail--format-properties-string-count file)
   (if dired-image-thumbnail--all-images
       ;; Use our enhanced header line
       (let* ((recursive-info (if dired-image-thumbnail--recursive " [recursive]" ""))
