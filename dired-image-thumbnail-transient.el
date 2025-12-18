@@ -53,11 +53,7 @@
 (declare-function dired-image-thumbnail--format-active-filters "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort-by-name "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort-by-date "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-sort-by-dimensions "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-filter-by-dimensions "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-mark "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-unmark "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-toggle-mark "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-mark-all "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-unmark-all "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-all-marks "dired-image-thumbnail")
@@ -113,8 +109,7 @@
   ["Sort By"
    ("n" "Name" dired-image-thumbnail-sort-by-name :transient nil)
    ("d" "Date modified" dired-image-thumbnail-sort-by-date :transient nil)
-   ("s" "Size" dired-image-thumbnail-sort-by-size :transient nil)
-   ("D" "Dimensions" dired-image-thumbnail-sort-by-dimensions :transient nil)]
+   ("s" "Size" dired-image-thumbnail-sort-by-size :transient nil)]
   ["Order"
    ("r" "Reverse order" dired-image-thumbnail-sort-reverse :transient nil)])
 
@@ -124,8 +119,7 @@
   "Filtering commands for image thumbnails."
   ["Filter By"
    ("n" "Name (regexp)" dired-image-thumbnail-filter-by-name :transient nil)
-   ("s" "Size range" dired-image-thumbnail-filter-by-size :transient nil)
-   ("d" "Dimensions range" dired-image-thumbnail-filter-by-dimensions :transient nil)]
+   ("s" "Size range" dired-image-thumbnail-filter-by-size :transient nil)]
   ["Actions"
    ("c" "Clear all filters" dired-image-thumbnail-filter-clear :transient nil)
    ("/" "Clear all filters" dired-image-thumbnail-filter-clear :transient nil)])
@@ -159,7 +153,7 @@
   [["Marking"
     ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
     ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
-    ("t" "Toggle current" dired-image-thumbnail-toggle-mark :transient nil)
+    ("t" "Toggle current" dired-image-thumbnail-toggle-all-marks :transient nil)
     ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
     ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]

@@ -28,8 +28,8 @@
 ;; This package extends `image-dired' with an improved workflow inspired by
 ;; `dired-video-thumbnail'.  It adds:
 ;;
-;; - Sorting: Sort thumbnails by name, date, size, or dimensions
-;; - Filtering: Filter by name regexp, file size range, or dimension range
+;; - Sorting: Sort thumbnails by name, date, size
+;; - Filtering: Filter by name regexp, file size range
 ;; - Recursive directory support: Browse images in subdirectories
 ;; - Wrap display mode: Thumbnails flow naturally and wrap to window width
 ;; - Enhanced header line: Shows current image info with sort/filter status
@@ -41,9 +41,9 @@
 ;; After loading this package, the enhanced features are available in
 ;; `image-dired-thumbnail-mode' buffers via new keybindings:
 ;;
-;;   s   - Sorting prefix (s n: name, s d: date, s s: size, s D: dimensions, s r: reverse)
+;;   s   - Sorting prefix (s n: name, s d: date, s s: size, s, s r: reverse)
 ;;   S   - Interactive sort selection
-;;   /   - Filtering prefix (/ n: name, / s: size, / d: dimensions, / c: clear)
+;;   /   - Filtering prefix (/ n: name, / s: size, / c: clear)
 ;;   R   - Toggle recursive directory search
 ;;   w   - Toggle wrap display mode
 ;;   r   - Refresh display
@@ -59,7 +59,6 @@
 ;;   x   - Delete marked images
 ;;   ?/h - Help
 ;;
-;; Or call `dired-image-thumbnail-show-all-from-dir' for the enhanced entry point.
 
 ;;; Code:
 
@@ -81,8 +80,7 @@
   "Default sorting criteria for thumbnails."
   :type '(choice (const :tag "Name" name)
                  (const :tag "Date modified" date)
-                 (const :tag "Size" size)
-                 (const :tag "Dimensions" dimensions))
+                 (const :tag "Size" size))
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-sort-order 'descending
@@ -144,12 +142,6 @@ When nil, the standard `image-dired' line-up method is used."
 
 (defvar-local dired-image-thumbnail--filter-size-max nil
   "Maximum size filter in bytes.")
-
-(defvar-local dired-image-thumbnail--filter-dimensions-min nil
-  "Minimum dimensions filter (width*height).")
-
-(defvar-local dired-image-thumbnail--filter-dimensions-max nil
-  "Maximum dimensions filter (width*height).")
 
 (defvar-local dired-image-thumbnail--recursive nil
   "Whether current buffer is showing images recursively.")
@@ -325,13 +317,6 @@ Returns non-nil if the file can now be found in dired."
                    (lambda (a b)
                      (< (or (file-attribute-size (file-attributes a)) 0)
                         (or (file-attribute-size (file-attributes b)) 0)))))
-            ('dimensions
-             (sort (copy-sequence images)
-                   (lambda (a b)
-                     (let ((size-a (dired-image-thumbnail--get-image-dimensions a))
-                           (size-b (dired-image-thumbnail--get-image-dimensions b)))
-                       (< (* (car size-a) (cdr size-a))
-                          (* (car size-b) (cdr size-b)))))))
             (_ images))))
     (if (eq sort-order 'descending)
         (nreverse sorted)
@@ -371,19 +356,6 @@ Returns (0 . 0) if dimensions cannot be determined."
                       (or (null dired-image-thumbnail--filter-size-max)
                           (<= size dired-image-thumbnail--filter-size-max)))))
              result)))
-    ;; Filter by dimensions
-    (when (or dired-image-thumbnail--filter-dimensions-min
-              dired-image-thumbnail--filter-dimensions-max)
-      (setq result
-            (seq-filter
-             (lambda (file)
-               (let* ((dims (dired-image-thumbnail--get-image-dimensions file))
-                      (pixels (* (car dims) (cdr dims))))
-                 (and (or (null dired-image-thumbnail--filter-dimensions-min)
-                          (>= pixels dired-image-thumbnail--filter-dimensions-min))
-                      (or (null dired-image-thumbnail--filter-dimensions-max)
-                          (<= pixels dired-image-thumbnail--filter-dimensions-max)))))
-             result)))
     result))
 
 (defun dired-image-thumbnail--format-active-filters ()
@@ -399,16 +371,6 @@ Returns (0 . 0) if dimensions cannot be determined."
                       "0")
                     (if dired-image-thumbnail--filter-size-max
                         (file-size-human-readable dired-image-thumbnail--filter-size-max)
-                      "∞"))
-            filters))
-    (when (or dired-image-thumbnail--filter-dimensions-min
-              dired-image-thumbnail--filter-dimensions-max)
-      (push (format "dimensions:%s-%s"
-                    (if dired-image-thumbnail--filter-dimensions-min
-                        (format "%.0f" dired-image-thumbnail--filter-dimensions-min)
-                      "0")
-                    (if dired-image-thumbnail--filter-dimensions-max
-                        (format "%.0f" dired-image-thumbnail--filter-dimensions-max)
                       "∞"))
             filters))
     (if filters
@@ -508,51 +470,6 @@ Uses `image-dired--thumb-update-marks' to update the display."
   (when (fboundp 'image-dired--thumb-update-marks)
     (image-dired--thumb-update-marks)))
 
-(defun dired-image-thumbnail--display-thumbs-internal (images source-dir dired-buf recursive)
-  "Display IMAGES thumbnails with enhanced features.
-SOURCE-DIR is the original directory.
-DIRED-BUF is the associated dired buffer.
-RECURSIVE indicates if images were found recursively."
-  (let ((buf (image-dired-create-thumbnail-buffer)))
-    (with-current-buffer buf
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        ;; Set buffer-local variables
-        (setq dired-image-thumbnail--all-images images)
-        (setq dired-image-thumbnail--source-dir source-dir)
-        (setq dired-image-thumbnail--dired-buffer dired-buf)
-        (setq dired-image-thumbnail--recursive recursive)
-        ;; Initialize sort settings
-        (setq dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
-        (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)
-        ;; Apply filter and sort
-        (let ((filtered (dired-image-thumbnail--filter-images images)))
-          (setq dired-image-thumbnail--current-images
-                (dired-image-thumbnail--sort-images filtered)))
-        ;; Insert thumbnails
-        (setq image-dired--number-of-thumbnails 0)
-        (dolist (file dired-image-thumbnail--current-images)
-          (let ((thumb-file (image-dired-thumb-name file)))
-            (dired-image-thumbnail--insert-thumbnail
-             (if (file-exists-p thumb-file)
-                 thumb-file
-               (image-dired--get-create-thumbnail-file file))
-             file dired-buf
-             (cl-incf image-dired--number-of-thumbnails))))
-        ;; Line up
-        (if dired-image-thumbnail-wrap-display
-            (progn
-              (setq-local word-wrap t)
-              (setq-local truncate-lines nil))
-          (image-dired--line-up-with-method))
-        ;; Restore mark display
-        (dired-image-thumbnail--restore-mark-display)
-        ;; Set enhanced header line (done via mode hook)
-        (goto-char (point-min))
-        (image-dired-forward-image)))
-    (pop-to-buffer buf)
-    buf))
-
 (defun dired-image-thumbnail-refresh ()
   "Refresh the thumbnail display with current images."
   (interactive)
@@ -568,8 +485,6 @@ RECURSIVE indicates if images were found recursively."
           (filter-name dired-image-thumbnail--filter-name)
           (filter-size-min dired-image-thumbnail--filter-size-min)
           (filter-size-max dired-image-thumbnail--filter-size-max)
-          (filter-dimensions-min dired-image-thumbnail--filter-dimensions-min)
-          (filter-dimensions-max dired-image-thumbnail--filter-dimensions-max)
           (recursive dired-image-thumbnail--recursive)
           (display-size dired-image-thumbnail--display-size)
           (all-images dired-image-thumbnail--all-images)
@@ -586,8 +501,6 @@ RECURSIVE indicates if images were found recursively."
       (setq dired-image-thumbnail--filter-name filter-name)
       (setq dired-image-thumbnail--filter-size-min filter-size-min)
       (setq dired-image-thumbnail--filter-size-max filter-size-max)
-      (setq dired-image-thumbnail--filter-dimensions-min filter-dimensions-min)
-      (setq dired-image-thumbnail--filter-dimensions-max filter-dimensions-max)
       ;; Apply filter and sort
       (let ((filtered (dired-image-thumbnail--filter-images all-images)))
         (setq dired-image-thumbnail--current-images
@@ -619,32 +532,6 @@ RECURSIVE indicates if images were found recursively."
               (image-dired-forward-image)))
         (image-dired-forward-image)))))
 
-;;; Entry point
-
-;;;###autoload
-(defun dired-image-thumbnail-show-all-from-dir (dir &optional recursive)
-  "Show all images from DIR with enhanced features.
-With prefix argument RECURSIVE, search subdirectories as well."
-  (interactive
-   (list (read-directory-name "Image directory: " nil nil t)
-         current-prefix-arg))
-  (let* ((auto-recursive (and (not recursive)
-                              dired-image-thumbnail-auto-recursive
-                              (dired-image-thumbnail--has-subdirectories-p dir)
-                              (null (seq-filter #'dired-image-thumbnail--image-p
-                                                (directory-files dir t nil t)))))
-         (use-recursive (or recursive dired-image-thumbnail-recursive auto-recursive))
-         (images (dired-image-thumbnail--find-images dir use-recursive))
-         (dired-buf (dired-noselect dir)))
-    (when auto-recursive
-      (message "No images in directory, searching recursively..."))
-    (if images
-        (dired-image-thumbnail--display-thumbs-internal images dir dired-buf use-recursive)
-      (user-error "No image files found in %s%s" dir
-                  (if use-recursive " (recursive)" "")))))
-
-;;; Sorting commands
-
 (defun dired-image-thumbnail-sort-by-name ()
   "Sort thumbnails by name."
   (interactive)
@@ -666,13 +553,6 @@ With prefix argument RECURSIVE, search subdirectories as well."
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Sorted by size"))
 
-(defun dired-image-thumbnail-sort-by-dimensions ()
-  "Sort thumbnails by dimensions (pixel count)."
-  (interactive)
-  (setq dired-image-thumbnail--sort-by 'dimensions)
-  (dired-image-thumbnail--apply-sort-and-filter)
-  (message "Sorted by dimensions"))
-
 (defun dired-image-thumbnail-sort-reverse ()
   "Reverse current sort order."
   (interactive)
@@ -687,13 +567,12 @@ With prefix argument RECURSIVE, search subdirectories as well."
   "Interactively choose sort criteria."
   (interactive)
   (let ((choice (completing-read "Sort by: "
-                                 '("name" "date" "size" "dimensions" "reverse")
+                                 '("name" "date" "size" "reverse")
                                  nil t)))
     (pcase choice
       ("name" (dired-image-thumbnail-sort-by-name))
       ("date" (dired-image-thumbnail-sort-by-date))
       ("size" (dired-image-thumbnail-sort-by-size))
-      ("dimensions" (dired-image-thumbnail-sort-by-dimensions))
       ("reverse" (dired-image-thumbnail-sort-reverse)))))
 
 ;;; Filtering commands
@@ -737,28 +616,12 @@ Enter size in human-readable format (e.g., 100k, 1M)."
       (* (string-to-number (match-string 1 str)) 1024))
      (t (string-to-number str)))))
 
-(defun dired-image-thumbnail-filter-by-dimensions (min max)
-  "Filter thumbnails by dimensions (pixels) between MIN and MAX."
-  (interactive
-   (list (read-string "Minimum pixels (e.g., 1000000 for 1MP, empty for none): ")
-         (read-string "Maximum pixels (e.g., 10000000 for 10MP, empty for none): ")))
-  (setq dired-image-thumbnail--filter-dimensions-min
-        (if (string-empty-p min) nil (string-to-number min)))
-  (setq dired-image-thumbnail--filter-dimensions-max
-        (if (string-empty-p max) nil (string-to-number max)))
-  (dired-image-thumbnail--apply-sort-and-filter)
-  (message "Dimension filter: %s - %s pixels"
-           (or dired-image-thumbnail--filter-dimensions-min "0")
-           (or dired-image-thumbnail--filter-dimensions-max "∞")))
-
 (defun dired-image-thumbnail-filter-clear ()
   "Clear all filters."
   (interactive)
   (setq dired-image-thumbnail--filter-name nil)
   (setq dired-image-thumbnail--filter-size-min nil)
   (setq dired-image-thumbnail--filter-size-max nil)
-  (setq dired-image-thumbnail--filter-dimensions-min nil)
-  (setq dired-image-thumbnail--filter-dimensions-max nil)
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Filters cleared"))
 
@@ -766,12 +629,11 @@ Enter size in human-readable format (e.g., 100k, 1M)."
   "Interactively choose filter type."
   (interactive)
   (let ((choice (completing-read "Filter by: "
-                                 '("name" "size" "dimensions" "clear")
+                                 '("name" "size" "clear")
                                  nil t)))
     (pcase choice
       ("name" (call-interactively #'dired-image-thumbnail-filter-by-name))
       ("size" (call-interactively #'dired-image-thumbnail-filter-by-size))
-      ("dimensions" (call-interactively #'dired-image-thumbnail-filter-by-dimensions))
       ("clear" (dired-image-thumbnail-filter-clear)))))
 
 (defun dired-image-thumbnail-increase-size ()
@@ -794,35 +656,6 @@ the original files for crisp display (slower but higher quality)."
     (setq dired-image-thumbnail--display-size (max 32 (- current 32)))
     (dired-image-thumbnail-refresh)
     (message "Thumbnail size: %d" dired-image-thumbnail--display-size)))
-
-;;; Marking commands - leverage image-dired's native marking
-
-;; For single mark/unmark, we use image-dired's functions directly.
-;; They handle: marking in dired, updating thumbnail display, and moving forward.
-
-(defun dired-image-thumbnail-mark ()
-  "Mark the image at point.
-Uses `image-dired-mark-thumb-original-file' which marks in dired and updates display."
-  (interactive)
-  (if-let ((file (image-dired-original-file-name)))
-      (let ((filename (file-name-nondirectory file)))
-        ;; For recursive mode, ensure file is accessible in dired
-        (when dired-image-thumbnail--recursive
-          (dired-image-thumbnail--ensure-subdir-in-dired
-           file dired-image-thumbnail--dired-buffer dired-image-thumbnail--source-dir))
-        ;; Use image-dired's native function (handles dired + thumbnail display)
-        (image-dired-mark-thumb-original-file)
-        (message "Marked: %s (%d total)" filename (dired-image-thumbnail--count-marked)))
-    (user-error "No image at point")))
-
-(defun dired-image-thumbnail-toggle-mark ()
-  "Toggle mark on the image at point."
-  (interactive)
-  (if (image-dired-original-file-name)
-      (if (image-dired-thumb-file-marked-p)
-          (dired-image-thumbnail-unmark)
-        (dired-image-thumbnail-mark))
-    (user-error "No image at point")))
 
 (defun dired-image-thumbnail-mark-all ()
   "Mark all visible images in the thumbnail buffer."
@@ -965,8 +798,6 @@ Uses `image-dired-mark-thumb-original-file' which marks in dired and updates dis
         (filter-name dired-image-thumbnail--filter-name)
         (filter-size-min dired-image-thumbnail--filter-size-min)
         (filter-size-max dired-image-thumbnail--filter-size-max)
-        (filter-dimensions-min dired-image-thumbnail--filter-dimensions-min)
-        (filter-dimensions-max dired-image-thumbnail--filter-dimensions-max)
         (sort-by dired-image-thumbnail--sort-by)
         (sort-order dired-image-thumbnail--sort-order)
         (display-size dired-image-thumbnail--display-size))
@@ -984,8 +815,6 @@ Uses `image-dired-mark-thumb-original-file' which marks in dired and updates dis
             (setq dired-image-thumbnail--filter-name filter-name)
             (setq dired-image-thumbnail--filter-size-min filter-size-min)
             (setq dired-image-thumbnail--filter-size-max filter-size-max)
-            (setq dired-image-thumbnail--filter-dimensions-min filter-dimensions-min)
-            (setq dired-image-thumbnail--filter-dimensions-max filter-dimensions-max)
             (setq dired-image-thumbnail--sort-by sort-by)
             (setq dired-image-thumbnail--sort-order sort-order)
             (setq dired-image-thumbnail--display-size display-size)
@@ -1034,12 +863,10 @@ Uses `image-dired-mark-thumb-original-file' which marks in dired and updates dis
     (princ "  sn           Sort by name\n")
     (princ "  sd           Sort by date\n")
     (princ "  ss           Sort by size\n")
-    (princ "  sD           Sort by dimensions\n")
     (princ "  sr           Reverse sort order\n\n")
     (princ "Filtering (/ prefix):\n")
     (princ "  /n           Filter by name\n")
     (princ "  /s           Filter by size\n")
-    (princ "  /d           Filter by dimensions\n")
     (princ "  /c           Clear filters\n\n")
     (princ "Other:\n")
     (princ "  q            Quit window\n")
@@ -1052,7 +879,6 @@ Uses `image-dired-mark-thumb-original-file' which marks in dired and updates dis
     (define-key map (kbd "n") #'dired-image-thumbnail-sort-by-name)
     (define-key map (kbd "d") #'dired-image-thumbnail-sort-by-date)
     (define-key map (kbd "s") #'dired-image-thumbnail-sort-by-size)
-    (define-key map (kbd "D") #'dired-image-thumbnail-sort-by-dimensions)
     (define-key map (kbd "r") #'dired-image-thumbnail-sort-reverse)
     map)
   "Keymap for sorting commands.")
@@ -1061,7 +887,6 @@ Uses `image-dired-mark-thumb-original-file' which marks in dired and updates dis
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "n") #'dired-image-thumbnail-filter-by-name)
     (define-key map (kbd "s") #'dired-image-thumbnail-filter-by-size)
-    (define-key map (kbd "d") #'dired-image-thumbnail-filter-by-dimensions)
     (define-key map (kbd "/") #'dired-image-thumbnail-filter-clear)
     (define-key map (kbd "c") #'dired-image-thumbnail-filter-clear)
     map)
@@ -1080,7 +905,6 @@ Uses `image-dired-mark-thumb-original-file' which marks in dired and updates dis
   (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
   (define-key image-dired-thumbnail-mode-map (kbd "-") #'dired-image-thumbnail-decrease-size)
   ;; Marking
-  (define-key image-dired-thumbnail-mode-map (kbd "m") #'dired-image-thumbnail-mark)
   (define-key image-dired-thumbnail-mode-map (kbd "M") #'dired-image-thumbnail-mark-all)
   (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
   ;; File operations
