@@ -152,6 +152,59 @@ When nil, the standard `image-dired' line-up method is used."
 (defvar-local dired-image-thumbnail--dimension-cache (make-hash-table :test 'equal)
   "Cache for image dimensions keyed by file name.")
 
+(defvar-local dired-image-thumbnail--dimension-pending (make-hash-table :test 'equal)
+  "Files pending dimension calculation. Value is t if process is running.")
+
+(defun dired-image-thumbnail--get-image-dimensions (file)
+  "Get dimensions of image FILE as (width . height), or (0 . 0) if unknown.
+If not cached, launch an async process (`identify`) to fill the cache."
+  (or (gethash file dired-image-thumbnail--dimension-cache)
+      (progn
+        (unless (gethash file dired-image-thumbnail--dimension-pending)
+          (puthash file t dired-image-thumbnail--dimension-pending)
+          (dired-image-thumbnail--start-identify-process file))
+        ;; Fallback until process finishes
+        (cons 0 0))))
+
+(defun dired-image-thumbnail--start-identify-process (file)
+  "Start an async process to get dimensions for FILE."
+  (let ((buf (generate-new-buffer " *dired-image-thumb-identify*")))
+    (make-process
+     :name "dired-image-thumb-identify"
+     :buffer buf
+     :command (list "identify" "-format" "%w %h" file)
+     :noquery t
+     :sentinel
+     (lambda (proc _event)
+       (when (eq (process-status proc) 'exit)
+         (with-current-buffer (process-buffer proc)
+           (goto-char (point-min))
+           (let ((success (and (zerop (process-exit-status proc))
+                               (not (bobp)))))
+             (if success
+                 (let* ((line (buffer-substring-no-properties (point-min) (point-max)))
+                        (nums (split-string line)))
+                   (when (and (= (length nums) 2)
+                              (string-match-p "^[0-9]+$" (car nums))
+                              (string-match-p "^[0-9]+$" (cadr nums)))
+                     (let ((w (string-to-number (car nums)))
+                           (h (string-to-number (cadr nums))))
+                       (puthash file (cons w h) dired-image-thumbnail--dimension-cache)
+                       ;; Remove from pending
+                       (remhash file dired-image-thumbnail--dimension-pending)
+                       ;; Refresh header or overlays
+                       (dired-image-thumbnail--refresh-dimensions file)))))
+             ;; On error, still remove pending
+             (remhash file dired-image-thumbnail--dimension-pending)))
+         (kill-buffer (process-buffer proc)))))))
+
+  (defun dired-image-thumbnail--refresh-dimensions (file)
+  "Refresh the header line or overlays for FILE whose dimensions just arrived."
+  ;; Find any place where FILE is being displayed and force a redisplay.
+  ;; Simplest: just refresh the buffer (could be smarter).
+  (when (eq major-mode 'image-dired-thumbnail-mode)
+    (dired-image-thumbnail-refresh)))
+
 ;;; Thumbnail insertion with zoom support
 
 (defun dired-image-thumbnail--insert-thumbnail (thumb-file original-file dired-buf image-number)
@@ -327,19 +380,19 @@ Returns non-nil if the file can now be found in dired."
         (nreverse sorted)
       sorted)))
 
-(defun dired-image-thumbnail--get-image-dimensions (file)
-  "Get dimensions of image FILE as (width . height).
-Returns (0 . 0) if dimensions cannot be determined."
-  (or (gethash file dired-image-thumbnail--dimension-cache)
-      (let ((dims
-             (condition-case nil
-                 (let* ((img (create-image file)))
-                   (when img
-                     (let ((size (image-size img t)))
-                       (cons (car size) (cdr size)))))
-               (error (cons 0 0)))))
-        (puthash file dims dired-image-thumbnail--dimension-cache)
-        dims)))
+;; (defun dired-image-thumbnail--get-image-dimensions (file)
+;;   "Get dimensions of image FILE as (width . height).
+;; Returns (0 . 0) if dimensions cannot be determined."
+;;   (or (gethash file dired-image-thumbnail--dimension-cache)
+;;       (let ((dims
+;;              (condition-case nil
+;;                  (let* ((img (create-image file)))
+;;                    (when img
+;;                      (let ((size (image-size img t)))
+;;                        (cons (car size) (cdr size)))))
+;;                (error (cons 0 0)))))
+;;         (puthash file dims dired-image-thumbnail--dimension-cache)
+;;         dims)))
 
 ;;; Filtering functions
 
