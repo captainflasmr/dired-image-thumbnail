@@ -167,36 +167,40 @@ If not cached, launch an async process (`identify`) to fill the cache."
         (cons 0 0))))
 
 (defun dired-image-thumbnail--start-identify-process (file)
-  "Start an async process to get dimensions for FILE."
-  (let ((buf (generate-new-buffer " *dired-image-thumb-identify*")))
+  "Start an async process to get dimensions for FILE with improved logging."
+  (let ((buf (generate-new-buffer " *dired-image-thumb-identify*"))
+        (file-attr file)) ; Capture file name for the closure
     (make-process
      :name "dired-image-thumb-identify"
      :buffer buf
-     :command (list "identify" "-format" "%w %h" file)
+     ;; Use expand-file-name to ensure the path is absolute and correct
+     :command (list "identify" "-format" "%w %h" (expand-file-name file))
      :noquery t
      :sentinel
      (lambda (proc _event)
        (when (eq (process-status proc) 'exit)
-         (with-current-buffer (process-buffer proc)
-           (goto-char (point-min))
-           (let ((success (and (zerop (process-exit-status proc))
-                               (not (bobp)))))
-             (if success
+         (let ((exit-status (process-exit-status proc)))
+           (with-current-buffer (process-buffer proc)
+             (goto-char (point-min))
+             (if (zerop exit-status)
                  (let* ((line (buffer-substring-no-properties (point-min) (point-max)))
                         (nums (split-string line)))
-                   (when (and (= (length nums) 2)
-                              (string-match-p "^[0-9]+$" (car nums))
-                              (string-match-p "^[0-9]+$" (cadr nums)))
-                     (let ((w (string-to-number (car nums)))
-                           (h (string-to-number (cadr nums))))
-                       (puthash file (cons w h) dired-image-thumbnail--dimension-cache)
-                       ;; Remove from pending
-                       (remhash file dired-image-thumbnail--dimension-pending)
-                       ;; Refresh header or overlays
-                       (dired-image-thumbnail-refresh)))))
-             ;; On error, still remove pending
-             (remhash file dired-image-thumbnail--dimension-pending)))
-         (kill-buffer (process-buffer proc)))))))
+                   (if (and (= (length nums) 2)
+                            (string-match-p "^[0-9]+$" (car nums))
+                            (string-match-p "^[0-9]+$" (cadr nums)))
+                       (let ((w (string-to-number (car nums)))
+                             (h (string-to-number (cadr nums))))
+                         (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)
+                         (message "dired-image-thumbnail: Cached %s as %dx%d" (file-name-nondirectory file-attr) w h)
+                         ;; Refresh only if we are in a relevant buffer
+                         (dolist (b (buffer-list))
+                           (with-current-buffer b
+                             (when (derived-mode-p 'image-dired-thumbnail-mode)
+                               (force-mode-line-update)))))
+                     (message "dired-image-thumbnail: Failed to parse output for %s: '%s'" file-attr line)))
+               (message "dired-image-thumbnail: 'identify' failed for %s with status %d" file-attr exit-status)))
+           (remhash file-attr dired-image-thumbnail--dimension-pending)
+           (kill-buffer (process-buffer proc))))))))
 
 (defun dired-image-thumbnail--insert-thumbnail (thumb-file original-file dired-buf image-number)
   "Insert thumbnail THUMB-FILE for ORIGINAL-FILE with zoom support.
