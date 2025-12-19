@@ -456,8 +456,7 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
         (setq dired-image-thumbnail--dired-buffer dired-buf)
         (setq dired-image-thumbnail--source-dir source-dir)
         (setq dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
-        (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)))
-    (dired-image-thumbnail-refresh)))
+        (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)))))
 
 ;;; Header line
 
