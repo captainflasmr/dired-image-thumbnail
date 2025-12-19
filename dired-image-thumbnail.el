@@ -191,16 +191,16 @@ If not cached, launch an async process (`identify`) to fill the cache."
                        (let ((w (string-to-number (car nums)))
                              (h (string-to-number (cadr nums))))
                          (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)
-                         (message "dired-image-thumbnail: Cached %s as %dx%d" (file-name-nondirectory file-attr) w h)
-                         ;; Refresh only if we are in a relevant buffer
-                         (dolist (b (buffer-list))
-                           (with-current-buffer b
+                         ;; Force image-dired to re-render the header immediately
+                         (dolist (window (window-list))
+                           (with-current-buffer (window-buffer window)
                              (when (derived-mode-p 'image-dired-thumbnail-mode)
-                               (force-mode-line-update)))))
+                               (image-dired--update-header-line)))))
                      (message "dired-image-thumbnail: Failed to parse output for %s: '%s'" file-attr line)))
                (message "dired-image-thumbnail: 'identify' failed for %s with status %d" file-attr exit-status)))
            (remhash file-attr dired-image-thumbnail--dimension-pending)
-           (kill-buffer (process-buffer proc))))))))
+           (kill-buffer (process-buffer proc)))))
+     )))
 
 (defun dired-image-thumbnail--insert-thumbnail (thumb-file original-file dired-buf image-number)
   "Insert thumbnail THUMB-FILE for ORIGINAL-FILE with zoom support.
