@@ -146,7 +146,7 @@ When nil, the standard `image-dired' line-up method is used."
 (defvar-local dired-image-thumbnail--recursive nil
   "Whether current buffer is showing images recursively.")
 
-(defvar-local dired-image-thumbnail--display-size 128
+(defvar-local dired-image-thumbnail--display-size 150
   "Current display size for thumbnails (for zoom).")
 
 (defvar-local dired-image-thumbnail--dimension-cache (make-hash-table :test 'equal)
