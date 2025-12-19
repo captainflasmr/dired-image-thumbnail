@@ -193,19 +193,10 @@ If not cached, launch an async process (`identify`) to fill the cache."
                        ;; Remove from pending
                        (remhash file dired-image-thumbnail--dimension-pending)
                        ;; Refresh header or overlays
-                       (dired-image-thumbnail--refresh-dimensions file)))))
+                       (dired-image-thumbnail-refresh)))))
              ;; On error, still remove pending
              (remhash file dired-image-thumbnail--dimension-pending)))
          (kill-buffer (process-buffer proc)))))))
-
-  (defun dired-image-thumbnail--refresh-dimensions (file)
-  "Refresh the header line or overlays for FILE whose dimensions just arrived."
-  ;; Find any place where FILE is being displayed and force a redisplay.
-  ;; Simplest: just refresh the buffer (could be smarter).
-  (when (eq major-mode 'image-dired-thumbnail-mode)
-    (dired-image-thumbnail-refresh)))
-
-;;; Thumbnail insertion with zoom support
 
 (defun dired-image-thumbnail--insert-thumbnail (thumb-file original-file dired-buf image-number)
   "Insert thumbnail THUMB-FILE for ORIGINAL-FILE with zoom support.
@@ -266,15 +257,6 @@ If RECURSIVE is non-nil, search subdirectories as well."
     (seq-filter #'dired-image-thumbnail--image-p
                 (directory-files directory t nil t))))
 
-(defun dired-image-thumbnail--has-subdirectories-p (directory)
-  "Return non-nil if DIRECTORY has subdirectories."
-  (let ((found nil))
-    (dolist (file (directory-files directory t "^[^.]" t))
-      (when (and (file-directory-p file)
-                 (not (member (file-name-nondirectory file) '("." ".."))))
-        (setq found t)))
-    found))
-
 (defun dired-image-thumbnail--file-marked-p (file)
   "Return non-nil if FILE is marked in the associated dired buffer."
   (when (and dired-image-thumbnail--dired-buffer
@@ -284,15 +266,6 @@ If RECURSIVE is non-nil, search subdirectories as well."
         (goto-char (point-min))
         (when (dired-goto-file file)
           (image-dired-dired-file-marked-p))))))
-
-(defun dired-image-thumbnail--file-in-dired-p (file)
-  "Return non-nil if FILE is visible in the associated dired buffer."
-  (when (and dired-image-thumbnail--dired-buffer
-             (buffer-live-p dired-image-thumbnail--dired-buffer))
-    (with-current-buffer dired-image-thumbnail--dired-buffer
-      (save-excursion
-        (goto-char (point-min))
-        (dired-goto-file file)))))
 
 (defun dired-image-thumbnail--ensure-subdir-in-dired (file dired-buf source-dir)
   "Ensure the subdirectory containing FILE is inserted in dired.
@@ -534,12 +507,6 @@ Otherwise, fall back to the original function."
 
 ;;; Display functions
 
-(defun dired-image-thumbnail--restore-mark-display ()
-  "Restore visual mark display for all thumbnails.
-Uses `image-dired--thumb-update-marks' to update the display."
-  (when (fboundp 'image-dired--thumb-update-marks)
-    (image-dired--thumb-update-marks)))
-
 (defun dired-image-thumbnail-refresh ()
   "Refresh the thumbnail display with current images."
   (interactive)
@@ -592,15 +559,7 @@ Uses `image-dired--thumb-update-marks' to update the display."
             (setq-local truncate-lines nil))
         (image-dired--line-up-with-method))
       ;; Restore mark display
-      (dired-image-thumbnail--restore-mark-display)
-      ;; Return to same file or first image
-      (goto-char (point-min))
-      (if (and current-file
-               (member current-file dired-image-thumbnail--current-images))
-          (let ((index (cl-position current-file dired-image-thumbnail--current-images :test #'equal)))
-            (dotimes (_ index)
-              (image-dired-forward-image)))
-        (image-dired-forward-image)))))
+      (image-dired--thumb-update-marks))))
 
 (defun dired-image-thumbnail-sort-by-name ()
   "Sort thumbnails by name."
