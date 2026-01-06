@@ -35,6 +35,8 @@
 ;; - Enhanced header line: Shows current image info with sort/filter status
 ;; - Marking: Uses built-in image-dired marking with visual border
 ;; - File operations: Delete images, navigate to dired buffer
+;; - Window layout: Automatic split-screen layout (thumbnails left, image right)
+;; - Auto-display: Navigate with n/p to automatically show full-size images
 ;;
 ;; Usage:
 ;;
@@ -59,7 +61,7 @@
 ;;   /   - Filtering prefix (/ n: name, / s: size, / c: clear)
 ;;   w   - Toggle wrap display mode
 ;;   r   - Refresh display
-;;   n/p - Next/previous image
+;;   n/p - Next/previous image (with auto-display when enabled)
 ;;   +/- - Increase/decrease size
 ;;   m   - Mark image (uses image-dired's native marking with border)
 ;;   u   - Unmark image
@@ -68,6 +70,7 @@
 ;;   t   - Toggle all marks
 ;;   d   - Go to Dired buffer
 ;;   D   - Delete image at point
+;;   C-d - Delete image and move to next
 ;;   x   - Delete marked images
 ;;   ?/h - Help
 ;;
@@ -105,6 +108,22 @@
   "Whether to wrap thumbnails to fill the buffer width.
 When non-nil, thumbnails flow naturally and wrap based on window width.
 When nil, the standard `image-dired' line-up method is used."
+  :type 'boolean
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-manage-window-layout t
+  "Whether to manage window layout for thumbnail and image display buffers.
+When non-nil, thumbnail buffer appears on the left (50% width) and
+image display buffer appears on the right (50% width).
+When nil, use Emacs default window placement."
+  :type 'boolean
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-auto-display-on-navigate t
+  "Whether to automatically display full-size image when navigating thumbnails.
+When non-nil, pressing `n` or `p` in the thumbnail buffer automatically
+updates the image display buffer. When nil, you must press RET or
+C-<return> to view the full-size image."
   :type 'boolean
   :group 'dired-image-thumbnail)
 
@@ -773,8 +792,14 @@ the original files for crisp display (slower but higher quality)."
   (with-help-window "*Image Thumbnail Help*"
     (princ "Image Thumbnail Mode Commands:\n\n")
     (princ "Navigation:\n")
-    (princ "  n, →         Next image\n")
-    (princ "  p, ←         Previous image\n")
+    (princ "  n, →         Next image")
+    (when dired-image-thumbnail-auto-display-on-navigate
+      (princ " (auto-display)"))
+    (princ "\n")
+    (princ "  p, ←         Previous image")
+    (when dired-image-thumbnail-auto-display-on-navigate
+      (princ " (auto-display)"))
+    (princ "\n")
     (princ "  +/-          Increase/decrease size\n\n")
     (princ "Marking:\n")
     (princ "  m            Mark image (visual border)\n")
@@ -784,6 +809,7 @@ the original files for crisp display (slower but higher quality)."
     (princ "  t            Toggle all marks\n\n")
     (princ "File Operations:\n")
     (princ "  D            Delete image at point\n")
+    (princ "  C-d          Delete image and move to next\n")
     (princ "  x            Delete marked images\n")
     (princ "  d            Go to Dired buffer\n\n")
     (princ "Display:\n")
@@ -803,6 +829,8 @@ the original files for crisp display (slower but higher quality)."
     (princ "  M-x dired-image-thumbnail-insert-subdir-recursive\n")
     (princ "  M-x dired-image-thumbnail-insert-image-subdirs\n")
     (princ "  M-x dired-image-thumbnail-kill-all-subdirs\n\n")
+    (princ "In Image Display Buffer:\n")
+    (princ "  C-d          Delete image and move to next\n\n")
     (princ "Other:\n")
     (princ "  q            Quit window\n")
     (princ "  h, ?         This help\n")))
@@ -988,16 +1016,85 @@ This returns the view to just the top-level directory."
   ;; File operations
   (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
   (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)
+  (define-key image-dired-thumbnail-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-and-next)
   (define-key image-dired-thumbnail-mode-map (kbd "x") #'dired-image-thumbnail-delete-marked)
+  ;; Enhanced navigation with auto-display
+  (when dired-image-thumbnail-auto-display-on-navigate
+    (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
+    (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image))
   ;; Other
   (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-help)
   (define-key image-dired-thumbnail-mode-map (kbd "h") #'dired-image-thumbnail-help))
 
+;;; Enhanced navigation and deletion
+
+(defun dired-image-thumbnail-next-image ()
+  "Move to next thumbnail and display full-size image."
+  (interactive)
+  (image-dired-forward-image)
+  (image-dired-display-this))
+
+(defun dired-image-thumbnail-previous-image ()
+  "Move to previous thumbnail and display full-size image."
+  (interactive)
+  (image-dired-backward-image)
+  (image-dired-display-this))
+
+(defun dired-image-thumbnail-delete-and-next ()
+  "Delete current image file and move to next thumbnail.
+This permanently deletes the file from disk and removes its thumbnail."
+  (interactive)
+  (let ((file-name (image-dired-original-file-name)))
+    (when (and file-name
+               (y-or-n-p (format "Delete %s? " (file-name-nondirectory file-name))))
+      (delete-file file-name)
+      (image-dired-delete-char)
+      (when (not (eobp))
+        (image-dired-display-this))
+      (message "Deleted %s" file-name))))
+
+(defun dired-image-thumbnail-delete-image-and-next ()
+  "Delete current image in image-mode buffer and move to next.
+For use in the *image-dired-display-image* buffer."
+  (interactive)
+  (let ((current-file (buffer-file-name)))
+    (when (and current-file
+               (y-or-n-p (format "Delete %s? " (file-name-nondirectory current-file))))
+      (image-next-file 1)
+      (delete-file current-file)
+      (message "Deleted %s" current-file))))
+
+;;; Window layout management
+
+(defun dired-image-thumbnail-setup-display-buffer ()
+  "Configure display-buffer rules for thumbnail and image buffers."
+  (when dired-image-thumbnail-manage-window-layout
+    ;; Thumbnail buffer on the left
+    (add-to-list 'display-buffer-alist
+                 '("\\*image-dired\\*"
+                   display-buffer-in-direction
+                   (direction . left)
+                   (window . root)
+                   (window-width . 0.5)))
+    ;; Image display buffer on the right
+    (add-to-list 'display-buffer-alist
+                 '("\\*image-dired-display-image\\*"
+                   display-buffer-in-direction
+                   (direction . right)
+                   (window . root)
+                   (window-width . 0.5)))))
+
 ;;;###autoload
 (with-eval-after-load 'image-dired
   (dired-image-thumbnail-setup-keys)
+  (dired-image-thumbnail-setup-display-buffer)
   ;; Hook to initialize our variables when entering thumbnail mode
   (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer))
+
+;;;###autoload
+(with-eval-after-load 'image-mode
+  ;; Add C-d keybinding for deleting in image display buffer
+  (define-key image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next))
 
 ;; Load transient menu support if available
 (when (require 'dired-image-thumbnail-transient nil t)
