@@ -414,7 +414,7 @@ Otherwise, fall back to the original function."
                                 (if (eq (or dired-image-thumbnail--sort-order
                                             dired-image-thumbnail-sort-order)
                                         'ascending)
-                                    "↑" "↓")))
+                                    "<" ">")))
              (filter-info (dired-image-thumbnail--format-active-filters))
              (marked-count (dired-image-thumbnail--count-marked))
              (marked-info (if (> marked-count 0)

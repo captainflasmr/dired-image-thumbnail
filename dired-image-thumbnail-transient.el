@@ -147,20 +147,18 @@
     ("S" "Interactive sort" dired-image-thumbnail-sort :transient nil)]
    ["Filtering"
     ("/" "Filter menu..." dired-image-thumbnail-transient-filter :transient nil)
-    ("\\" "Interactive filter" dired-image-thumbnail-filter :transient nil)]]
+    ("\\" "Interactive filter" dired-image-thumbnail-filter :transient nil)]
+   ["Delete"
+    ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
+    ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]]
   [["Marking"
     ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
     ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
-    ("t" "Toggle current" dired-image-thumbnail-toggle-all-marks :transient nil)
     ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
     ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]
-   ["Delete"
-    ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
-    ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]
    ["Display"
     ("r" "Refresh" dired-image-thumbnail-refresh :transient nil)
-    ("v" "Display menu..." dired-image-thumbnail-transient-display :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
     ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)]
@@ -173,8 +171,7 @@
 (defun dired-image-thumbnail-transient-setup-keys ()
   "Set up keybindings for the transient menu."
   (when (fboundp 'dired-image-thumbnail-transient)
-    (define-key image-dired-thumbnail-mode-map (kbd "C-c .") #'dired-image-thumbnail-transient)
-    (define-key image-dired-thumbnail-mode-map (kbd ".") #'dired-image-thumbnail-transient)))
+    (define-key image-dired-thumbnail-mode-map (kbd "C-c .") #'dired-image-thumbnail-transient)))
 
 (defun dired-image-thumbnail--in-thumbnail-buffer-p ()
   "Return non-nil if current buffer is an image-dired thumbnail buffer with our enhancements."
