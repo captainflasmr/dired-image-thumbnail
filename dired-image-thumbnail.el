@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 0.3.0
+;; Version: 0.4.0
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -38,10 +38,16 @@
 ;;
 ;; Usage:
 ;;
-;; After loading this package, the enhanced features are available in
-;; `image-dired-thumbnail-mode' buffers via new keybindings:
+;; From a Dired buffer, call `M-x dired-image-thumbnail' to display
+;; thumbnails with enhanced features. You can also use the standard
+;; `M-x image-dired' and the enhanced features will be available.
 ;;
-;;   s   - Sorting prefix (s n: name, s d: date, s s: size, s, s r: reverse)
+;; The package uses the standard *image-dired* buffer, so all native
+;; image-dired marking commands work as expected.
+;;
+;; Key bindings in thumbnail buffer:
+;;
+;;   s   - Sorting prefix (s n: name, s d: date, s s: size, s r: reverse)
 ;;   S   - Interactive sort selection
 ;;   /   - Filtering prefix (/ n: name, / s: size, / c: clear)
 ;;   R   - Toggle recursive directory search
@@ -166,79 +172,59 @@ If not cached, launch an async process (`identify`) to fill the cache."
         ;; Fallback until process finishes
         (cons 0 0))))
 
+(defun dired-image-thumbnail--nearest-image-original-file-name (&optional pos)
+  "Return the 'original-file-name property at POS, or search nearby if not found."
+  (let ((pos (or pos (point))))
+    (or (get-text-property pos 'original-file-name)
+        ;; Search backward then forward for nearest image property
+        (save-excursion
+          (let ((found nil)
+                (limit (point-min)))
+            (goto-char pos)
+            (while (and (not found) (> (point) limit))
+              (setq found (get-text-property (point) 'original-file-name))
+              (unless found (backward-char)))
+            found))
+        (save-excursion
+          (let ((found nil)
+                (limit (point-max)))
+            (goto-char pos)
+            (while (and (not found) (< (point) limit))
+              (setq found (get-text-property (point) 'original-file-name))
+              (unless found (forward-char)))
+            found)))))
+
 (defun dired-image-thumbnail--start-identify-process (file)
   "Start an async process to get dimensions for FILE with improved logging."
   (let ((buf (generate-new-buffer " *dired-image-thumb-identify*"))
-        (file-attr file)) ; Capture file name for the closure
+        (file-attr file))
     (make-process
      :name "dired-image-thumb-identify"
      :buffer buf
-     ;; Use expand-file-name to ensure the path is absolute and correct
      :command (list "identify" "-format" "%w %h" (expand-file-name file))
      :noquery t
      :sentinel
      (lambda (proc _event)
-       (when (eq (process-status proc) 'exit)
-         (let ((exit-status (process-exit-status proc)))
-           (with-current-buffer (process-buffer proc)
-             (goto-char (point-min))
-             (when (zerop exit-status)
-               (let* ((line (buffer-substring-no-properties (point-min) (point-max)))
-                      (nums (split-string line)))
-                 (when (and (= (length nums) 2)
-                            (string-match-p "^[0-9]+$" (car nums))
-                            (string-match-p "^[0-9]+$" (cadr nums)))
-                   (let ((w (string-to-number (car nums)))
-                         (h (string-to-number (cadr nums))))
-                     (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)
-                     ;; Find any buffer displaying thumbnails and force its header update
-                     (dolist (buf (buffer-list))
-                       (with-current-buffer buf
-                         (when (derived-mode-p 'image-dired-thumbnail-mode)
-                           ;; image-dired--update-header-line specifically triggers 
-                           ;; the header refresh for the thumbnail buffer
-                           (image-dired--update-header-line))))
-                     )))))
-           (remhash file-attr dired-image-thumbnail--dimension-pending)
-           (kill-buffer (process-buffer proc))))))))
-
-(defun dired-image-thumbnail--insert-thumbnail (thumb-file original-file dired-buf image-number)
-  "Insert thumbnail THUMB-FILE for ORIGINAL-FILE with zoom support.
-DIRED-BUF is the associated dired buffer.
-IMAGE-NUMBER is the index of this image.
-Uses `dired-image-thumbnail--display-size' for scaling.
-When display size exceeds `image-dired-thumb-height', uses the original
-image file for crisp display."
-  (let* ((size (or dired-image-thumbnail--display-size 128))
-         ;; Use original file when zoomed beyond thumbnail size for quality
-         (use-original (> size image-dired-thumb-height))
-         (image-file (if use-original original-file thumb-file)))
-    (dired-image-thumbnail--insert-thumbnail-impl
-     image-file original-file dired-buf image-number size)))
-
-(defun dired-image-thumbnail--insert-thumbnail-impl (image-file original-file dired-buf image-number size)
-  "Insert IMAGE-FILE as thumbnail for ORIGINAL-FILE at SIZE.
-DIRED-BUF is the associated dired buffer.
-IMAGE-NUMBER is the index of this image."
-  (let ((beg (point)))
-    (condition-case nil
-        (insert-image (create-image image-file nil nil
-                                    :relief image-dired-thumb-relief
-                                    :margin image-dired-thumb-margin
-                                    :max-width size
-                                    :max-height size))
-      (error
-       ;; Fallback if image can't be loaded
-       (insert "[?]")))
-    (add-text-properties
-     beg (point)
-     (list 'image-dired-thumbnail t
-           'original-file-name original-file
-           'associated-dired-buffer dired-buf
-           'image-number image-number
-           'mouse-face 'highlight
-           'keymap image-dired-thumbnail-mode-map))
-    (insert " ")))
+       (let ((file-attr file-attr)) ; ensure file-attr is always bound in closure
+         (when (eq (process-status proc) 'exit)
+           (let ((exit-status (process-exit-status proc)))
+             (with-current-buffer (process-buffer proc)
+               (goto-char (point-min))
+               (when (zerop exit-status)
+                 (let* ((line (buffer-substring-no-properties (point-min) (point-max)))
+                        (nums (split-string line)))
+                   (when (and (= (length nums) 2)
+                              (string-match-p "^[0-9]+$" (car nums))
+                              (string-match-p "^[0-9]+$" (cadr nums)))
+                     (let ((w (string-to-number (car nums)))
+                           (h (string-to-number (cadr nums))))
+                       (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)
+                       (dolist (buf (buffer-list))
+                         (with-current-buffer buf
+                           (when (derived-mode-p 'image-dired-thumbnail-mode)
+                             (image-dired--update-header-line))))))))
+               (remhash file-attr dired-image-thumbnail--dimension-pending)
+               (kill-buffer (process-buffer proc))))))))))
 
 ;;; Utility functions
 
@@ -279,22 +265,22 @@ Returns non-nil if the file can now be found in dired."
   (when (and dired-buf (buffer-live-p dired-buf) source-dir)
     (let* ((file-dir (file-name-directory (expand-file-name file)))
            (source-dir-exp (expand-file-name source-dir)))
-      ;; Only insert if file is in a subdirectory of source-dir
-      (when (and (string-prefix-p source-dir-exp file-dir)
-                 (not (string= source-dir-exp file-dir)))
-        (with-current-buffer dired-buf
-          ;; Check if file is already accessible
-          (save-excursion
-            (goto-char (point-min))
-            (unless (dired-goto-file file)
-              ;; Need to insert the subdirectory
-              (condition-case err
-                  (progn
-                    (dired-insert-subdir file-dir)
-                    t)
-                (error
-                 (message "Could not insert subdir %s: %s" file-dir err)
-                 nil)))))))))
+      (with-current-buffer dired-buf
+        (save-excursion
+          (goto-char (point-min))
+          (or (dired-goto-file file) ; File already visible
+              ;; File not visible - try to insert its subdirectory
+              (when (and (string-prefix-p source-dir-exp file-dir)
+                         (not (string= source-dir-exp file-dir)))
+                (condition-case err
+                    (progn
+                      (dired-insert-subdir file-dir)
+                      ;; After insertion, check if file is now visible
+                      (goto-char (point-min))
+                      (dired-goto-file file))
+                  (error
+                   (message "Could not insert subdir %s: %s" file-dir err)
+                   nil)))))))))
 
 (defun dired-image-thumbnail--relative-name (file)
   "Return FILE name relative to the source directory."
@@ -313,8 +299,6 @@ Returns non-nil if the file can now be found in dired."
 
 (defun dired-image-thumbnail--format-image-dimensions (file)
   "Return formatted dimensions string for image FILE (e.g., \"1920x1080\")."
-  (message file)
-  (princ file)
   (let ((dims (dired-image-thumbnail--get-image-dimensions file)))
     (if (and dims (> (car dims) 0) (> (cdr dims) 0))
         (format "%dx%d" (car dims) (cdr dims))
@@ -356,20 +340,6 @@ Returns non-nil if the file can now be found in dired."
     (if (eq sort-order 'descending)
         (nreverse sorted)
       sorted)))
-
-;; (defun dired-image-thumbnail--get-image-dimensions (file)
-;;   "Get dimensions of image FILE as (width . height).
-;; Returns (0 . 0) if dimensions cannot be determined."
-;;   (or (gethash file dired-image-thumbnail--dimension-cache)
-;;       (let ((dims
-;;              (condition-case nil
-;;                  (let* ((img (create-image file)))
-;;                    (when img
-;;                      (let ((size (image-size img t)))
-;;                        (cons (car size) (cdr size)))))
-;;                (error (cons 0 0)))))
-;;         (puthash file dims dired-image-thumbnail--dimension-cache)
-;;         dims)))
 
 ;;; Filtering functions
 
@@ -439,7 +409,8 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
     ;; Collect images from the buffer's text properties
     (let ((images nil)
           (dired-buf nil)
-          (source-dir nil))
+          (source-dir nil)
+          (recursive-p nil))
       (save-excursion
         (goto-char (point-min))
         (while (not (eobp))
@@ -450,18 +421,22 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
             (unless source-dir
               (setq source-dir (file-name-directory file))))
           (forward-char)))
+      ;; Get recursive state from dired buffer if available
+      (when (and dired-buf (buffer-live-p dired-buf))
+        (with-current-buffer dired-buf
+          (setq recursive-p dired-image-thumbnail--recursive)
+          (unless source-dir
+            (setq source-dir dired-image-thumbnail--source-dir))))
       (when images
         (setq dired-image-thumbnail--all-images (nreverse images))
         (setq dired-image-thumbnail--current-images dired-image-thumbnail--all-images)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
-        (setq dired-image-thumbnail--source-dir source-dir)
+        (setq dired-image-thumbnail--source-dir (or source-dir default-directory))
+        (setq dired-image-thumbnail--recursive recursive-p)
         (setq dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
         (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)))))
 
 ;;; Header line
-
-(defvar dired-image-thumbnail--format-properties-string-count 0
-  "Counter for how many times `dired-image-thumbnail--format-properties-string` is called.")
 
 (defun dired-image-thumbnail--format-properties-string (orig-fun buf file image-count props comment)
   "Advice around `image-dired-format-properties-string' for enhanced header line.
@@ -469,10 +444,6 @@ ORIG-FUN is the original function.
 BUF, FILE, IMAGE-COUNT, PROPS, and COMMENT are passed to the original function.
 When `dired-image-thumbnail--all-images' is set, return our enhanced header line.
 Otherwise, fall back to the original function."
-  (setq dired-image-thumbnail--format-properties-string-count
-        (1+ dired-image-thumbnail--format-properties-string-count))
-  (message "dired-image-thumbnail--format-properties-string called %d times (file=%s)"
-           dired-image-thumbnail--format-properties-string-count file)
   (if dired-image-thumbnail--all-images
       ;; Use our enhanced header line
       (let* ((recursive-info (if dired-image-thumbnail--recursive " [recursive]" ""))
@@ -546,16 +517,19 @@ Otherwise, fall back to the original function."
       (let ((filtered (dired-image-thumbnail--filter-images all-images)))
         (setq dired-image-thumbnail--current-images
               (dired-image-thumbnail--sort-images filtered)))
-      ;; Insert thumbnails
-      (setq image-dired--number-of-thumbnails 0)
-      (dolist (file dired-image-thumbnail--current-images)
-        (let ((thumb-file (image-dired-thumb-name file)))
-          (dired-image-thumbnail--insert-thumbnail
-           (if (file-exists-p thumb-file)
-               thumb-file
-             (image-dired--get-create-thumbnail-file file))
-           file dired-buf
-           (cl-incf image-dired--number-of-thumbnails))))
+      ;; Temporarily override thumb size if needed
+      (let ((standard-size image-dired-thumb-size))
+        (when (and display-size (/= display-size standard-size))
+          (setq-local image-dired-thumb-size display-size))
+        ;; Insert thumbnails using image-dired's standard function
+        ;; This ensures proper marking support
+        (dolist (file dired-image-thumbnail--current-images)
+          (let ((thumb-file (image-dired-thumb-name file)))
+            ;; Create thumbnail if it doesn't exist
+            (unless (file-exists-p thumb-file)
+              (image-dired-create-thumb file thumb-file))
+            ;; Insert with all three required arguments
+            (image-dired-insert-thumbnail thumb-file file dired-buf))))
       ;; Line up
       (if dired-image-thumbnail-wrap-display
           (progn
@@ -564,7 +538,16 @@ Otherwise, fall back to the original function."
         (image-dired--line-up-with-method))
       ;; Restore mark display
       (image-dired--thumb-update-marks)
-      (image-dired--update-header-line))))
+      (image-dired--update-header-line)
+      ;; Try to restore position
+      (when current-file
+        (goto-char (point-min))
+        (let ((found nil))
+          (while (and (not found) (not (eobp)))
+            (when (equal (get-text-property (point) 'original-file-name) current-file)
+              (setq found t))
+            (unless found (forward-char)))
+          (unless found (goto-char (point-min))))))))
 
 (defun dired-image-thumbnail-sort-by-name ()
   "Sort thumbnails by name."
@@ -758,14 +741,14 @@ the original files for crisp display (slower but higher quality)."
       (dired dired-image-thumbnail--source-dir))))
 
 (defun dired-image-thumbnail-get-marked ()
-  "Return list of marked images, or image at point if none marked."
+  "Return list of marked images, or image at/near point if none marked."
   (unless dired-image-thumbnail--all-images
     (dired-image-thumbnail--initialize-buffer))
   (let ((marked (when dired-image-thumbnail--current-images
                   (seq-filter #'dired-image-thumbnail--file-marked-p
                               dired-image-thumbnail--current-images))))
     (or marked
-        (when-let ((file (image-dired-original-file-name)))
+        (when-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
           (list file)))))
 
 (defun dired-image-thumbnail-delete-marked ()
@@ -790,9 +773,9 @@ the original files for crisp display (slower but higher quality)."
       (message "Deleted %d image(s)" (length files)))))
 
 (defun dired-image-thumbnail-delete ()
-  "Delete the image at point."
+  "Delete the image at or near point."
   (interactive)
-  (if-let ((file (image-dired-original-file-name)))
+  (if-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
       (when (yes-or-no-p (format "Delete %s? " (file-name-nondirectory file)))
         ;; Find the next image to move to after deletion
         (let ((index (cl-position file dired-image-thumbnail--current-images :test #'equal)))
@@ -906,6 +889,136 @@ the original files for crisp display (slower but higher quality)."
     (princ "  q            Quit window\n")
     (princ "  h, ?         This help\n")))
 
+;;; Main entry point
+
+(defun dired-image-thumbnail--insert-all-subdirs (directory dired-buffer)
+  "Insert all subdirectories of DIRECTORY into DIRED-BUFFER.
+This makes all files in subdirectories visible to image-dired."
+  (when (buffer-live-p dired-buffer)
+    (let ((subdirs (dired-image-thumbnail--find-subdirs directory)))
+      (when subdirs
+        (with-current-buffer dired-buffer
+          (message "Inserting %d subdirectories..." (length subdirs))
+          (let ((inserted 0))
+            (dolist (subdir subdirs)
+              ;; Ensure directory has trailing slash
+              (let ((subdir-path (file-name-as-directory subdir)))
+                (condition-case err
+                    (progn
+                      (save-excursion
+                        ;; Check if this subdir is already inserted by looking for its header
+                        (goto-char (point-min))
+                        (unless (re-search-forward 
+                                (concat "^  " (regexp-quote subdir-path) ":$") 
+                                nil t)
+                          (goto-char (point-max))
+                          (dired-insert-subdir subdir-path)
+                          (setq inserted (1+ inserted)))))
+                  (error
+                   (message "Could not insert subdir %s: %s" subdir-path err)))))
+            (message "Inserted %d subdirectories" inserted)))))))
+
+(defun dired-image-thumbnail--find-subdirs (directory)
+  "Return a list of all subdirectories under DIRECTORY (recursive).
+Does not include DIRECTORY itself."
+  (let ((subdirs nil)
+        (dirs-to-process (list directory)))
+    (while dirs-to-process
+      (let ((current-dir (pop dirs-to-process)))
+        (dolist (file (directory-files current-dir t "^[^.]" t))
+          (when (and (file-directory-p file)
+                     (not (member (file-name-nondirectory file) '("." ".."))))
+            (push file subdirs)
+            (push file dirs-to-process)))))
+    (nreverse subdirs)))
+
+(defun dired-image-thumbnail--find-images-in-buffer (dired-buffer)
+  "Return list of image files visible in DIRED-BUFFER.
+This looks at what's actually shown in the dired buffer, including
+any inserted subdirectories."
+  (with-current-buffer dired-buffer
+    (let ((images nil))
+      (save-excursion
+        (goto-char (point-min))
+        (while (not (eobp))
+          (when-let ((file (dired-get-filename nil t)))
+            (when (and (not (file-directory-p file))
+                       (dired-image-thumbnail--image-p file))
+              (push file images)))
+          (forward-line 1)))
+      (nreverse images))))
+
+(defun dired-image-thumbnail--has-subdirectories-p (directory)
+  "Return non-nil if DIRECTORY has subdirectories."
+  (let ((found nil))
+    (dolist (file (directory-files directory t "^[^.]" t))
+      (when (and (file-directory-p file)
+                 (not (member (file-name-nondirectory file) '("." ".."))))
+        (setq found t)))
+    found))
+
+;;;###autoload
+(defun dired-image-thumbnail (&optional recursive)
+  "Display thumbnails for image files in current dired buffer.
+If files are marked, show thumbnails for marked images only.
+Otherwise, show thumbnails for all images in the directory.
+With prefix argument RECURSIVE, include images from subdirectories.
+
+When `dired-image-thumbnail-auto-recursive' is non-nil and the current
+directory has no image files but has subdirectories, recursive mode
+is automatically enabled.
+
+This function extends `image-dired' functionality by preparing the dired
+buffer (inserting subdirectories if needed), then calling vanilla image-dired
+which triggers all the hooks and gets our enhanced features."
+  (interactive "P")
+  (unless (derived-mode-p 'dired-mode)
+    (user-error "Not in a dired buffer"))
+  (let* ((dired-buf (current-buffer))
+         (source-dir default-directory)
+         (has-marks (save-excursion
+                      (goto-char (point-min))
+                      (re-search-forward dired-re-mark nil t)))
+         ;; Check for images in current directory first (non-recursive)
+         (local-images (unless has-marks
+                         (dired-image-thumbnail--find-images source-dir nil)))
+         ;; Determine if we should go recursive
+         (recursive-p (or recursive
+                          dired-image-thumbnail-recursive
+                          ;; Auto-recursive: no local images but has subdirs
+                          (and dired-image-thumbnail-auto-recursive
+                               (not has-marks)
+                               (null local-images)
+                               (dired-image-thumbnail--has-subdirectories-p source-dir)))))
+    
+    ;; If recursive, insert all subdirectories into dired first
+    (when recursive-p
+      (dired-image-thumbnail--insert-all-subdirs source-dir dired-buf)
+      (message "Recursive mode: subdirectories inserted"))
+    
+    ;; Count images that will be shown
+    (let ((images (cond
+                   (has-marks
+                    (dired-get-marked-files nil nil #'dired-image-thumbnail--image-p))
+                   (t
+                    (dired-image-thumbnail--find-images-in-buffer dired-buf)))))
+      (unless images
+        (user-error "No image files found%s"
+                    (if recursive-p " (searched recursively)" "")))
+      
+      (message "Found %d image files%s" 
+               (length images)
+               (if recursive-p " (recursive)" "")))
+    
+    ;; Store state for our hooks to use
+    (with-current-buffer dired-buf
+      (setq-local dired-image-thumbnail--source-dir source-dir)
+      (setq-local dired-image-thumbnail--recursive recursive-p))
+    
+    ;; Call vanilla image-dired which will trigger our hooks and enhancements
+    (call-interactively 'image-dired)))
+
+;;;###autoload
 ;;; Keymaps
 
 (defvar dired-image-thumbnail-sort-map
