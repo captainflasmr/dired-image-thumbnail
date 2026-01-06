@@ -14,6 +14,9 @@
 - *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
 - *Enhanced header line* - Shows current image info, dimensions, sort/filter status
+- *Window layout management* - Automatic split-screen layout (thumbnails left, image right)
+- *Auto-display navigation* - Navigate with n/p to automatically show full-size images
+- *Enhanced deletion* - Delete and advance with C-d in both thumbnail and image buffers
 - *Full integration* - Works seamlessly with existing =image-dired= functionality
 - *Transient menus* - Optional transient.el integration for discoverability
 
@@ -57,7 +60,9 @@ The simplest way to use =dired-image-thumbnail= is from a Dired buffer:
 
 1. Navigate to a directory containing images
 2. Press =C-t d= (or =C-t m=) to view thumbnails
-3. Use the enhanced keybindings for sorting, filtering, etc.
+3. Thumbnails appear on the left, full-size image on the right
+4. Navigate with =n=/=p= to automatically view each image
+5. Use the enhanced keybindings for sorting, filtering, etc.
 
 ** Working with Subdirectories
 
@@ -75,6 +80,50 @@ Use Dired's built-in =i= (=dired-maybe-insert-subdir=) on any subdirectory to ma
 
 You can also use the standard =image-dired= commands (=C-t d=, =C-t a=, etc.) - =dired-image-thumbnail= automatically enhances the thumbnail buffer with new keybindings.
 
+* Enhanced Workflow
+
+=dired-image-thumbnail= provides an enhanced grid-view workflow that improves upon standard =image-dired=:
+
+** Automatic Split-Screen Layout
+
+When you launch =dired-image-thumbnail= (or use standard =image-dired= with this package loaded):
+
+#+begin_example
+┌──────────────────┬────────────────────────┐
+│  Thumbnails      │  Full-size Image       │
+│  (Left 50%)      │  (Right 50%)           │
+│                  │                        │
+│  [img1] ←──      │  ┌──────────────────┐  │
+│  [img2]          │  │                  │  │
+│  [img3]          │  │   Current Image  │  │
+│  [img4]          │  │                  │  │
+│  [img5]          │  └──────────────────┘  │
+│                  │                        │
+└──────────────────┴────────────────────────┘
+#+end_example
+
+The layout is automatically configured via =display-buffer-alist= when =dired-image-thumbnail-manage-window-layout= is enabled (default).
+
+** Auto-Display Navigation
+
+With =dired-image-thumbnail-auto-display-on-navigate= enabled (default):
+
+- Press =n= or =p= to navigate thumbnails
+- The full-size image automatically updates on the right
+- No need to press =RET= or =C-<return>= for each image
+- Smooth, fluid browsing experience
+
+** Quick Deletion Workflow
+
+Press =C-d= in either the thumbnail or image display buffer to:
+
+1. Get a confirmation prompt
+2. Delete the current image file
+3. Automatically advance to the next image
+4. Continue browsing seamlessly
+
+This makes culling large photo collections much faster than the standard workflow.
+
 * Keybindings
 
 ** In Dired Buffer
@@ -89,7 +138,18 @@ You can also use the standard =image-dired= commands (=C-t d=, =C-t a=, etc.) - 
 
 ** In Thumbnail Buffer
 
-*** Sorting
+*** Navigation
+
+| Key     | Command                                   | Description                              |
+|---------+-------------------------------------------+------------------------------------------|
+| =n=, =→= | ~dired-image-thumbnail-next-image~          | Next image (auto-display when enabled)   |
+| =p=, =←= | ~dired-image-thumbnail-previous-image~      | Previous image (auto-display when enabled) |
+| =+=     | ~dired-image-thumbnail-increase-size~       | Increase thumbnail size                  |
+| =-=     | ~dired-image-thumbnail-decrease-size~       | Decrease thumbnail size                  |
+
+Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default), pressing =n= or =p= automatically displays the full-size image in the right window.
+
+*** Marking
 
 | Key   | Command                                    | Description                     |
 |-------+--------------------------------------------+---------------------------------|
@@ -129,17 +189,24 @@ You can also use the standard =image-dired= commands (=C-t d=, =C-t a=, etc.) - 
 
 *** File Operations
 
-| Key | Command                             | Description                |
-|-----+-------------------------------------+----------------------------|
-| =D= | ~dired-image-thumbnail-delete~        | Delete image at point      |
-| =x= | ~dired-image-thumbnail-delete-marked~ | Delete all marked images   |
-| =d= | ~dired-image-thumbnail-goto-dired~    | Jump to file in Dired      |
+| Key   | Command                                   | Description                    |
+|-------+-------------------------------------------+--------------------------------|
+| =D=   | ~dired-image-thumbnail-delete~              | Delete image at point          |
+| =C-d= | ~dired-image-thumbnail-delete-and-next~     | Delete image and move to next  |
+| =x=   | ~dired-image-thumbnail-delete-marked~       | Delete all marked images       |
+| =d=   | ~dired-image-thumbnail-goto-dired~          | Jump to file in Dired          |
 
 *** Other
 
 | Key   | Command                        | Description |
 |-------+--------------------------------+-------------|
 | =?/h= | ~dired-image-thumbnail-help~     | Show help   |
+
+*In Image Display Buffer:*
+
+| Key   | Command                                       | Description                    |
+|-------+-----------------------------------------------+--------------------------------|
+| =C-d= | ~dired-image-thumbnail-delete-image-and-next~   | Delete image and move to next  |
 
 Note: All standard =image-dired= keybindings (=n=, =p=, =m=, =u=, =U=, etc.) continue to work as expected.
 
@@ -173,6 +240,26 @@ All customization options are in the =dired-image-thumbnail= group. Use =M-x cus
 (setq dired-image-thumbnail-wrap-display nil)   ; Enable wrap display by default
 #+end_src
 
+** Window Layout
+
+Control the automatic split-screen layout:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-manage-window-layout t)  ; Enable split-screen layout
+#+end_src
+
+When enabled (default), thumbnails appear on the left (50% width) and the full-size image display appears on the right (50% width).
+
+** Navigation Behavior
+
+Control whether navigating with =n=/=p= automatically displays full-size images:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-auto-display-on-navigate t)  ; Auto-display on n/p
+#+end_src
+
+When enabled (default), pressing =n= or =p= in the thumbnail buffer automatically updates the image display buffer. When disabled, you must press =RET= or =C-<return>= to view full-size images.
+
 ** Image Extensions
 
 Add or modify recognized image file extensions:
@@ -192,6 +279,8 @@ Add or modify recognized image file extensions:
   (dired-image-thumbnail-sort-by 'date)
   (dired-image-thumbnail-sort-order 'descending)
   (dired-image-thumbnail-wrap-display t)
+  (dired-image-thumbnail-manage-window-layout t)      ; Split-screen layout
+  (dired-image-thumbnail-auto-display-on-navigate t)  ; Auto-display on n/p
   :bind
   (:map dired-mode-map
    ("C-t d" . (lambda () (interactive)
@@ -210,16 +299,29 @@ Add or modify recognized image file extensions:
 1. Open directory in Dired: =C-x d ~/Photos RET=
 2. Insert subdirectories with images: =C-t s=
 3. View thumbnails: =C-t m=
-4. Sort by date (newest first): =s d= then =s r=
-5. Browse with =n= / =p= or arrow keys
-6. Mark keepers with =m=, jump to Dired with =d=
+4. Thumbnails appear on the left, full-size view on the right
+5. Sort by date (newest first): =s d= then =s r=
+6. Browse with =n= / =p= - images automatically update on the right
+7. Mark keepers with =m=, jump to Dired with =d=
 
 ** Finding Large Images
 
 1. View thumbnails: =C-t m=
-2. Filter by size: =/ s= and enter =1M= for minimum, leave maximum empty
-3. Sort by size (largest first): =s s= then =s r=
-4. Review and mark images, delete with =x=
+2. Grid appears on left, image display on right
+3. Filter by size: =/ s= and enter =1M= for minimum, leave maximum empty
+4. Sort by size (largest first): =s s= then =s r=
+5. Navigate with =n=/=p= to review each image
+6. Mark images for deletion with =m=, delete with =x=
+7. Or use =C-d= to delete current image and advance to next
+
+** Quick Culling Workflow
+
+1. View thumbnails: =C-t m=
+2. Navigate through images with =n= and =p=
+3. Press =C-d= on images you want to delete
+4. Confirmation prompt appears for each deletion
+5. Automatically advances to next image after deletion
+6. Continue until finished
 
 ** Finding High-Resolution Images
 
@@ -257,6 +359,9 @@ Add or modify recognized image file extensions:
 | Helper commands        | ✗           | ✓                     |
 | Wrap display           | ✗           | ✓                     |
 | Enhanced header line   | Basic       | Enhanced              |
+| Auto-display on n/p    | ✗           | ✓                     |
+| Split-screen layout    | ✗           | ✓ (automatic)         |
+| Delete and advance     | ✗           | ✓ (C-d)               |
 | Transient menus        | ✗           | ✓ (optional)          |
 
 * Transient Menu Support
@@ -301,6 +406,19 @@ First-time thumbnail generation can be slow for large images. Thumbnails are cac
 - Use =C-t s= (insert image subdirs only) instead of =C-t z= (insert all subdirs)
 - Manually insert specific subdirectories with =i= as needed
 - Consider filtering to reduce the number of visible thumbnails
+
+** Layout not splitting correctly
+
+- Ensure =dired-image-thumbnail-manage-window-layout= is =t= (default)
+- Check that no other packages are overriding =display-buffer-alist=
+- Try =M-x display-buffer-alist= to inspect the current rules
+- Manually delete other windows with =C-x 1= before launching
+
+** Auto-display not working
+
+- Ensure =dired-image-thumbnail-auto-display-on-navigate= is =t= (default)
+- The feature requires the split-screen layout to be active
+- Try pressing =RET= on a thumbnail to manually trigger display
 
 * Related Packages
 
