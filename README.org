@@ -4,23 +4,24 @@
 
 * Introduction
 
-=dired-image-thumbnail= is an Emacs package that extends =image-dired= with an enhanced workflow inspired by =dired-video-thumbnail=. It adds powerful sorting, filtering, recursive directory support, and flexible display options to the standard =image-dired= thumbnail viewer.
+=dired-image-thumbnail= is an Emacs package that extends =image-dired= with an enhanced workflow inspired by =dired-video-thumbnail=. It adds powerful sorting, filtering, subdirectory management, and flexible display options to the standard =image-dired= thumbnail viewer.
 
 * Features
 
 - *Sorting* - Sort thumbnails by name, date, size, or image dimensions
 - *Filtering* - Filter by name regexp, file size range, or dimension range
-- *Recursive directory support* - Browse images in subdirectories with a single command
-- *Auto-recursive* - Automatically searches subdirectories when the current directory has no images
+- *Subdirectory support* - Works seamlessly with Dired's inserted subdirectories
+- *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
 - *Enhanced header line* - Shows current image info, dimensions, sort/filter status
-- *Local marks* - Mark files even when they're not visible in the Dired buffer
 - *Full integration* - Works seamlessly with existing =image-dired= functionality
+- *Transient menus* - Optional transient.el integration for discoverability
 
 * Requirements
 
 - Emacs 28.1 or later
 - =image-dired= (built-in)
+- =transient= (optional, for transient menu support)
 
 * Installation
 
@@ -38,7 +39,7 @@ Download =dired-image-thumbnail.el= and place it in your load-path:
 #+begin_src emacs-lisp
 (use-package dired-image-thumbnail
   :load-path "/path/to/dired-image-thumbnail/"
-  :after image-dired)
+  :demand t)
 #+end_src
 
 ** straight.el
@@ -52,99 +53,118 @@ Download =dired-image-thumbnail.el= and place it in your load-path:
 
 ** Quick Start
 
-The simplest way to use =dired-image-thumbnail= is through its entry point:
+The simplest way to use =dired-image-thumbnail= is from a Dired buffer:
 
-#+begin_src emacs-lisp
-M-x dired-image-thumbnail-show-all-from-dir RET /path/to/images RET
-#+end_src
+1. Navigate to a directory containing images
+2. Press =C-t d= (or =C-t m=) to view thumbnails
+3. Use the enhanced keybindings for sorting, filtering, etc.
 
-For recursive searching:
+** Working with Subdirectories
 
-#+begin_src emacs-lisp
-M-x dired-image-thumbnail-show-all-recursive RET /path/to/images RET
-#+end_src
+=dired-image-thumbnail= works with Dired's subdirectory insertion feature. You have several options:
 
-** From Dired
+*** Manual insertion
+Use Dired's built-in =i= (=dired-maybe-insert-subdir=) on any subdirectory to make its contents visible, then run =dired-image-thumbnail=.
 
-You can also use the standard =image-dired= commands - =dired-image-thumbnail= automatically enhances the thumbnail buffer with new keybindings:
+*** Helper commands
+- =C-t s= (=dired-image-thumbnail-insert-image-subdirs=) - Insert only subdirectories containing images (recommended)
+- =C-t z= (=dired-image-thumbnail-insert-subdir-recursive=) - Insert all subdirectories
+- =C-t k= (=dired-image-thumbnail-kill-all-subdirs=) - Remove all inserted subdirectories
 
-1. Open a directory in Dired
-2. Mark some images (or don't, to view all)
-3. Run =C-t d= (=image-dired-display-thumbs=)
-4. Use the new keybindings for sorting, filtering, etc.
+** From Standard image-dired
+
+You can also use the standard =image-dired= commands (=C-t d=, =C-t a=, etc.) - =dired-image-thumbnail= automatically enhances the thumbnail buffer with new keybindings.
 
 * Keybindings
 
-In the =*image-dired*= thumbnail buffer, =dired-image-thumbnail= adds:
+** In Dired Buffer
 
-** Sorting
+| Key     | Command                                      | Description                          |
+|---------+----------------------------------------------+--------------------------------------|
+| =C-t d= | ~image-dired~ + ~dired-image-thumbnail-refresh~ | Launch standard image-dired enhanced |
+| =C-t m= | ~dired-image-thumbnail~                        | Launch enhanced thumbnail viewer     |
+| =C-t s= | ~dired-image-thumbnail-insert-image-subdirs~   | Insert subdirs with images           |
+| =C-t z= | ~dired-image-thumbnail-insert-subdir-recursive~ | Insert all subdirs recursively       |
+| =C-t k= | ~dired-image-thumbnail-kill-all-subdirs~       | Remove all inserted subdirs          |
 
-| Key   | Command                           | Description                     |
-|-------+-----------------------------------+---------------------------------|
-| =s n= | ~dired-image-thumbnail-sort-by-name~   | Sort by filename                |
-| =s d= | ~dired-image-thumbnail-sort-by-date~   | Sort by modification date       |
-| =s s= | ~dired-image-thumbnail-sort-by-size~   | Sort by file size               |
-| =s D= | ~dired-image-thumbnail-sort-by-dimensions~ | Sort by image dimensions (area) |
-| =s r= | ~dired-image-thumbnail-sort-reverse~   | Reverse sort order              |
-| =S=   | ~dired-image-thumbnail-sort~           | Interactive sort selection      |
+** In Thumbnail Buffer
 
-** Filtering
+*** Sorting
 
-| Key   | Command                              | Description                |
-|-------+--------------------------------------+----------------------------|
-| =/ n= | ~dired-image-thumbnail-filter-by-name~    | Filter by name regexp      |
-| =/ s= | ~dired-image-thumbnail-filter-by-size~    | Filter by file size range  |
-| =/ d= | ~dired-image-thumbnail-filter-by-dimensions~ | Filter by dimension range |
-| =/ /= | ~dired-image-thumbnail-filter-clear~      | Clear all filters          |
-| =/ c= | ~dired-image-thumbnail-filter-clear~      | Clear all filters          |
-| =\=   | ~dired-image-thumbnail-filter~            | Interactive filter selection |
+| Key   | Command                                    | Description                     |
+|-------+--------------------------------------------+---------------------------------|
+| =s n= | ~dired-image-thumbnail-sort-by-name~         | Sort by filename                |
+| =s d= | ~dired-image-thumbnail-sort-by-date~         | Sort by modification date       |
+| =s s= | ~dired-image-thumbnail-sort-by-size~         | Sort by file size               |
+| =s D= | ~dired-image-thumbnail-sort-by-dimensions~   | Sort by image dimensions (area) |
+| =s r= | ~dired-image-thumbnail-sort-reverse~         | Reverse sort order              |
+| =S=   | ~dired-image-thumbnail-sort~ (transient)     | Interactive sort selection      |
 
-** Display
+*** Filtering
 
-| Key | Command                            | Description                     |
-|-----+------------------------------------+---------------------------------|
-| =R= | ~dired-image-thumbnail-toggle-recursive~ | Toggle recursive directory search |
-| =w= | ~dired-image-thumbnail-toggle-wrap~     | Toggle wrap display mode        |
-| =r= | ~dired-image-thumbnail-refresh~         | Refresh the display             |
+| Key   | Command                                    | Description                |
+|-------+--------------------------------------------+----------------------------|
+| =/ n= | ~dired-image-thumbnail-filter-by-name~       | Filter by name regexp      |
+| =/ s= | ~dired-image-thumbnail-filter-by-size~       | Filter by file size range  |
+| =/ d= | ~dired-image-thumbnail-filter-by-dimensions~ | Filter by dimension range  |
+| =/ /= | ~dired-image-thumbnail-filter-clear~         | Clear all filters          |
+| =/ c= | ~dired-image-thumbnail-filter-clear~         | Clear all filters          |
+| =\=   | ~dired-image-thumbnail-filter~ (transient)   | Interactive filter menu    |
 
-** Marking
+*** Display
 
-| Key | Command                            | Description        |
-|-----+------------------------------------+--------------------|
-| =M= | ~dired-image-thumbnail-mark-all~        | Mark all images    |
-| =t= | ~dired-image-thumbnail-toggle-all-marks~ | Toggle all marks   |
+| Key | Command                              | Description              |
+|-----+--------------------------------------+--------------------------|
+| =w= | ~dired-image-thumbnail-toggle-wrap~    | Toggle wrap display mode |
+| =r= | ~dired-image-thumbnail-refresh~        | Refresh the display      |
+| =+= | ~dired-image-thumbnail-increase-size~  | Increase thumbnail size  |
+| =-= | ~dired-image-thumbnail-decrease-size~  | Decrease thumbnail size  |
 
-Note: The standard =image-dired= marking keybindings (=m=, =u=, =U=, =d=) continue to work as expected.
+*** Marking
+
+| Key | Command                                 | Description        |
+|-----+-----------------------------------------+--------------------|
+| =M= | ~dired-image-thumbnail-mark-all~          | Mark all images    |
+| =t= | ~dired-image-thumbnail-toggle-all-marks~  | Toggle all marks   |
+
+*** File Operations
+
+| Key | Command                             | Description                |
+|-----+-------------------------------------+----------------------------|
+| =D= | ~dired-image-thumbnail-delete~        | Delete image at point      |
+| =x= | ~dired-image-thumbnail-delete-marked~ | Delete all marked images   |
+| =d= | ~dired-image-thumbnail-goto-dired~    | Jump to file in Dired      |
+
+*** Other
+
+| Key   | Command                        | Description |
+|-------+--------------------------------+-------------|
+| =?/h= | ~dired-image-thumbnail-help~     | Show help   |
+
+Note: All standard =image-dired= keybindings (=n=, =p=, =m=, =u=, =U=, etc.) continue to work as expected.
 
 * Header Line
 
 The enhanced header line displays:
 
 - *Mark indicator* - A =*= if the current image is marked
-- *Filename* - Relative to source directory for recursive views
+- *Filename* - Relative to source directory when subdirectories are inserted
 - *Image count* - Current position / total (e.g., =23/156=)
 - *Dimensions* - Width × Height in pixels (e.g., =1920x1080=)
 - *File size* - Human-readable size (e.g., =2.4M=)
 - *Sort indicator* - Current sort field and direction (e.g., =[name ↑]=)
 - *Active filters* - Description of any active filters
-- *Recursive indicator* - =[recursive]= when viewing subdirectories
+- *Marked count* - Number of marked images (e.g., =[3 marked]=)
 
 * Customization
 
-All customisation options are in the =dired-image-thumbnail= group. Use =M-x customize-group RET dired-image-thumbnail RET= to browse them interactively.
+All customization options are in the =dired-image-thumbnail= group. Use =M-x customize-group RET dired-image-thumbnail RET= to browse them interactively.
 
 ** Default Sort Settings
 
 #+begin_src emacs-lisp
 (setq dired-image-thumbnail-sort-by 'name)      ; 'name, 'date, 'size, or 'dimensions
 (setq dired-image-thumbnail-sort-order 'ascending) ; 'ascending or 'descending
-#+end_src
-
-** Recursive Behavior
-
-#+begin_src emacs-lisp
-(setq dired-image-thumbnail-recursive nil)      ; Always recursive by default
-(setq dired-image-thumbnail-auto-recursive t)   ; Auto-recursive when no images in current dir
 #+end_src
 
 ** Display Options
@@ -155,7 +175,7 @@ All customisation options are in the =dired-image-thumbnail= group. Use =M-x cus
 
 ** Image Extensions
 
-Add or modify recognised image file extensions:
+Add or modify recognized image file extensions:
 
 #+begin_src emacs-lisp
 (setq dired-image-thumbnail-image-extensions
@@ -167,63 +187,124 @@ Add or modify recognised image file extensions:
 #+begin_src emacs-lisp
 (use-package dired-image-thumbnail
   :load-path "/path/to/dired-image-thumbnail/"
-  :after image-dired
+  :demand t
   :custom
   (dired-image-thumbnail-sort-by 'date)
   (dired-image-thumbnail-sort-order 'descending)
-  (dired-image-thumbnail-auto-recursive t)
   (dired-image-thumbnail-wrap-display t)
-  :bind (:map dired-mode-map
-         ("C-t +" . dired-image-thumbnail-show-all-from-dir)
-         ("C-t *" . dired-image-thumbnail-show-all-recursive)))
+  :bind
+  (:map dired-mode-map
+   ("C-t d" . (lambda () (interactive)
+                (image-dired default-directory)
+                (dired-image-thumbnail-refresh)))
+   ("C-t m" . dired-image-thumbnail)
+   ("C-t s" . dired-image-thumbnail-insert-image-subdirs)
+   ("C-t z" . dired-image-thumbnail-insert-subdir-recursive)
+   ("C-t k" . dired-image-thumbnail-kill-all-subdirs)))
 #+end_src
 
 * Workflow Examples
 
 ** Reviewing a Photo Collection
 
-1. =M-x dired-image-thumbnail-show-all-from-dir RET ~/Photos RET=
-2. Press =R= to include subdirectories
-3. Press =s d= then =s r= to sort by date (newest first)
-4. Browse with =n= / =p= or arrow keys
-5. Mark keepers with =m=, switch to Dired with =TAB=
+1. Open directory in Dired: =C-x d ~/Photos RET=
+2. Insert subdirectories with images: =C-t s=
+3. View thumbnails: =C-t m=
+4. Sort by date (newest first): =s d= then =s r=
+5. Browse with =n= / =p= or arrow keys
+6. Mark keepers with =m=, jump to Dired with =d=
 
 ** Finding Large Images
 
-1. Open thumbnail view
-2. Press =/ s= and enter =1M= for minimum, leave maximum empty
-3. Press =s s= then =s r= to sort by size (largest first)
-4. Review and mark images for deletion
+1. View thumbnails: =C-t m=
+2. Filter by size: =/ s= and enter =1M= for minimum, leave maximum empty
+3. Sort by size (largest first): =s s= then =s r=
+4. Review and mark images, delete with =x=
 
 ** Finding High-Resolution Images
 
-1. Open thumbnail view
-2. Press =/ d= and enter minimum width =1920=, minimum height =1080=
+1. View thumbnails: =C-t m=
+2. Filter by dimensions: =/ d= and enter minimum width =1920=, minimum height =1080=
 3. Browse only HD+ images
+4. Use =/ c= to clear the filter when done
+
+** Working with Subdirectories
+
+1. Open parent directory in Dired
+2. Use =C-t s= to insert only subdirectories containing images (fast)
+3. Or use =C-t z= to insert all subdirectories (may be slow with many dirs)
+4. View thumbnails with =C-t m=
+5. Images from all visible subdirectories will be shown
+6. Use =C-t k= to remove all subdirectories and return to top-level view
 
 ** Organizing by Date
 
-1. =M-x dired-image-thumbnail-show-all-recursive RET ~/Pictures RET=
-2. Press =s d= to sort by date
-3. Use the header line to see file dates as you browse
+1. Open directory in Dired
+2. Insert subdirectories if needed: =C-t s=
+3. View thumbnails: =C-t m=
+4. Sort by date: =s d=
+5. Use the header line to see file dates as you browse
 
 * Comparison with Standard image-dired
 
 | Feature                | image-dired | dired-image-thumbnail |
-|------------------------+-------------+------------------|
-| Thumbnail display      | ✓           | ✓                |
-| Dired integration      | ✓           | ✓                |
-| Sorting                | ✗           | ✓ (4 criteria)   |
-| Filtering              | ✗           | ✓ (name, size, dims) |
-| Recursive directories  | ✗           | ✓                |
-| Auto-recursive         | ✗           | ✓                |
-| Wrap display           | ✗           | ✓                |
-| Enhanced header line   | Basic       | Enhanced         |
-| Local marks            | ✗           | ✓                |
+|------------------------+-------------+-----------------------|
+| Thumbnail display      | ✓           | ✓                     |
+| Dired integration      | ✓           | ✓                     |
+| Sorting                | ✗           | ✓ (4 criteria)        |
+| Filtering              | ✗           | ✓ (name, size, dims)  |
+| Subdirectory support   | ✗           | ✓ (via insertion)     |
+| Helper commands        | ✗           | ✓                     |
+| Wrap display           | ✗           | ✓                     |
+| Enhanced header line   | Basic       | Enhanced              |
+| Transient menus        | ✗           | ✓ (optional)          |
+
+* Transient Menu Support
+
+If =transient= is available, =dired-image-thumbnail= provides interactive menus for sorting and filtering. These can be accessed with:
+
+- =S= - Sort menu (shows all sort options and current state)
+- =\= - Filter menu (shows all filter options and current filters)
+
+To disable transient menus even when transient is installed, don't load =dired-image-thumbnail-transient.el=.
+
+* Performance Notes
+
+** Subdirectory Insertion
+
+When working with large directory trees:
+
+- Use =dired-image-thumbnail-insert-image-subdirs= (=C-t s=) instead of =dired-image-thumbnail-insert-subdir-recursive= (=C-t z=)
+- The "smart" insertion only processes subdirectories containing images, which is much faster
+- For very large collections, manually insert specific subdirectories with =i= as needed
+
+** Thumbnail Generation
+
+First-time thumbnail generation can be slow for large images. Thumbnails are cached by =image-dired=, so subsequent viewing is fast.
+
+* Troubleshooting
+
+** Images not appearing
+
+- Ensure =image-dired= is working: test with =C-t d= in a directory with images
+- Check that file extensions are in =dired-image-thumbnail-image-extensions=
+- Verify thumbnails are being created in =image-dired-dir=
+
+** Subdirectories not showing images
+
+- Ensure subdirectories are actually inserted in the Dired buffer (use =i= or helper commands)
+- Check that =dired-image-thumbnail-insert-image-subdirs= found subdirectories (watch for message)
+- Verify files in subdirectories have recognized image extensions
+
+** Slow performance with many directories
+
+- Use =C-t s= (insert image subdirs only) instead of =C-t z= (insert all subdirs)
+- Manually insert specific subdirectories with =i= as needed
+- Consider filtering to reduce the number of visible thumbnails
 
 * Related Packages
 
-- [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Image_002dDired.html][image-dired]] - Built-in image thumbnail browser for dired (extended by this package)
+- [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Image_002dDired.html][image-dired]] - Built-in image thumbnail browser for Dired (extended by this package)
 - [[https://github.com/captainflasmr/dired-video-thumbnail][dired-video-thumbnail]] - Video thumbnail browser (inspiration for this package)
 - [[https://github.com/alexluigit/dirvish][dirvish]] - A modern file manager for Emacs with preview support
 
