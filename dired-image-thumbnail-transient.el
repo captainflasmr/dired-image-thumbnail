@@ -62,7 +62,6 @@
 (declare-function dired-image-thumbnail-increase-size "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-decrease-size "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-wrap "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-toggle-recursive "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-refresh "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete-marked "dired-image-thumbnail")
@@ -132,8 +131,7 @@
    ("+" "Increase size" dired-image-thumbnail-increase-size :transient t)
    ("-" "Decrease size" dired-image-thumbnail-decrease-size :transient t)]
   ["Toggle"
-   ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)
-   ("R" "Recursive" dired-image-thumbnail-toggle-recursive :transient nil)]
+   ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)]
   ["Refresh"
    ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)])
 
@@ -165,8 +163,7 @@
     ("v" "Display menu..." dired-image-thumbnail-transient-display :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
-    ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)
-    ("R" "Toggle recursive" dired-image-thumbnail-toggle-recursive :transient nil)]
+    ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)]
    ["Other"
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
     ("?" "Help" dired-image-thumbnail-help :transient nil)

@@ -30,7 +30,7 @@
 ;;
 ;; - Sorting: Sort thumbnails by name, date, size
 ;; - Filtering: Filter by name regexp, file size range
-;; - Recursive directory support: Browse images in subdirectories
+;; - Subdirectory support: Works with inserted subdirectories
 ;; - Wrap display mode: Thumbnails flow naturally and wrap to window width
 ;; - Enhanced header line: Shows current image info with sort/filter status
 ;; - Marking: Uses built-in image-dired marking with visual border
@@ -42,6 +42,13 @@
 ;; thumbnails with enhanced features. You can also use the standard
 ;; `M-x image-dired' and the enhanced features will be available.
 ;;
+;; To include images from subdirectories, use 'i' (`dired-maybe-insert-subdir`)
+;; to insert subdirectories before calling `dired-image-thumbnail', or use
+;; the helper commands:
+;; - `dired-image-thumbnail-insert-subdir-recursive' - Insert all subdirectories
+;; - `dired-image-thumbnail-insert-image-subdirs' - Insert only subdirs with images
+;; - `dired-image-thumbnail-kill-all-subdirs' - Remove all inserted subdirectories
+;;
 ;; The package uses the standard *image-dired* buffer, so all native
 ;; image-dired marking commands work as expected.
 ;;
@@ -50,7 +57,6 @@
 ;;   s   - Sorting prefix (s n: name, s d: date, s s: size, s r: reverse)
 ;;   S   - Interactive sort selection
 ;;   /   - Filtering prefix (/ n: name, / s: size, / c: clear)
-;;   R   - Toggle recursive directory search
 ;;   w   - Toggle wrap display mode
 ;;   r   - Refresh display
 ;;   n/p - Next/previous image
@@ -95,18 +101,6 @@
                  (const :tag "Descending" descending))
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-recursive nil
-  "Whether to search for images recursively in subdirectories by default."
-  :type 'boolean
-  :group 'dired-image-thumbnail)
-
-(defcustom dired-image-thumbnail-auto-recursive t
-  "Whether to automatically search recursively when no images in current directory.
-When non-nil, if the current directory contains no image files but has
-subdirectories, the package will automatically search recursively."
-  :type 'boolean
-  :group 'dired-image-thumbnail)
-
 (defcustom dired-image-thumbnail-wrap-display nil
   "Whether to wrap thumbnails to fill the buffer width.
 When non-nil, thumbnails flow naturally and wrap based on window width.
@@ -148,9 +142,6 @@ When nil, the standard `image-dired' line-up method is used."
 
 (defvar-local dired-image-thumbnail--filter-size-max nil
   "Maximum size filter in bytes.")
-
-(defvar-local dired-image-thumbnail--recursive nil
-  "Whether current buffer is showing images recursively.")
 
 (defvar-local dired-image-thumbnail--display-size 150
   "Current display size for thumbnails (for zoom).")
@@ -256,31 +247,6 @@ If RECURSIVE is non-nil, search subdirectories as well."
         (goto-char (point-min))
         (when (dired-goto-file file)
           (image-dired-dired-file-marked-p))))))
-
-(defun dired-image-thumbnail--ensure-subdir-in-dired (file dired-buf source-dir)
-  "Ensure the subdirectory containing FILE is inserted in dired.
-DIRED-BUF is the dired buffer to insert into.
-SOURCE-DIR is the root directory.
-Returns non-nil if the file can now be found in dired."
-  (when (and dired-buf (buffer-live-p dired-buf) source-dir)
-    (let* ((file-dir (file-name-directory (expand-file-name file)))
-           (source-dir-exp (expand-file-name source-dir)))
-      (with-current-buffer dired-buf
-        (save-excursion
-          (goto-char (point-min))
-          (or (dired-goto-file file) ; File already visible
-              ;; File not visible - try to insert its subdirectory
-              (when (and (string-prefix-p source-dir-exp file-dir)
-                         (not (string= source-dir-exp file-dir)))
-                (condition-case err
-                    (progn
-                      (dired-insert-subdir file-dir)
-                      ;; After insertion, check if file is now visible
-                      (goto-char (point-min))
-                      (dired-goto-file file))
-                  (error
-                   (message "Could not insert subdir %s: %s" file-dir err)
-                   nil)))))))))
 
 (defun dired-image-thumbnail--relative-name (file)
   "Return FILE name relative to the source directory."
@@ -409,8 +375,7 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
     ;; Collect images from the buffer's text properties
     (let ((images nil)
           (dired-buf nil)
-          (source-dir nil)
-          (recursive-p nil))
+          (source-dir nil))
       (save-excursion
         (goto-char (point-min))
         (while (not (eobp))
@@ -421,10 +386,9 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
             (unless source-dir
               (setq source-dir (file-name-directory file))))
           (forward-char)))
-      ;; Get recursive state from dired buffer if available
+      ;; Get source-dir from dired buffer if available
       (when (and dired-buf (buffer-live-p dired-buf))
         (with-current-buffer dired-buf
-          (setq recursive-p dired-image-thumbnail--recursive)
           (unless source-dir
             (setq source-dir dired-image-thumbnail--source-dir))))
       (when images
@@ -432,7 +396,6 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
         (setq dired-image-thumbnail--current-images dired-image-thumbnail--all-images)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
         (setq dired-image-thumbnail--source-dir (or source-dir default-directory))
-        (setq dired-image-thumbnail--recursive recursive-p)
         (setq dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
         (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)))))
 
@@ -446,8 +409,7 @@ When `dired-image-thumbnail--all-images' is set, return our enhanced header line
 Otherwise, fall back to the original function."
   (if dired-image-thumbnail--all-images
       ;; Use our enhanced header line
-      (let* ((recursive-info (if dired-image-thumbnail--recursive " [recursive]" ""))
-             (sort-info (format "[%s %s]"
+      (let* ((sort-info (format "[%s %s]"
                                 (or dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
                                 (if (eq (or dired-image-thumbnail--sort-order
                                             dired-image-thumbnail-sort-order)
@@ -473,8 +435,7 @@ Otherwise, fall back to the original function."
          "  "
          sort-info
          (if (string-empty-p filter-info) "" (format "  %s" filter-info))
-         marked-info
-         recursive-info))
+         marked-info))
     ;; Fall back to original function
     (funcall orig-fun buf file image-count props comment)))
 
@@ -497,7 +458,6 @@ Otherwise, fall back to the original function."
           (filter-name dired-image-thumbnail--filter-name)
           (filter-size-min dired-image-thumbnail--filter-size-min)
           (filter-size-max dired-image-thumbnail--filter-size-max)
-          (recursive dired-image-thumbnail--recursive)
           (display-size dired-image-thumbnail--display-size)
           (all-images dired-image-thumbnail--all-images)
           (inhibit-read-only t))
@@ -506,7 +466,6 @@ Otherwise, fall back to the original function."
       (setq dired-image-thumbnail--all-images all-images)
       (setq dired-image-thumbnail--source-dir source-dir)
       (setq dired-image-thumbnail--dired-buffer dired-buf)
-      (setq dired-image-thumbnail--recursive recursive)
       (setq dired-image-thumbnail--display-size display-size)
       (setq dired-image-thumbnail--sort-by sort-by)
       (setq dired-image-thumbnail--sort-order sort-order)
@@ -683,9 +642,6 @@ the original files for crisp display (slower but higher quality)."
     ;; Mark each file in dired
     (dolist (file dired-image-thumbnail--current-images)
       ;; Ensure subdir is in dired for recursive mode
-      (when dired-image-thumbnail--recursive
-        (dired-image-thumbnail--ensure-subdir-in-dired
-         file dired-image-thumbnail--dired-buffer dired-image-thumbnail--source-dir))
       ;; Mark in dired buffer
       (when (and dired-image-thumbnail--dired-buffer
                  (buffer-live-p dired-image-thumbnail--dired-buffer))
@@ -715,9 +671,6 @@ the original files for crisp display (slower but higher quality)."
                 (when (dired-goto-file file)
                   (dired-unmark 1)))))
         ;; Mark
-        (when dired-image-thumbnail--recursive
-          (dired-image-thumbnail--ensure-subdir-in-dired
-           file dired-image-thumbnail--dired-buffer dired-image-thumbnail--source-dir))
         (when (and dired-image-thumbnail--dired-buffer
                    (buffer-live-p dired-image-thumbnail--dired-buffer))
           (with-current-buffer dired-image-thumbnail--dired-buffer
@@ -803,45 +756,6 @@ the original files for crisp display (slower but higher quality)."
   (dotimes (_ n)
     (image-dired-forward-image)))
 
-(defun dired-image-thumbnail-toggle-recursive ()
-  "Toggle recursive display and reload images."
-  (interactive)
-  ;; Initialize if not already done
-  (unless dired-image-thumbnail--all-images
-    (dired-image-thumbnail--initialize-buffer))
-  (let ((new-recursive (not dired-image-thumbnail--recursive))
-        (source-dir dired-image-thumbnail--source-dir)
-        ;; Preserve current filters and display settings
-        (filter-name dired-image-thumbnail--filter-name)
-        (filter-size-min dired-image-thumbnail--filter-size-min)
-        (filter-size-max dired-image-thumbnail--filter-size-max)
-        (sort-by dired-image-thumbnail--sort-by)
-        (sort-order dired-image-thumbnail--sort-order)
-        (display-size dired-image-thumbnail--display-size))
-    (unless source-dir
-      (setq source-dir default-directory))
-    (message "Searching for images%s..."
-             (if new-recursive " recursively" ""))
-    (let ((images (dired-image-thumbnail--find-images source-dir new-recursive)))
-      (if images
-          (progn
-            (setq dired-image-thumbnail--all-images images)
-            (setq dired-image-thumbnail--source-dir source-dir)
-            (setq dired-image-thumbnail--recursive new-recursive)
-            ;; Restore filters and display settings
-            (setq dired-image-thumbnail--filter-name filter-name)
-            (setq dired-image-thumbnail--filter-size-min filter-size-min)
-            (setq dired-image-thumbnail--filter-size-max filter-size-max)
-            (setq dired-image-thumbnail--sort-by sort-by)
-            (setq dired-image-thumbnail--sort-order sort-order)
-            (setq dired-image-thumbnail--display-size display-size)
-            (dired-image-thumbnail--apply-sort-and-filter)
-            (message "Found %d image files%s"
-                     (length images)
-                     (if new-recursive " (recursive)" "")))
-        (message "No image files found%s"
-                 (if new-recursive " recursively" ""))))))
-
 (defun dired-image-thumbnail-toggle-wrap ()
   "Toggle between wrap display and standard line-up."
   (interactive)
@@ -874,8 +788,7 @@ the original files for crisp display (slower but higher quality)."
     (princ "  d            Go to Dired buffer\n\n")
     (princ "Display:\n")
     (princ "  r            Refresh display\n")
-    (princ "  w            Toggle wrap mode\n")
-    (princ "  R            Toggle recursive\n\n")
+    (princ "  w            Toggle wrap mode\n\n")
     (princ "Sorting (s prefix):\n")
     (princ "  sn           Sort by name\n")
     (princ "  sd           Sort by date\n")
@@ -885,138 +798,157 @@ the original files for crisp display (slower but higher quality)."
     (princ "  /n           Filter by name\n")
     (princ "  /s           Filter by size\n")
     (princ "  /c           Clear filters\n\n")
+    (princ "Subdirectories:\n")
+    (princ "  Use 'i' in dired to insert subdirectories, or:\n")
+    (princ "  M-x dired-image-thumbnail-insert-subdir-recursive\n")
+    (princ "  M-x dired-image-thumbnail-insert-image-subdirs\n")
+    (princ "  M-x dired-image-thumbnail-kill-all-subdirs\n\n")
     (princ "Other:\n")
     (princ "  q            Quit window\n")
     (princ "  h, ?         This help\n")))
 
 ;;; Main entry point
 
-(defun dired-image-thumbnail--insert-all-subdirs (directory dired-buffer)
-  "Insert all subdirectories of DIRECTORY into DIRED-BUFFER.
-This makes all files in subdirectories visible to image-dired."
-  (when (buffer-live-p dired-buffer)
-    (let ((subdirs (dired-image-thumbnail--find-subdirs directory)))
-      (when subdirs
-        (with-current-buffer dired-buffer
-          (message "Inserting %d subdirectories..." (length subdirs))
-          (let ((inserted 0))
-            (dolist (subdir subdirs)
-              ;; Ensure directory has trailing slash
-              (let ((subdir-path (file-name-as-directory subdir)))
-                (condition-case err
-                    (progn
-                      (save-excursion
-                        ;; Check if this subdir is already inserted by looking for its header
-                        (goto-char (point-min))
-                        (unless (re-search-forward 
-                                (concat "^  " (regexp-quote subdir-path) ":$") 
-                                nil t)
-                          (goto-char (point-max))
-                          (dired-insert-subdir subdir-path)
-                          (setq inserted (1+ inserted)))))
-                  (error
-                   (message "Could not insert subdir %s: %s" subdir-path err)))))
-            (message "Inserted %d subdirectories" inserted)))))))
-
-(defun dired-image-thumbnail--find-subdirs (directory)
-  "Return a list of all subdirectories under DIRECTORY (recursive).
-Does not include DIRECTORY itself."
+(defun dired-image-thumbnail--find-subdirs (directory &optional max-depth)
+  "Return a list of all subdirectories under DIRECTORY.
+Does not include DIRECTORY itself.
+Optional MAX-DEPTH limits recursion (nil means unlimited, 1 means direct children only)."
   (let ((subdirs nil)
-        (dirs-to-process (list directory)))
+        (dirs-to-process (list (cons directory 0))))
     (while dirs-to-process
-      (let ((current-dir (pop dirs-to-process)))
+      (let* ((item (pop dirs-to-process))
+             (current-dir (car item))
+             (current-depth (cdr item)))
         (dolist (file (directory-files current-dir t "^[^.]" t))
           (when (and (file-directory-p file)
                      (not (member (file-name-nondirectory file) '("." ".."))))
             (push file subdirs)
-            (push file dirs-to-process)))))
+            ;; Only recurse if we haven't hit max depth
+            (when (or (null max-depth) (< (1+ current-depth) max-depth))
+              (push (cons file (1+ current-depth)) dirs-to-process))))))
     (nreverse subdirs)))
 
-(defun dired-image-thumbnail--find-images-in-buffer (dired-buffer)
-  "Return list of image files visible in DIRED-BUFFER.
-This looks at what's actually shown in the dired buffer, including
-any inserted subdirectories."
-  (with-current-buffer dired-buffer
-    (let ((images nil))
-      (save-excursion
-        (goto-char (point-min))
-        (while (not (eobp))
-          (when-let ((file (dired-get-filename nil t)))
-            (when (and (not (file-directory-p file))
-                       (dired-image-thumbnail--image-p file))
-              (push file images)))
-          (forward-line 1)))
-      (nreverse images))))
+(defun dired-image-thumbnail--find-image-subdirs (directory &optional max-depth)
+  "Return subdirectories under DIRECTORY that contain image files.
+Optional MAX-DEPTH limits recursion depth."
+  (let ((all-subdirs (dired-image-thumbnail--find-subdirs directory max-depth))
+        (image-subdirs nil))
+    (dolist (subdir all-subdirs)
+      (when (dired-image-thumbnail--directory-has-images-p subdir)
+        (push subdir image-subdirs)))
+    (nreverse image-subdirs)))
 
-(defun dired-image-thumbnail--has-subdirectories-p (directory)
-  "Return non-nil if DIRECTORY has subdirectories."
-  (let ((found nil))
+(defun dired-image-thumbnail--directory-has-images-p (directory)
+  "Return non-nil if DIRECTORY contains image files (non-recursive check)."
+  (let ((has-images nil))
     (dolist (file (directory-files directory t "^[^.]" t))
-      (when (and (file-directory-p file)
-                 (not (member (file-name-nondirectory file) '("." ".."))))
-        (setq found t)))
-    found))
+      (when (and (not (file-directory-p file))
+                 (dired-image-thumbnail--image-p file))
+        (setq has-images t)))
+    has-images))
+
+(defun dired-image-thumbnail--insert-subdirs (subdirs)
+  "Insert SUBDIRS into the current dired buffer.
+SUBDIRS should be a list of directory paths."
+  (let ((inserted 0))
+    (dolist (subdir subdirs)
+      (let ((subdir-path (file-name-as-directory subdir)))
+        (condition-case err
+            (progn
+              (save-excursion
+                ;; Check if this subdir is already inserted
+                (goto-char (point-min))
+                (unless (re-search-forward 
+                        (concat "^  " (regexp-quote subdir-path) ":$") 
+                        nil t)
+                  (goto-char (point-max))
+                  (dired-insert-subdir subdir-path)
+                  (setq inserted (1+ inserted)))))
+          (error
+           (message "Could not insert subdir %s: %s" subdir-path err)))))
+    inserted))
 
 ;;;###autoload
-(defun dired-image-thumbnail (&optional recursive)
+(defun dired-image-thumbnail ()
   "Display thumbnails for image files in current dired buffer.
 If files are marked, show thumbnails for marked images only.
-Otherwise, show thumbnails for all images in the directory.
-With prefix argument RECURSIVE, include images from subdirectories.
+Otherwise, show thumbnails for all images visible in the dired buffer.
 
-When `dired-image-thumbnail-auto-recursive' is non-nil and the current
-directory has no image files but has subdirectories, recursive mode
-is automatically enabled.
+This works with inserted subdirectories - use 'i' (`dired-maybe-insert-subdir`)
+to insert subdirectories before calling this command to include images from
+those subdirectories. See `dired-image-thumbnail-insert-subdir-recursive'
+for a helper to insert all subdirectories at once.
 
-This function extends `image-dired' functionality by preparing the dired
-buffer (inserting subdirectories if needed), then calling vanilla image-dired
-which triggers all the hooks and gets our enhanced features."
-  (interactive "P")
+This function calls vanilla `image-dired' which triggers our hooks for
+enhanced features like sorting and filtering."
+  (interactive)
   (unless (derived-mode-p 'dired-mode)
     (user-error "Not in a dired buffer"))
-  (let* ((dired-buf (current-buffer))
-         (source-dir default-directory)
-         (has-marks (save-excursion
-                      (goto-char (point-min))
-                      (re-search-forward dired-re-mark nil t)))
-         ;; Check for images in current directory first (non-recursive)
-         (local-images (unless has-marks
-                         (dired-image-thumbnail--find-images source-dir nil)))
-         ;; Determine if we should go recursive
-         (recursive-p (or recursive
-                          dired-image-thumbnail-recursive
-                          ;; Auto-recursive: no local images but has subdirs
-                          (and dired-image-thumbnail-auto-recursive
-                               (not has-marks)
-                               (null local-images)
-                               (dired-image-thumbnail--has-subdirectories-p source-dir)))))
-    
-    ;; If recursive, insert all subdirectories into dired first
-    (when recursive-p
-      (dired-image-thumbnail--insert-all-subdirs source-dir dired-buf)
-      (message "Recursive mode: subdirectories inserted"))
-    
-    ;; Count images that will be shown
-    (let ((images (cond
-                   (has-marks
-                    (dired-get-marked-files nil nil #'dired-image-thumbnail--image-p))
-                   (t
-                    (dired-image-thumbnail--find-images-in-buffer dired-buf)))))
-      (unless images
-        (user-error "No image files found%s"
-                    (if recursive-p " (searched recursively)" "")))
-      
-      (message "Found %d image files%s" 
-               (length images)
-               (if recursive-p " (recursive)" "")))
-    
+  (let ((dired-buf (current-buffer))
+        (source-dir default-directory))
     ;; Store state for our hooks to use
-    (with-current-buffer dired-buf
-      (setq-local dired-image-thumbnail--source-dir source-dir)
-      (setq-local dired-image-thumbnail--recursive recursive-p))
+    (setq-local dired-image-thumbnail--source-dir source-dir)
+    (setq-local dired-image-thumbnail--dired-buffer dired-buf)
     
     ;; Call vanilla image-dired which will trigger our hooks and enhancements
     (call-interactively 'image-dired)))
+
+;;;###autoload
+(defun dired-image-thumbnail-insert-subdir-recursive (&optional max-depth)
+  "Insert all subdirectories recursively into the current dired buffer.
+Optional MAX-DEPTH limits recursion depth (nil means unlimited).
+This makes images in subdirectories visible to `dired-image-thumbnail'.
+
+Note: This can be slow for directories with many subdirectories.
+Consider using `dired-image-thumbnail-insert-image-subdirs' instead,
+which only inserts subdirectories that contain images."
+  (interactive "P")
+  (unless (derived-mode-p 'dired-mode)
+    (user-error "Not in a dired buffer"))
+  (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
+         (subdirs (dired-image-thumbnail--find-subdirs default-directory depth)))
+    (if subdirs
+        (progn
+          (message "Inserting %d subdirectories..." (length subdirs))
+          (dired-image-thumbnail--insert-subdirs subdirs)
+          (message "Inserted %d subdirectories" (length subdirs)))
+      (message "No subdirectories found"))))
+
+;;;###autoload
+(defun dired-image-thumbnail-insert-image-subdirs (&optional max-depth)
+  "Insert only subdirectories that contain image files.
+Optional MAX-DEPTH limits recursion depth (nil means unlimited).
+This is more efficient than `dired-image-thumbnail-insert-subdir-recursive'
+for directories with many non-image subdirectories."
+  (interactive "P")
+  (unless (derived-mode-p 'dired-mode)
+    (user-error "Not in a dired buffer"))
+  (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
+         (subdirs (dired-image-thumbnail--find-image-subdirs default-directory depth)))
+    (if subdirs
+        (progn
+          (message "Inserting %d subdirectories with images..." (length subdirs))
+          (dired-image-thumbnail--insert-subdirs subdirs)
+          (message "Inserted %d subdirectories" (length subdirs)))
+      (message "No subdirectories with images found"))))
+
+;;;###autoload
+(defun dired-image-thumbnail-kill-all-subdirs ()
+  "Remove all inserted subdirectories from the current dired buffer.
+This returns the view to just the top-level directory."
+  (interactive)
+  (unless (derived-mode-p 'dired-mode)
+    (user-error "Not in a dired buffer"))
+  (let ((count 0))
+    (save-excursion
+      (goto-char (point-max))
+      ;; Work backwards to avoid position issues
+      (while (dired-get-subdir)
+        (dired-kill-subdir)
+        (setq count (1+ count))))
+    (if (> count 0)
+        (message "Removed %d subdirectories" count)
+      (message "No subdirectories to remove"))))
 
 ;;;###autoload
 ;;; Keymaps
@@ -1046,7 +978,6 @@ which triggers all the hooks and gets our enhanced features."
   (define-key image-dired-thumbnail-mode-map (kbd "S") #'dired-image-thumbnail-sort)
   (define-key image-dired-thumbnail-mode-map (kbd "/") dired-image-thumbnail-filter-map)
   (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
-  (define-key image-dired-thumbnail-mode-map (kbd "R") #'dired-image-thumbnail-toggle-recursive)
   (define-key image-dired-thumbnail-mode-map (kbd "w") #'dired-image-thumbnail-toggle-wrap)
   (define-key image-dired-thumbnail-mode-map (kbd "r") #'dired-image-thumbnail-refresh)
   (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
