@@ -117,7 +117,7 @@ With =dired-image-thumbnail-auto-display-on-navigate= enabled (default):
 
 Press =C-d= in either the thumbnail or image display buffer to:
 
-1. Get a confirmation prompt
+1. Get a confirmation prompt (unless `dired-image-thumbnail-auto-accept` is enabled)
 2. Delete the current image file
 3. Automatically advance to the next image
 4. Continue browsing seamlessly
@@ -153,6 +153,7 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 | Key   | Command                                    | Description                     |
 |-------+--------------------------------------------+---------------------------------|
+| =s b= | ~dired-image-thumbnail-sort-by-dired~        | Sort by Dired buffer order      |
 | =s n= | ~dired-image-thumbnail-sort-by-name~         | Sort by filename                |
 | =s d= | ~dired-image-thumbnail-sort-by-date~         | Sort by modification date       |
 | =s s= | ~dired-image-thumbnail-sort-by-size~         | Sort by file size               |
@@ -176,7 +177,7 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 | Key | Command                              | Description              |
 |-----+--------------------------------------+--------------------------|
 | =w= | ~dired-image-thumbnail-toggle-wrap~    | Toggle wrap display mode |
-| =r= | ~dired-image-thumbnail-refresh~        | Refresh the display      |
+| =r=, =g= | ~dired-image-thumbnail-refresh~ | Refresh the display      |
 | =+= | ~dired-image-thumbnail-increase-size~  | Increase thumbnail size  |
 | =-= | ~dired-image-thumbnail-decrease-size~  | Decrease thumbnail size  |
 
@@ -230,7 +231,7 @@ All customization options are in the =dired-image-thumbnail= group. Use =M-x cus
 ** Default Sort Settings
 
 #+begin_src emacs-lisp
-(setq dired-image-thumbnail-sort-by 'name)      ; 'name, 'date, 'size, or 'dimensions
+(setq dired-image-thumbnail-sort-by 'dired)      ; 'dired, 'name, 'date, 'size, or 'dimensions
 (setq dired-image-thumbnail-sort-order 'ascending) ; 'ascending or 'descending
 #+end_src
 
@@ -259,6 +260,16 @@ Control whether navigating with =n=/=p= automatically displays full-size images:
 #+end_src
 
 When enabled (default), pressing =n= or =p= in the thumbnail buffer automatically updates the image display buffer. When disabled, you must press =RET= or =C-<return>= to view full-size images.
+
+** Auto-Accepting Actions
+
+Control whether to skip confirmation prompts for file actions:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-auto-accept nil)  ; Require confirmation (default)
+#+end_src
+
+When enabled, actions like deleting files (=D=, =C-d=, =x=) will proceed without asking for confirmation.
 
 ** Image Extensions
 

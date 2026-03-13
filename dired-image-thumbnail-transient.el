@@ -51,6 +51,7 @@
 ;; Declare functions from dired-image-thumbnail
 (declare-function image-dired-display-image "image-dired")
 (declare-function dired-image-thumbnail--format-active-filters "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-sort-by-dired "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort-by-name "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort-by-date "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-unmark "dired-image-thumbnail")
@@ -106,9 +107,10 @@
 (transient-define-prefix dired-image-thumbnail-transient-sort ()
   "Sorting commands for image thumbnails."
   ["Sort By"
-   ("n" "Name" dired-image-thumbnail-sort-by-name :transient nil)
-   ("d" "Date modified" dired-image-thumbnail-sort-by-date :transient nil)
-   ("s" "Size" dired-image-thumbnail-sort-by-size :transient nil)]
+    ("b" "Dired buffer order" dired-image-thumbnail-sort-by-dired :transient nil)
+    ("n" "Name" dired-image-thumbnail-sort-by-name :transient nil)
+    ("d" "Date modified" dired-image-thumbnail-sort-by-date :transient nil)
+    ("s" "Size" dired-image-thumbnail-sort-by-size :transient nil)]
   ["Order"
    ("r" "Reverse order" dired-image-thumbnail-sort-reverse :transient nil)])
 
@@ -133,7 +135,8 @@
   ["Toggle"
    ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)]
   ["Refresh"
-   ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)])
+   ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)
+   ("g" "Refresh display" dired-image-thumbnail-refresh :transient nil)])
 
 ;;; Main transient menu
 
@@ -164,6 +167,12 @@
     ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)]
    ["Other"
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
+    ("A" "Auto-accept" (lambda () (interactive)
+                         (setq dired-image-thumbnail-auto-accept
+                               (not dired-image-thumbnail-auto-accept))
+                         (message "Auto-accept: %s"
+                                  (if dired-image-thumbnail-auto-accept "ON" "OFF")))
+     :transient t)
     ("?" "Help" dired-image-thumbnail-help :transient nil)
     ("q" "Quit menu" transient-quit-one)]])
 

@@ -91,14 +91,15 @@
   :group 'image-dired
   :prefix "dired-image-thumbnail-")
 
-(defcustom dired-image-thumbnail-sort-by 'date
+(defcustom dired-image-thumbnail-sort-by 'dired
   "Default sorting criteria for thumbnails."
-  :type '(choice (const :tag "Name" name)
+  :type '(choice (const :tag "Dired Order" dired)
+                 (const :tag "Name" name)
                  (const :tag "Date modified" date)
                  (const :tag "Size" size))
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-sort-order 'descending
+(defcustom dired-image-thumbnail-sort-order 'ascending
   "Default sort order for thumbnails."
   :type '(choice (const :tag "Ascending" ascending)
                  (const :tag "Descending" descending))
@@ -124,6 +125,13 @@ When nil, use Emacs default window placement."
 When non-nil, pressing `n` or `p` in the thumbnail buffer automatically
 updates the image display buffer. When nil, you must press RET or
 C-<return> to view the full-size image."
+  :type 'boolean
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-auto-accept nil
+  "Whether to skip confirmation for file actions like deletion.
+When non-nil, actions that normally ask for confirmation (like
+deleting files) will proceed without prompting."
   :type 'boolean
   :group 'dired-image-thumbnail)
 
@@ -306,6 +314,7 @@ If RECURSIVE is non-nil, search subdirectories as well."
          (sort-order (or dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order))
          (sorted
           (pcase sort-by
+            ('dired images)
             ('name
              (sort (copy-sequence images)
                    (lambda (a b)
@@ -390,26 +399,52 @@ If RECURSIVE is non-nil, search subdirectories as well."
 (defun dired-image-thumbnail--initialize-buffer ()
   "Initialize dired-image-thumbnail variables in the current thumbnail buffer.
 This is called via hook when entering `image-dired-thumbnail-mode'."
-  (unless dired-image-thumbnail--all-images
-    ;; Collect images from the buffer's text properties
+  ;; Skip if already initialized and has images
+  (unless (and dired-image-thumbnail--all-images
+               dired-image-thumbnail--dired-buffer)
+    ;; Small delay to ensure image-dired has started inserting properties
+    ;; though we prefer finding the dired buffer through other means if possible
     (let ((images nil)
-          (dired-buf nil)
-          (source-dir nil))
+          (dired-buf dired-image-thumbnail--dired-buffer)
+          (source-dir dired-image-thumbnail--source-dir))
+      
+      ;; If not explicitly passed, try to find from text properties
+      (unless dired-buf
+        (save-excursion
+          (goto-char (point-min))
+          (let ((found nil))
+            (while (and (not found) (not (eobp)))
+              (when-let ((buf (get-text-property (point) 'associated-dired-buffer)))
+                (setq dired-buf buf)
+                (setq found t))
+              (forward-char)))))
+
+      ;; If still not found, look for any live dired buffer that might be relevant
+      (unless dired-buf
+        (let ((buffers (buffer-list)))
+          (while (and (not dired-buf) buffers)
+            (let ((buf (pop buffers)))
+              (with-current-buffer buf
+                (when (and (derived-mode-p 'dired-mode)
+                           (boundp 'dired-image-thumbnail--source-dir)
+                           (equal default-directory (buffer-local-value 'default-directory (current-buffer))))
+                  (setq dired-buf buf)))))))
+
       (save-excursion
         (goto-char (point-min))
         (while (not (eobp))
           (when-let ((file (get-text-property (point) 'original-file-name)))
             (push file images)
-            (unless dired-buf
-              (setq dired-buf (get-text-property (point) 'associated-dired-buffer)))
             (unless source-dir
               (setq source-dir (file-name-directory file))))
           (forward-char)))
+
       ;; Get source-dir from dired buffer if available
       (when (and dired-buf (buffer-live-p dired-buf))
         (with-current-buffer dired-buf
           (unless source-dir
             (setq source-dir dired-image-thumbnail--source-dir))))
+      
       (when images
         (setq dired-image-thumbnail--all-images (nreverse images))
         (setq dired-image-thumbnail--current-images dired-image-thumbnail--all-images)
@@ -527,6 +562,13 @@ Otherwise, fall back to the original function."
             (unless found (forward-char)))
           (unless found (goto-char (point-min))))))))
 
+(defun dired-image-thumbnail-sort-by-dired ()
+  "Sort thumbnails by Dired buffer order."
+  (interactive)
+  (setq dired-image-thumbnail--sort-by 'dired)
+  (dired-image-thumbnail--apply-sort-and-filter)
+  (message "Sorted by Dired order"))
+
 (defun dired-image-thumbnail-sort-by-name ()
   "Sort thumbnails by name."
   (interactive)
@@ -562,9 +604,10 @@ Otherwise, fall back to the original function."
   "Interactively choose sort criteria."
   (interactive)
   (let ((choice (completing-read "Sort by: "
-                                 '("name" "date" "size" "reverse")
+                                 '("dired" "name" "date" "size" "reverse")
                                  nil t)))
     (pcase choice
+      ("dired" (dired-image-thumbnail-sort-by-dired))
       ("name" (dired-image-thumbnail-sort-by-name))
       ("date" (dired-image-thumbnail-sort-by-date))
       ("size" (dired-image-thumbnail-sort-by-size))
@@ -729,7 +772,8 @@ the original files for crisp display (slower but higher quality)."
   (let ((files (dired-image-thumbnail-get-marked)))
     (unless files
       (user-error "No images to delete"))
-    (when (yes-or-no-p (format "Delete %d image(s)? " (length files)))
+    (when (or dired-image-thumbnail-auto-accept
+              (yes-or-no-p (format "Delete %d image(s)? " (length files))))
       (dolist (file files)
         (delete-file file t)
         (setq dired-image-thumbnail--current-images
@@ -748,7 +792,8 @@ the original files for crisp display (slower but higher quality)."
   "Delete the image at or near point."
   (interactive)
   (if-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
-      (when (yes-or-no-p (format "Delete %s? " (file-name-nondirectory file)))
+      (when (or dired-image-thumbnail-auto-accept
+                (yes-or-no-p (format "Delete %s? " (file-name-nondirectory file))))
         ;; Find the next image to move to after deletion
         (let ((index (cl-position file dired-image-thumbnail--current-images :test #'equal)))
           (delete-file file t)
@@ -813,9 +858,10 @@ the original files for crisp display (slower but higher quality)."
     (princ "  x            Delete marked images\n")
     (princ "  d            Go to Dired buffer\n\n")
     (princ "Display:\n")
-    (princ "  r            Refresh display\n")
+    (princ "  r, g         Refresh display\n")
     (princ "  w            Toggle wrap mode\n\n")
     (princ "Sorting (s prefix):\n")
+    (princ "  sb           Sort by Dired buffer order\n")
     (princ "  sn           Sort by name\n")
     (princ "  sd           Sort by date\n")
     (princ "  ss           Sort by size\n")
@@ -919,7 +965,17 @@ enhanced features like sorting and filtering."
     (setq-local dired-image-thumbnail--dired-buffer dired-buf)
     
     ;; Call vanilla image-dired which will trigger our hooks and enhancements
-    (call-interactively 'image-dired)))
+    (call-interactively 'image-dired)
+    
+    ;; Now refresh the thumbnail buffer with our enhancements
+    ;; We need to find the thumbnail buffer first
+    (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+      (with-current-buffer thumb-buf
+        ;; Explicitly set these since image-dired might have created a new buffer
+        (setq dired-image-thumbnail--dired-buffer dired-buf)
+        (setq dired-image-thumbnail--source-dir source-dir)
+        (dired-image-thumbnail-refresh)
+        (goto-char (point-min))))))
 
 ;;;###autoload
 (defun dired-image-thumbnail-insert-subdir-recursive (&optional max-depth)
@@ -983,6 +1039,7 @@ This returns the view to just the top-level directory."
 
 (defvar dired-image-thumbnail-sort-map
   (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "b") #'dired-image-thumbnail-sort-by-dired)
     (define-key map (kbd "n") #'dired-image-thumbnail-sort-by-name)
     (define-key map (kbd "d") #'dired-image-thumbnail-sort-by-date)
     (define-key map (kbd "s") #'dired-image-thumbnail-sort-by-size)
@@ -1008,6 +1065,7 @@ This returns the view to just the top-level directory."
   (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
   (define-key image-dired-thumbnail-mode-map (kbd "w") #'dired-image-thumbnail-toggle-wrap)
   (define-key image-dired-thumbnail-mode-map (kbd "r") #'dired-image-thumbnail-refresh)
+  (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)
   (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
   (define-key image-dired-thumbnail-mode-map (kbd "-") #'dired-image-thumbnail-decrease-size)
   ;; Marking
@@ -1046,7 +1104,8 @@ This permanently deletes the file from disk and removes its thumbnail."
   (interactive)
   (let ((file-name (image-dired-original-file-name)))
     (when (and file-name
-               (y-or-n-p (format "Delete %s? " (file-name-nondirectory file-name))))
+               (or dired-image-thumbnail-auto-accept
+                   (y-or-n-p (format "Delete %s? " (file-name-nondirectory file-name)))))
       (delete-file file-name)
       (image-dired-delete-char)
       (when (not (eobp))
@@ -1059,7 +1118,8 @@ For use in the *image-dired-display-image* buffer."
   (interactive)
   (let ((current-file (buffer-file-name)))
     (when (and current-file
-               (y-or-n-p (format "Delete %s? " (file-name-nondirectory current-file))))
+               (or dired-image-thumbnail-auto-accept
+                   (y-or-n-p (format "Delete %s? " (file-name-nondirectory current-file)))))
       (image-next-file 1)
       (delete-file current-file)
       (message "Deleted %s" current-file))))
