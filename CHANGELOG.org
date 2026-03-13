@@ -1,0 +1,51 @@
+#+title: Change Log for dired-image-thumbnail
+#+author: James Dyer
+#+email: captainflasmr@gmail.com
+#+language: en
+#+options: ':t toc:nil author:nil email:nil num:nil title:nil
+#+todo: TODO DOING | DONE
+#+startup: showall
+
+This document contains the release notes for each tagged commit on the
+project's main git repository.
+
+* Versions
+
+** <2026-03-13 Fri> *1.1.0*
+
+Enhanced workflow: auto-accept, Dired-order sorting, and initialization fixes.
+
+*** New Features
+
+- *Auto-accept for file actions* -- Added `dired-image-thumbnail-auto-accept`
+  option. When enabled, deletion actions (D, C-d, x) skip confirmation
+  prompts.  A toggle is available in the transient menu (=A=).
+- *Dired buffer sorting alignment* -- Default sorting now matches the Dired
+  buffer order (=dired=). Added =dired-image-thumbnail-sort-by-dired= (bound
+  to =s b=) to easily revert to this order if changed.
+- *Refresh shortcut* -- Added =g= as a standard Emacs refresh shortcut
+  alongside =r=.
+- *Initial cursor positioning* -- The cursor is now automatically positioned
+  on the very first thumbnail when the buffer is first loaded.
+
+*** Improvements
+
+- *Initialization robustness* -- Fixed issue where standard =image-dired=
+  settings would override enhancements on initial load. The main entry point
+  now explicitly triggers a refresh with custom settings.
+- *Transient menu updates* -- Added sorting by Dired order and the
+  Auto-accept toggle to the transient interface.
+
+*** Documentation
+
+- Updated =README.org= and help buffers to reflect new keybindings and
+  sorting options.
+
+** <2026-03-10 Tue> *1.0.0*
+
+Initial release.
+
+- Thumbnails based on Dired/image-dired integration.
+- Sorting by name, date, size.
+- Basic marking and deletion support.
+- Transient menu for common actions.
