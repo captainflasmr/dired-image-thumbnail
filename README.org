@@ -178,6 +178,7 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 |-----+--------------------------------------+--------------------------|
 | =w= | ~dired-image-thumbnail-toggle-wrap~    | Toggle wrap display mode |
 | =r=, =g= | ~dired-image-thumbnail-refresh~ | Refresh the display      |
+| =G=     | ~dired-image-thumbnail-hard-refresh~ | Clear cache and refresh  |
 | =+= | ~dired-image-thumbnail-increase-size~  | Increase thumbnail size  |
 | =-= | ~dired-image-thumbnail-decrease-size~  | Decrease thumbnail size  |
 

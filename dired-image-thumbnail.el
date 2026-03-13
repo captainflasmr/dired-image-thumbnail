@@ -562,6 +562,25 @@ Otherwise, fall back to the original function."
             (unless found (forward-char)))
           (unless found (goto-char (point-min))))))))
 
+(defun dired-image-thumbnail-hard-refresh ()
+  "Refresh thumbnails by clearing the cache and reloading.
+This deletes the contents of `image-dired-dir' and then calls
+`dired-image-thumbnail-refresh'."
+  (interactive)
+  (unless (file-directory-p image-dired-dir)
+    (make-directory image-dired-dir t))
+  (when (or dired-image-thumbnail-auto-accept
+            (yes-or-no-p (format "Deep refresh: Clear all thumbnails in %s? " image-dired-dir)))
+    (message "Clearing thumbnail cache...")
+    ;; Delete all files in image-dired-dir
+    (let ((files (directory-files image-dired-dir t directory-files-no-dot-files-regexp)))
+      (dolist (file files)
+        (if (file-directory-p file)
+            (delete-directory file t)
+          (delete-file file))))
+    (dired-image-thumbnail-refresh)
+    (message "Thumbnail cache cleared and buffer refreshed.")))
+
 (defun dired-image-thumbnail-sort-by-dired ()
   "Sort thumbnails by Dired buffer order."
   (interactive)
@@ -859,6 +878,7 @@ the original files for crisp display (slower but higher quality)."
     (princ "  d            Go to Dired buffer\n\n")
     (princ "Display:\n")
     (princ "  r, g         Refresh display\n")
+    (princ "  G            Hard refresh (clear cache and reload)\n")
     (princ "  w            Toggle wrap mode\n\n")
     (princ "Sorting (s prefix):\n")
     (princ "  sb           Sort by Dired buffer order\n")
@@ -1066,6 +1086,7 @@ This returns the view to just the top-level directory."
   (define-key image-dired-thumbnail-mode-map (kbd "w") #'dired-image-thumbnail-toggle-wrap)
   (define-key image-dired-thumbnail-mode-map (kbd "r") #'dired-image-thumbnail-refresh)
   (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)
+  (define-key image-dired-thumbnail-mode-map (kbd "G") #'dired-image-thumbnail-hard-refresh)
   (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
   (define-key image-dired-thumbnail-mode-map (kbd "-") #'dired-image-thumbnail-decrease-size)
   ;; Marking

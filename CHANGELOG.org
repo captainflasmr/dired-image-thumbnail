@@ -11,6 +11,17 @@ project's main git repository.
 
 * Versions
 
+** <2026-03-13 Fri> *1.2.0*
+
+Hard Refresh and Cache Management.
+
+*** New Features
+
+- *Hard Refresh (G)* -- Added `dired-image-thumbnail-hard-refresh` (bound to
+  =G=). This command clears the entire thumbnail cache in
+  `image-dired-dir' before reloading the buffer. Useful for resolving
+  stale or broken thumbnails.
+
 ** <2026-03-13 Fri> *1.1.0*
 
 Enhanced workflow: auto-accept, Dired-order sorting, and initialization fixes.

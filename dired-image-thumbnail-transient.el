@@ -51,6 +51,7 @@
 ;; Declare functions from dired-image-thumbnail
 (declare-function image-dired-display-image "image-dired")
 (declare-function dired-image-thumbnail--format-active-filters "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-hard-refresh "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort-by-dired "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort-by-name "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort-by-date "dired-image-thumbnail")
@@ -136,7 +137,8 @@
    ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)]
   ["Refresh"
    ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)
-   ("g" "Refresh display" dired-image-thumbnail-refresh :transient nil)])
+   ("g" "Refresh display" dired-image-thumbnail-refresh :transient nil)
+   ("G" "Hard refresh (clear cache)" dired-image-thumbnail-hard-refresh :transient nil)])
 
 ;;; Main transient menu
 
