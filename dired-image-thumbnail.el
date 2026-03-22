@@ -281,6 +281,23 @@ If RECURSIVE is non-nil, search subdirectories as well."
     (seq-filter #'dired-image-thumbnail--image-p
                 (directory-files directory t nil t))))
 
+(defun dired-image-thumbnail--get-dired-marked-set ()
+  "Return a hash set of all marked files in the associated dired buffer.
+This collects all marks in a single pass through the dired buffer."
+  (let ((marked (make-hash-table :test 'equal)))
+    (when (and dired-image-thumbnail--dired-buffer
+               (buffer-live-p dired-image-thumbnail--dired-buffer))
+      (with-current-buffer dired-image-thumbnail--dired-buffer
+        (save-excursion
+          (goto-char (point-min))
+          (while (not (eobp))
+            (when (image-dired-dired-file-marked-p)
+              (let ((file (dired-get-filename nil t)))
+                (when file
+                  (puthash file t marked))))
+            (forward-line 1)))))
+    marked))
+
 (defun dired-image-thumbnail--file-marked-p (file)
   "Return non-nil if FILE is marked in the associated dired buffer."
   (when (and dired-image-thumbnail--dired-buffer
@@ -315,12 +332,14 @@ If RECURSIVE is non-nil, search subdirectories as well."
 
 (defun dired-image-thumbnail--count-marked ()
   "Count the number of marked images."
-  (let ((count 0))
-    (when dired-image-thumbnail--current-images
-      (dolist (file dired-image-thumbnail--current-images)
-        (when (dired-image-thumbnail--file-marked-p file)
-          (setq count (1+ count)))))
-    count))
+  (if dired-image-thumbnail--current-images
+      (let ((marked-set (dired-image-thumbnail--get-dired-marked-set))
+            (count 0))
+        (dolist (file dired-image-thumbnail--current-images)
+          (when (gethash file marked-set)
+            (setq count (1+ count))))
+        count)
+    0))
 
 ;;; Sorting functions
 
@@ -565,16 +584,19 @@ Otherwise, fall back to the original function."
         (image-dired--line-up-with-method))
       ;; Restore mark display
       (image-dired--thumb-update-marks)
-      (image-dired--update-header-line)
-      ;; Try to restore position
-      (when current-file
-        (goto-char (point-min))
-        (let ((found nil))
-          (while (and (not found) (not (eobp)))
-            (when (equal (get-text-property (point) 'original-file-name) current-file)
-              (setq found t))
-            (unless found (forward-char)))
-          (unless found (goto-char (point-min))))))))
+      ;; Restore position before updating header line, so point is on a
+      ;; valid thumbnail when the header line reads the file at point.
+      (if current-file
+          (progn
+            (goto-char (point-min))
+            (let ((found nil))
+              (while (and (not found) (not (eobp)))
+                (when (equal (get-text-property (point) 'original-file-name) current-file)
+                  (setq found t))
+                (unless found (forward-char)))
+              (unless found (goto-char (point-min)))))
+        (goto-char (point-min)))
+      (image-dired--update-header-line))))
 
 (defun dired-image-thumbnail-hard-refresh ()
   "Refresh thumbnails by clearing the cache and reloading.
@@ -793,8 +815,9 @@ the original files for crisp display (slower but higher quality)."
   (unless dired-image-thumbnail--all-images
     (dired-image-thumbnail--initialize-buffer))
   (let ((marked (when dired-image-thumbnail--current-images
-                  (seq-filter #'dired-image-thumbnail--file-marked-p
-                              dired-image-thumbnail--current-images))))
+                  (let ((marked-set (dired-image-thumbnail--get-dired-marked-set)))
+                    (seq-filter (lambda (file) (gethash file marked-set))
+                                dired-image-thumbnail--current-images)))))
     (or marked
         (when-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
           (list file)))))
@@ -1003,9 +1026,14 @@ enhanced features like sorting and filtering."
     ;; We need to find the thumbnail buffer first
     (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
       (with-current-buffer thumb-buf
-        ;; Explicitly set these since image-dired might have created a new buffer
+        ;; Reset state so initialization re-scans from the new dired buffer
+        (setq dired-image-thumbnail--all-images nil)
+        (setq dired-image-thumbnail--current-images nil)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
         (setq dired-image-thumbnail--source-dir source-dir)
+        (setq dired-image-thumbnail--filter-name nil)
+        (setq dired-image-thumbnail--filter-size-min nil)
+        (setq dired-image-thumbnail--filter-size-max nil)
         (dired-image-thumbnail-refresh)
         (goto-char (point-min))))))
 
