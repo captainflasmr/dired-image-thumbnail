@@ -4,6 +4,7 @@
 
 ;; Author: James Dyer
 ;; Keywords: multimedia, files, dired
+;; URL: https://github.com/captainflasmr/dired-image-thumbnail
 ;; Package-Requires: ((emacs "28.1") (transient "0.4.0"))
 
 ;; This file is not part of GNU Emacs.

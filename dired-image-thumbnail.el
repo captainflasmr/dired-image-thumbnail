@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 0.4.0
+;; Version: 1.2.0
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -81,6 +81,7 @@
 (require 'image-dired-util)
 (require 'image)
 (require 'dired)
+(require 'cl-lib)
 
 (declare-function image-size "image.c" (spec &optional pixels frame))
 
@@ -96,13 +97,16 @@
   :type '(choice (const :tag "Dired Order" dired)
                  (const :tag "Name" name)
                  (const :tag "Date modified" date)
-                 (const :tag "Size" size))
+                 (const :tag "Size" size)
+                 (const :tag "Dimensions" dimensions))
+  :safe #'symbolp
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-sort-order 'ascending
   "Default sort order for thumbnails."
   :type '(choice (const :tag "Ascending" ascending)
                  (const :tag "Descending" descending))
+  :safe #'symbolp
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-wrap-display nil
@@ -110,6 +114,7 @@
 When non-nil, thumbnails flow naturally and wrap based on window width.
 When nil, the standard `image-dired' line-up method is used."
   :type 'boolean
+  :safe #'booleanp
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-manage-window-layout t
@@ -118,6 +123,7 @@ When non-nil, thumbnail buffer appears on the left (50% width) and
 image display buffer appears on the right (50% width).
 When nil, use Emacs default window placement."
   :type 'boolean
+  :safe #'booleanp
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-auto-display-on-navigate t
@@ -126,6 +132,7 @@ When non-nil, pressing `n` or `p` in the thumbnail buffer automatically
 updates the image display buffer. When nil, you must press RET or
 C-<return> to view the full-size image."
   :type 'boolean
+  :safe #'booleanp
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-auto-accept nil
@@ -133,12 +140,14 @@ C-<return> to view the full-size image."
 When non-nil, actions that normally ask for confirmation (like
 deleting files) will proceed without prompting."
   :type 'boolean
+  :safe #'booleanp
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-image-extensions
   '("jpg" "jpeg" "png" "gif" "bmp" "tiff" "tif" "webp" "svg" "ico" "heic" "heif")
   "List of image file extensions to recognise."
   :type '(repeat string)
+  :safe (lambda (v) (and (listp v) (cl-every #'stringp v)))
   :group 'dired-image-thumbnail)
 
 ;;; Internal variables
@@ -179,6 +188,9 @@ deleting files) will proceed without prompting."
 (defvar-local dired-image-thumbnail--dimension-pending (make-hash-table :test 'equal)
   "Files pending dimension calculation. Value is t if process is running.")
 
+(defvar-local dired-image-thumbnail--recursive nil
+  "Non-nil if thumbnails include images from subdirectories.")
+
 (defun dired-image-thumbnail--get-image-dimensions (file)
   "Get dimensions of image FILE as (width . height), or (0 . 0) if unknown.
 If not cached, launch an async process (`identify`) to fill the cache."
@@ -213,22 +225,23 @@ If not cached, launch an async process (`identify`) to fill the cache."
             found)))))
 
 (defun dired-image-thumbnail--start-identify-process (file)
-  "Start an async process to get dimensions for FILE with improved logging."
-  (let ((buf (generate-new-buffer " *dired-image-thumb-identify*"))
+  "Start an async process to get dimensions for FILE."
+  (let ((proc-buf (generate-new-buffer " *dired-image-thumb-identify*"))
+        (thumb-buf (current-buffer))
         (file-attr file))
     (make-process
      :name "dired-image-thumb-identify"
-     :buffer buf
+     :buffer proc-buf
      :command (list "identify" "-format" "%w %h" (expand-file-name file))
      :noquery t
      :sentinel
      (lambda (proc _event)
-       (let ((file-attr file-attr)) ; ensure file-attr is always bound in closure
-         (when (eq (process-status proc) 'exit)
-           (let ((exit-status (process-exit-status proc)))
-             (with-current-buffer (process-buffer proc)
-               (goto-char (point-min))
-               (when (zerop exit-status)
+       (when (eq (process-status proc) 'exit)
+         (unwind-protect
+             (when (and (zerop (process-exit-status proc))
+                        (buffer-live-p (process-buffer proc)))
+               (with-current-buffer (process-buffer proc)
+                 (goto-char (point-min))
                  (let* ((line (buffer-substring-no-properties (point-min) (point-max)))
                         (nums (split-string line)))
                    (when (and (= (length nums) 2)
@@ -236,13 +249,16 @@ If not cached, launch an async process (`identify`) to fill the cache."
                               (string-match-p "^[0-9]+$" (cadr nums)))
                      (let ((w (string-to-number (car nums)))
                            (h (string-to-number (cadr nums))))
-                       (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)
-                       (dolist (buf (buffer-list))
-                         (with-current-buffer buf
+                       (when (buffer-live-p thumb-buf)
+                         (with-current-buffer thumb-buf
+                           (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)
+                           (remhash file-attr dired-image-thumbnail--dimension-pending)))
+                       (dolist (b (buffer-list))
+                         (with-current-buffer b
                            (when (derived-mode-p 'image-dired-thumbnail-mode)
-                             (image-dired--update-header-line))))))))
-               (remhash file-attr dired-image-thumbnail--dimension-pending)
-               (kill-buffer (process-buffer proc))))))))))
+                             (image-dired--update-header-line)))))))))
+           (when (buffer-live-p (process-buffer proc))
+             (kill-buffer (process-buffer proc)))))))))
 
 ;;; Utility functions
 
@@ -314,23 +330,23 @@ If RECURSIVE is non-nil, search subdirectories as well."
          (sort-order (or dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order))
          (sorted
           (pcase sort-by
-            ('dired images)
+            ('dired (copy-sequence images))
             ('name
              (sort (copy-sequence images)
                    (lambda (a b)
                      (string< (downcase (file-name-nondirectory a))
                               (downcase (file-name-nondirectory b))))))
             ('date
-             (sort (copy-sequence images)
-                   (lambda (a b)
-                     (time-less-p (file-attribute-modification-time (file-attributes a))
-                                  (file-attribute-modification-time (file-attributes b))))))
+             (let ((decorated (mapcar (lambda (f)
+                                        (cons (file-attribute-modification-time (file-attributes f)) f))
+                                      images)))
+               (mapcar #'cdr (sort decorated (lambda (a b) (time-less-p (car a) (car b)))))))
             ('size
-             (sort (copy-sequence images)
-                   (lambda (a b)
-                     (< (or (file-attribute-size (file-attributes a)) 0)
-                        (or (file-attribute-size (file-attributes b)) 0)))))
-            (_ images))))
+             (let ((decorated (mapcar (lambda (f)
+                                        (cons (or (file-attribute-size (file-attributes f)) 0) f))
+                                      images)))
+               (mapcar #'cdr (sort decorated (lambda (a b) (< (car a) (car b)))))))
+            (_ (copy-sequence images)))))
     (if (eq sort-order 'descending)
         (nreverse sorted)
       sorted)))
@@ -492,8 +508,6 @@ Otherwise, fall back to the original function."
          marked-info))
     ;; Fall back to original function
     (funcall orig-fun buf file image-count props comment)))
-
-(advice-add 'image-dired-format-properties-string :around #'dired-image-thumbnail--format-properties-string)
 
 ;;; Display functions
 
@@ -665,11 +679,11 @@ Enter size in human-readable format (e.g., 100k, 1M)."
   "Parse human-readable size STR to bytes."
   (let ((str (downcase (string-trim str))))
     (cond
-     ((string-match "\\([0-9.]+\\)g" str)
+     ((string-match "\\`\\([0-9.]+\\)g\\'" str)
       (* (string-to-number (match-string 1 str)) 1073741824))
-     ((string-match "\\([0-9.]+\\)m" str)
+     ((string-match "\\`\\([0-9.]+\\)m\\'" str)
       (* (string-to-number (match-string 1 str)) 1048576))
-     ((string-match "\\([0-9.]+\\)k" str)
+     ((string-match "\\`\\([0-9.]+\\)k\\'" str)
       (* (string-to-number (match-string 1 str)) 1024))
      (t (string-to-number str)))))
 
@@ -796,9 +810,9 @@ the original files for crisp display (slower but higher quality)."
       (dolist (file files)
         (delete-file file t)
         (setq dired-image-thumbnail--current-images
-              (delete file dired-image-thumbnail--current-images))
+              (remove file dired-image-thumbnail--current-images))
         (setq dired-image-thumbnail--all-images
-              (delete file dired-image-thumbnail--all-images)))
+              (remove file dired-image-thumbnail--all-images)))
       ;; Refresh dired buffer
       (when (and dired-image-thumbnail--dired-buffer
                  (buffer-live-p dired-image-thumbnail--dired-buffer))
@@ -817,9 +831,9 @@ the original files for crisp display (slower but higher quality)."
         (let ((index (cl-position file dired-image-thumbnail--current-images :test #'equal)))
           (delete-file file t)
           (setq dired-image-thumbnail--current-images
-                (delete file dired-image-thumbnail--current-images))
+                (remove file dired-image-thumbnail--current-images))
           (setq dired-image-thumbnail--all-images
-                (delete file dired-image-thumbnail--all-images))
+                (remove file dired-image-thumbnail--all-images))
           ;; Refresh dired buffer
           (when (and dired-image-thumbnail--dired-buffer
                      (buffer-live-p dired-image-thumbnail--dired-buffer))
@@ -934,12 +948,10 @@ Optional MAX-DEPTH limits recursion depth."
 
 (defun dired-image-thumbnail--directory-has-images-p (directory)
   "Return non-nil if DIRECTORY contains image files (non-recursive check)."
-  (let ((has-images nil))
-    (dolist (file (directory-files directory t "^[^.]" t))
-      (when (and (not (file-directory-p file))
-                 (dired-image-thumbnail--image-p file))
-        (setq has-images t)))
-    has-images))
+  (cl-some (lambda (file)
+             (and (not (file-directory-p file))
+                  (dired-image-thumbnail--image-p file)))
+           (directory-files directory t "^[^.]" t)))
 
 (defun dired-image-thumbnail--insert-subdirs (subdirs)
   "Insert SUBDIRS into the current dired buffer.
@@ -1054,7 +1066,6 @@ This returns the view to just the top-level directory."
         (message "Removed %d subdirectories" count)
       (message "No subdirectories to remove"))))
 
-;;;###autoload
 ;;; Keymaps
 
 (defvar dired-image-thumbnail-sort-map
@@ -1097,10 +1108,9 @@ This returns the view to just the top-level directory."
   (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)
   (define-key image-dired-thumbnail-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-and-next)
   (define-key image-dired-thumbnail-mode-map (kbd "x") #'dired-image-thumbnail-delete-marked)
-  ;; Enhanced navigation with auto-display
-  (when dired-image-thumbnail-auto-display-on-navigate
-    (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
-    (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image))
+  ;; Enhanced navigation (auto-display checked at runtime)
+  (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
+  (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
   ;; Other
   (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-help)
   (define-key image-dired-thumbnail-mode-map (kbd "h") #'dired-image-thumbnail-help))
@@ -1108,16 +1118,22 @@ This returns the view to just the top-level directory."
 ;;; Enhanced navigation and deletion
 
 (defun dired-image-thumbnail-next-image ()
-  "Move to next thumbnail and display full-size image."
+  "Move to next thumbnail and optionally display full-size image.
+When `dired-image-thumbnail-auto-display-on-navigate' is non-nil,
+the full-size image is automatically displayed."
   (interactive)
   (image-dired-forward-image)
-  (image-dired-display-this))
+  (when dired-image-thumbnail-auto-display-on-navigate
+    (image-dired-display-this)))
 
 (defun dired-image-thumbnail-previous-image ()
-  "Move to previous thumbnail and display full-size image."
+  "Move to previous thumbnail and optionally display full-size image.
+When `dired-image-thumbnail-auto-display-on-navigate' is non-nil,
+the full-size image is automatically displayed."
   (interactive)
   (image-dired-backward-image)
-  (image-dired-display-this))
+  (when dired-image-thumbnail-auto-display-on-navigate
+    (image-dired-display-this)))
 
 (defun dired-image-thumbnail-delete-and-next ()
   "Delete current image file and move to next thumbnail.
@@ -1128,20 +1144,37 @@ This permanently deletes the file from disk and removes its thumbnail."
                (or dired-image-thumbnail-auto-accept
                    (y-or-n-p (format "Delete %s? " (file-name-nondirectory file-name)))))
       (delete-file file-name)
+      (setq dired-image-thumbnail--current-images
+            (remove file-name dired-image-thumbnail--current-images))
+      (setq dired-image-thumbnail--all-images
+            (remove file-name dired-image-thumbnail--all-images))
       (image-dired-delete-char)
       (when (not (eobp))
         (image-dired-display-this))
       (message "Deleted %s" file-name))))
 
 (defun dired-image-thumbnail-delete-image-and-next ()
-  "Delete current image in image-mode buffer and move to next.
-For use in the *image-dired-display-image* buffer."
+  "Delete current image displayed in the image-dired display buffer.
+Gets the current file from the thumbnail buffer's text properties,
+since the display buffer is not a file-visiting buffer."
   (interactive)
-  (let ((current-file (buffer-file-name)))
+  (let ((current-file
+         (or (buffer-file-name)
+             (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+               (with-current-buffer thumb-buf
+                 (image-dired-original-file-name))))))
     (when (and current-file
                (or dired-image-thumbnail-auto-accept
                    (y-or-n-p (format "Delete %s? " (file-name-nondirectory current-file)))))
-      (image-next-file 1)
+      ;; Update internal lists in the thumbnail buffer
+      (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+        (with-current-buffer thumb-buf
+          (setq dired-image-thumbnail--current-images
+                (remove current-file dired-image-thumbnail--current-images))
+          (setq dired-image-thumbnail--all-images
+                (remove current-file dired-image-thumbnail--all-images))
+          (image-dired-forward-image)
+          (image-dired-display-this)))
       (delete-file current-file)
       (message "Deleted %s" current-file))))
 
@@ -1169,13 +1202,15 @@ For use in the *image-dired-display-image* buffer."
 (with-eval-after-load 'image-dired
   (dired-image-thumbnail-setup-keys)
   (dired-image-thumbnail-setup-display-buffer)
+  (advice-add 'image-dired-format-properties-string :around #'dired-image-thumbnail--format-properties-string)
   ;; Hook to initialize our variables when entering thumbnail mode
   (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer))
 
 ;;;###autoload
-(with-eval-after-load 'image-mode
-  ;; Add C-d keybinding for deleting in image display buffer
-  (define-key image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next))
+(with-eval-after-load 'image-dired
+  ;; Scope C-d to the image-dired display buffer only
+  (when (boundp 'image-dired-display-image-mode-map)
+    (define-key image-dired-display-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
 
 ;; Load transient menu support if available
 (when (require 'dired-image-thumbnail-transient nil t)
