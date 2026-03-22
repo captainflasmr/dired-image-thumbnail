@@ -1,0 +1,880 @@
+\input texinfo
+@c -*-texinfo-*-
+@c %**start of header
+@setfilename dired-image-thumbnail.info
+@documentencoding UTF-8
+@settitle dired-image-thumbnail User Manual
+@c %**end of header
+
+@dircategory Emacs
+@direntry
+* dired-image-thumbnail: (dired-image-thumbnail). Enhanced image-dired workflow.
+@end direntry
+
+@copying
+Copyright @copyright{} 2025-2026 James Dyer
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+@end quotation
+@end copying
+
+@titlepage
+@title dired-image-thumbnail User Manual
+@subtitle For dired-image-thumbnail version 2.0.0
+@author James Dyer
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c Output the table of the contents at the beginning.
+@contents
+
+@ifnottex
+@node Top
+@top dired-image-thumbnail
+
+@code{dired-image-thumbnail} is an Emacs package that extends
+@code{image-dired} with an enhanced workflow inspired by
+@code{dired-video-thumbnail}.  It adds powerful sorting, filtering,
+subdirectory management, and flexible display options to the standard
+@code{image-dired} thumbnail viewer.
+
+@end ifnottex
+
+@menu
+* Introduction::                What is dired-image-thumbnail?
+* Features::                    Overview of capabilities
+* Requirements::                What you need
+* Installation::                How to install the package
+* Usage::                       Getting started
+* Enhanced Workflow::           Split-screen, auto-display, quick deletion
+* Keybindings::                 Complete keybinding reference
+* Header Line::                 Enhanced header line information
+* Customization::               All customization options
+* Example Configuration::       Sample use-package setup
+* Workflow Examples::           Step-by-step usage examples
+* Comparison with Standard image-dired:: Feature comparison table
+* Transient Menu Support::      Optional transient.el integration
+* Performance Notes::           Tips for large collections
+* Troubleshooting::             Common issues and solutions
+* Related Packages::            Other useful packages
+* License::                     GPL-3.0-or-later
+@end menu
+
+@node Introduction
+@chapter Introduction
+
+@code{dired-image-thumbnail} is an Emacs package that extends
+@code{image-dired} with an enhanced workflow inspired by
+@code{dired-video-thumbnail}.  It adds powerful sorting, filtering,
+subdirectory management, and flexible display options to the standard
+@code{image-dired} thumbnail viewer.
+
+@node Features
+@chapter Features
+
+@itemize @bullet
+@item
+@strong{Sorting} --- Sort thumbnails by name, date, size, or image dimensions
+@item
+@strong{Filtering} --- Filter by name regexp, file size range, or dimension range
+@item
+@strong{Subdirectory support} --- Works seamlessly with Dired's inserted subdirectories
+@item
+@strong{Subdirectory helpers} --- Commands to quickly insert/remove subdirectories
+@item
+@strong{Wrap display mode} --- Thumbnails flow naturally and wrap to window width
+@item
+@strong{Enhanced header line} --- Shows current image info, dimensions, sort/filter status, and quality level
+@item
+@strong{Configurable window layout} --- Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
+@item
+@strong{Display quality levels} --- Five quality tiers (full/high/fast/faster/draft) for speed vs fidelity trade-off
+@item
+@strong{External-tool preview generation} --- Uses @code{djpeg}/@code{cjpeg} or @code{magick} for genuinely faster image previews
+@item
+@strong{Image file validation} --- Magic-byte header checks and minimum file size to exclude corrupt files
+@item
+@strong{Open in external editor} --- Press @kbd{W} to open an image in GIMP, Krita, or your system default
+@item
+@strong{Auto-display navigation} --- Navigate with @kbd{n}/@kbd{p} to automatically show full-size images
+@item
+@strong{Enhanced deletion} --- Delete and advance with @kbd{C-d} in both thumbnail and image buffers
+@item
+@strong{Full integration} --- Works seamlessly with existing @code{image-dired} functionality
+@item
+@strong{Transient menus} --- Optional @code{transient.el} integration for discoverability
+@end itemize
+
+@node Requirements
+@chapter Requirements
+
+@itemize @bullet
+@item
+Emacs 28.1 or later
+@item
+@code{image-dired} (built-in)
+@item
+@code{transient} (optional, for transient menu support)
+@end itemize
+
+@node Installation
+@chapter Installation
+
+@menu
+* Manual Installation::         Download and load-path
+* use-package::                 Declarative configuration
+* straight.el::                 Git-based package management
+@end menu
+
+@node Manual Installation
+@section Manual
+
+Download @file{dired-image-thumbnail.el} and place it in your load-path:
+
+@lisp
+(add-to-list 'load-path "/path/to/dired-image-thumbnail/")
+(require 'dired-image-thumbnail)
+@end lisp
+
+@node use-package
+@section use-package
+
+@lisp
+(use-package dired-image-thumbnail
+  :load-path "/path/to/dired-image-thumbnail/"
+  :demand t)
+@end lisp
+
+@node straight.el
+@section straight.el
+
+@lisp
+(straight-use-package
+ '(dired-image-thumbnail :type git :host github
+                         :repo "captainflasmr/dired-image-thumbnail"))
+@end lisp
+
+@node Usage
+@chapter Usage
+
+@menu
+* Quick Start::                 Five-step introduction
+* Working with Subdirectories:: Using Dired's subdirectory insertion
+* From Standard image-dired::   Enhancing the standard workflow
+@end menu
+
+@node Quick Start
+@section Quick Start
+
+The simplest way to use @code{dired-image-thumbnail} is from a Dired buffer:
+
+@enumerate
+@item
+Navigate to a directory containing images
+@item
+Press @kbd{C-t d} (or @kbd{C-t m}) to view thumbnails
+@item
+Thumbnails appear on the left, full-size image on the right
+@item
+Navigate with @kbd{n}/@kbd{p} to automatically view each image
+@item
+Use the enhanced keybindings for sorting, filtering, etc.
+@end enumerate
+
+@node Working with Subdirectories
+@section Working with Subdirectories
+
+@code{dired-image-thumbnail} works with Dired's subdirectory insertion
+feature.  You have several options:
+
+@subheading Manual insertion
+
+Use Dired's built-in @kbd{i} (@code{dired-maybe-insert-subdir}) on any
+subdirectory to make its contents visible, then run
+@code{dired-image-thumbnail}.
+
+@subheading Helper commands
+
+@itemize @bullet
+@item
+@kbd{C-t s} (@code{dired-image-thumbnail-insert-image-subdirs}) --- Insert only subdirectories containing images (recommended)
+@item
+@kbd{C-t z} (@code{dired-image-thumbnail-insert-subdir-recursive}) --- Insert all subdirectories
+@item
+@kbd{C-t k} (@code{dired-image-thumbnail-kill-all-subdirs}) --- Remove all inserted subdirectories
+@end itemize
+
+@node From Standard image-dired
+@section From Standard image-dired
+
+You can also use the standard @code{image-dired} commands (@kbd{C-t d},
+@kbd{C-t a}, etc.) --- @code{dired-image-thumbnail} automatically enhances
+the thumbnail buffer with new keybindings.
+
+@node Enhanced Workflow
+@chapter Enhanced Workflow
+
+@code{dired-image-thumbnail} provides an enhanced grid-view workflow that
+improves upon standard @code{image-dired}.
+
+@menu
+* Automatic Split-Screen Layout:: Configurable window arrangements
+* Auto-Display Navigation::       Hands-free image browsing
+* Quick Deletion Workflow::       Fast photo culling
+@end menu
+
+@node Automatic Split-Screen Layout
+@section Automatic Split-Screen Layout
+
+When you launch @code{dired-image-thumbnail} (or use standard
+@code{image-dired} with this package loaded):
+
+@example
++------------------+------------------------+
+|  Thumbnails      |  Full-size Image       |
+|  (Left 40%)      |  (Right 60%)           |
+|                  |                        |
+|  [img1] <--      |  +------------------+  |
+|  [img2]          |  |                  |  |
+|  [img3]          |  |   Current Image  |  |
+|  [img4]          |  |                  |  |
+|  [img5]          |  +------------------+  |
+|                  |                        |
++------------------+------------------------+
+@end example
+
+The layout is controlled by @code{dired-image-thumbnail-window-layout}
+(default @code{left-right}) and @code{dired-image-thumbnail-window-ratio}
+(default @code{0.4}).
+
+@node Auto-Display Navigation
+@section Auto-Display Navigation
+
+With @code{dired-image-thumbnail-auto-display-on-navigate} enabled (default):
+
+@itemize @bullet
+@item
+Press @kbd{n} or @kbd{p} to navigate thumbnails
+@item
+The full-size image automatically updates on the right
+@item
+No need to press @key{RET} or @kbd{C-@key{RET}} for each image
+@item
+Smooth, fluid browsing experience
+@end itemize
+
+@node Quick Deletion Workflow
+@section Quick Deletion Workflow
+
+Press @kbd{C-d} in either the thumbnail or image display buffer to:
+
+@enumerate
+@item
+Get a confirmation prompt (unless @code{dired-image-thumbnail-auto-accept} is enabled)
+@item
+Delete the current image file
+@item
+Automatically advance to the next image
+@item
+Continue browsing seamlessly
+@end enumerate
+
+This makes culling large photo collections much faster than the standard workflow.
+
+@node Keybindings
+@chapter Keybindings
+
+@menu
+* Dired Buffer Keys::           Keys available in Dired
+* Thumbnail Buffer Keys::       Keys in the thumbnail buffer
+* Image Display Buffer Keys::   Keys in the image display buffer
+@end menu
+
+@node Dired Buffer Keys
+@section In Dired Buffer
+
+@table @kbd
+@item C-t d
+Launch standard image-dired enhanced (@code{image-dired} + @code{dired-image-thumbnail-refresh})
+@item C-t m
+Launch enhanced thumbnail viewer (@code{dired-image-thumbnail})
+@item C-t s
+Insert subdirs with images (@code{dired-image-thumbnail-insert-image-subdirs})
+@item C-t z
+Insert all subdirs recursively (@code{dired-image-thumbnail-insert-subdir-recursive})
+@item C-t k
+Remove all inserted subdirs (@code{dired-image-thumbnail-kill-all-subdirs})
+@end table
+
+@node Thumbnail Buffer Keys
+@section In Thumbnail Buffer
+
+@subheading Navigation
+
+@table @kbd
+@item n
+@itemx @key{RIGHT}
+Next image (auto-display when enabled)
+@item p
+@itemx @key{LEFT}
+Previous image (auto-display when enabled)
+@item +
+Increase thumbnail size
+@item -
+Decrease thumbnail size
+@end table
+
+When @code{dired-image-thumbnail-auto-display-on-navigate} is enabled (default),
+pressing @kbd{n} or @kbd{p} automatically displays the full-size image.
+
+@subheading Sorting
+
+@table @kbd
+@item s b
+Sort by Dired buffer order
+@item s n
+Sort by filename
+@item s d
+Sort by modification date
+@item s s
+Sort by file size
+@item s D
+Sort by image dimensions (area)
+@item s r
+Reverse sort order
+@item S
+Interactive sort selection (transient)
+@end table
+
+@subheading Filtering
+
+@table @kbd
+@item / n
+Filter by name regexp
+@item / s
+Filter by file size range
+@item / d
+Filter by dimension range
+@item / /
+@itemx / c
+Clear all filters
+@item \
+Interactive filter menu (transient)
+@end table
+
+@subheading Display
+
+@table @kbd
+@item w
+Toggle wrap display mode
+@item r
+@itemx g
+Refresh the display
+@item G
+Clear cache and refresh (hard refresh)
+@item +
+Increase thumbnail size
+@item -
+Decrease thumbnail size
+@item Q
+Cycle display quality (full, high, fast, faster, draft)
+@end table
+
+@subheading Marking
+
+@table @kbd
+@item m
+Mark image (uses image-dired's native marking with border)
+@item u
+Unmark image
+@item M
+Mark all images
+@item U
+Unmark all
+@item t
+Toggle all marks
+@end table
+
+@subheading File Operations
+
+@table @kbd
+@item D
+Delete image at point
+@item C-d
+Delete image and move to next
+@item x
+Delete all marked images
+@item d
+Jump to file in Dired
+@end table
+
+@subheading Other
+
+@table @kbd
+@item W
+Open in external editor
+@item ?
+@itemx h
+Show help
+@end table
+
+@node Image Display Buffer Keys
+@section In Image Display Buffer
+
+@table @kbd
+@item C-d
+Delete image and move to next
+@end table
+
+All standard @code{image-dired} keybindings (@kbd{n}, @kbd{p}, @kbd{m},
+@kbd{u}, @kbd{U}, etc.) continue to work as expected.
+
+@node Header Line
+@chapter Header Line
+
+The enhanced header line displays:
+
+@itemize @bullet
+@item
+@strong{Mark indicator} --- A @samp{*} if the current image is marked
+@item
+@strong{Filename} --- Relative to source directory when subdirectories are inserted
+@item
+@strong{Image count} --- Current position / total (e.g., @samp{23/156})
+@item
+@strong{Dimensions} --- Width x Height in pixels (e.g., @samp{1920x1080})
+@item
+@strong{File size} --- Human-readable size (e.g., @samp{2.4M})
+@item
+@strong{Sort indicator} --- Current sort field and direction (e.g., @samp{[name <]})
+@item
+@strong{Display quality} --- Current quality level (e.g., @samp{[fast]})
+@item
+@strong{Active filters} --- Description of any active filters
+@item
+@strong{Marked count} --- Number of marked images (e.g., @samp{[3 marked]})
+@end itemize
+
+@node Customization
+@chapter Customization
+
+All customization options are in the @code{dired-image-thumbnail} group.
+Use @kbd{M-x customize-group @key{RET} dired-image-thumbnail @key{RET}}
+to browse them interactively.
+
+@menu
+* Default Sort Settings::       Sorting defaults
+* Display Options::             Wrap display mode
+* Window Layout::               Split-screen layout presets
+* Display Quality::             Speed vs fidelity trade-off
+* Image Validation::            Corrupt file detection
+* External Editor::             Open images externally
+* Navigation Behavior::         Auto-display on navigate
+* Auto-Accepting Actions::      Skip confirmation prompts
+* Image Extensions::            Recognised file types
+@end menu
+
+@node Default Sort Settings
+@section Default Sort Settings
+
+@lisp
+(setq dired-image-thumbnail-sort-by 'dired)       ; 'dired, 'name, 'date, 'size, or 'dimensions
+(setq dired-image-thumbnail-sort-order 'ascending) ; 'ascending or 'descending
+@end lisp
+
+@node Display Options
+@section Display Options
+
+@lisp
+(setq dired-image-thumbnail-wrap-display nil) ; Enable wrap display by default
+@end lisp
+
+@node Window Layout
+@section Window Layout
+
+Control the split-screen layout and thumbnail/image ratio:
+
+@lisp
+(setq dired-image-thumbnail-window-layout 'left-right) ; 'left-right, 'right-left, 'top-bottom, 'bottom-top, 'thumb-only, or nil
+(setq dired-image-thumbnail-window-ratio 0.4)          ; Fraction of frame for thumbnails
+@end lisp
+
+Set to @code{nil} to disable automatic layout management and use your own
+@code{display-buffer-alist} rules.
+
+@node Display Quality
+@section Display Quality
+
+Control the speed/fidelity trade-off when navigating with @kbd{n}/@kbd{p}:
+
+@lisp
+(setq dired-image-thumbnail-display-quality 'fast) ; 'full, 'high, 'fast, 'faster, or 'draft
+@end lisp
+
+Lower quality levels use external tools (@code{djpeg}/@code{cjpeg} for
+JPEGs, @code{magick} for others) to generate small preview files, so Emacs
+decodes less data.  Press @kbd{Q} in the thumbnail buffer to cycle through
+levels interactively.
+
+@node Image Validation
+@section Image Validation
+
+Control which files are accepted as images:
+
+@lisp
+(setq dired-image-thumbnail-minimum-file-size 100) ; Minimum bytes (0 to disable)
+(setq dired-image-thumbnail-validate-headers t)    ; Check magic bytes
+@end lisp
+
+When @code{dired-image-thumbnail-validate-headers} is non-nil, each
+candidate file is opened briefly to verify that its first few bytes match a
+known image format signature (JPEG, PNG, GIF, BMP, TIFF, WEBP, ICO,
+HEIC/HEIF).  SVG files are accepted without a byte check since they are XML
+text.
+
+@node External Editor
+@section External Editor
+
+Set a specific program for @kbd{W} to open images with:
+
+@lisp
+(setq dired-image-thumbnail-external-editor "gimp") ; nil for system default
+@end lisp
+
+When @code{nil} (default), the system default application is used via
+@code{xdg-open} on Linux, @code{open} on macOS, or @code{start} on
+Windows.
+
+@node Navigation Behavior
+@section Navigation Behavior
+
+Control whether navigating with @kbd{n}/@kbd{p} automatically displays
+full-size images:
+
+@lisp
+(setq dired-image-thumbnail-auto-display-on-navigate t) ; Auto-display on n/p
+@end lisp
+
+When enabled (default), pressing @kbd{n} or @kbd{p} in the thumbnail
+buffer automatically updates the image display buffer.  When disabled, you
+must press @key{RET} or @kbd{C-@key{RET}} to view full-size images.
+
+@node Auto-Accepting Actions
+@section Auto-Accepting Actions
+
+Control whether to skip confirmation prompts for file actions:
+
+@lisp
+(setq dired-image-thumbnail-auto-accept nil) ; Require confirmation (default)
+@end lisp
+
+When enabled, actions like deleting files (@kbd{D}, @kbd{C-d}, @kbd{x})
+will proceed without asking for confirmation.
+
+@node Image Extensions
+@section Image Extensions
+
+Add or modify recognized image file extensions:
+
+@lisp
+(setq dired-image-thumbnail-image-extensions
+      '("jpg" "jpeg" "png" "gif" "bmp" "tiff" "tif" "webp" "svg" "ico" "heic" "heif"))
+@end lisp
+
+@node Example Configuration
+@chapter Example Configuration
+
+@lisp
+(use-package dired-image-thumbnail
+  :load-path "/path/to/dired-image-thumbnail/"
+  :demand t
+  :custom
+  (dired-image-thumbnail-sort-by 'date)
+  (dired-image-thumbnail-sort-order 'descending)
+  (dired-image-thumbnail-wrap-display t)
+  (dired-image-thumbnail-window-layout 'left-right)
+  (dired-image-thumbnail-auto-display-on-navigate t)
+  :bind
+  (:map dired-mode-map
+   ("C-t d" . (lambda () (interactive)
+                (image-dired default-directory)
+                (dired-image-thumbnail-refresh)))
+   ("C-t m" . dired-image-thumbnail)
+   ("C-t s" . dired-image-thumbnail-insert-image-subdirs)
+   ("C-t z" . dired-image-thumbnail-insert-subdir-recursive)
+   ("C-t k" . dired-image-thumbnail-kill-all-subdirs)))
+@end lisp
+
+@node Workflow Examples
+@chapter Workflow Examples
+
+@menu
+* Reviewing a Photo Collection:: Browse and mark photos
+* Finding Large Images::         Filter by file size
+* Quick Culling Workflow::       Fast delete-and-advance
+* Finding High-Resolution Images:: Filter by dimensions
+* Working with Subdirectories Example:: Multi-directory browsing
+* Organizing by Date::           Date-sorted browsing
+@end menu
+
+@node Reviewing a Photo Collection
+@section Reviewing a Photo Collection
+
+@enumerate
+@item
+Open directory in Dired: @kbd{C-x d ~/Photos @key{RET}}
+@item
+Insert subdirectories with images: @kbd{C-t s}
+@item
+View thumbnails: @kbd{C-t m}
+@item
+Thumbnails appear on the left, full-size view on the right
+@item
+Sort by date (newest first): @kbd{s d} then @kbd{s r}
+@item
+Browse with @kbd{n} / @kbd{p} --- images automatically update on the right
+@item
+Mark keepers with @kbd{m}, jump to Dired with @kbd{d}
+@end enumerate
+
+@node Finding Large Images
+@section Finding Large Images
+
+@enumerate
+@item
+View thumbnails: @kbd{C-t m}
+@item
+Grid appears on left, image display on right
+@item
+Filter by size: @kbd{/ s} and enter @samp{1M} for minimum, leave maximum empty
+@item
+Sort by size (largest first): @kbd{s s} then @kbd{s r}
+@item
+Navigate with @kbd{n}/@kbd{p} to review each image
+@item
+Mark images for deletion with @kbd{m}, delete with @kbd{x}
+@item
+Or use @kbd{C-d} to delete current image and advance to next
+@end enumerate
+
+@node Quick Culling Workflow
+@section Quick Culling Workflow
+
+@enumerate
+@item
+View thumbnails: @kbd{C-t m}
+@item
+Navigate through images with @kbd{n} and @kbd{p}
+@item
+Press @kbd{C-d} on images you want to delete
+@item
+Confirmation prompt appears for each deletion
+@item
+Automatically advances to next image after deletion
+@item
+Continue until finished
+@end enumerate
+
+@node Finding High-Resolution Images
+@section Finding High-Resolution Images
+
+@enumerate
+@item
+View thumbnails: @kbd{C-t m}
+@item
+Filter by dimensions: @kbd{/ d} and enter minimum width @samp{1920}, minimum height @samp{1080}
+@item
+Browse only HD+ images
+@item
+Use @kbd{/ c} to clear the filter when done
+@end enumerate
+
+@node Working with Subdirectories Example
+@section Working with Subdirectories
+
+@enumerate
+@item
+Open parent directory in Dired
+@item
+Use @kbd{C-t s} to insert only subdirectories containing images (fast)
+@item
+Or use @kbd{C-t z} to insert all subdirectories (may be slow with many dirs)
+@item
+View thumbnails with @kbd{C-t m}
+@item
+Images from all visible subdirectories will be shown
+@item
+Use @kbd{C-t k} to remove all subdirectories and return to top-level view
+@end enumerate
+
+@node Organizing by Date
+@section Organizing by Date
+
+@enumerate
+@item
+Open directory in Dired
+@item
+Insert subdirectories if needed: @kbd{C-t s}
+@item
+View thumbnails: @kbd{C-t m}
+@item
+Sort by date: @kbd{s d}
+@item
+Use the header line to see file dates as you browse
+@end enumerate
+
+@node Comparison with Standard image-dired
+@chapter Comparison with Standard image-dired
+
+@multitable @columnfractions .35 .15 .30
+@headitem Feature @tab image-dired @tab dired-image-thumbnail
+@item Thumbnail display @tab Yes @tab Yes
+@item Dired integration @tab Yes @tab Yes
+@item Sorting @tab No @tab Yes (4 criteria)
+@item Filtering @tab No @tab Yes (name, size, dims)
+@item Subdirectory support @tab No @tab Yes (via insertion)
+@item Helper commands @tab No @tab Yes
+@item Wrap display @tab No @tab Yes
+@item Enhanced header line @tab Basic @tab Enhanced + quality
+@item Auto-display on n/p @tab No @tab Yes
+@item Configurable layout @tab No @tab Yes (6 presets)
+@item Display quality levels @tab No @tab Yes (5 levels)
+@item Image file validation @tab No @tab Yes (magic bytes)
+@item Open external editor @tab No @tab Yes (W)
+@item Delete and advance @tab No @tab Yes (C-d)
+@item Transient menus @tab No @tab Yes (optional)
+@end multitable
+
+@node Transient Menu Support
+@chapter Transient Menu Support
+
+If @code{transient} is available, @code{dired-image-thumbnail} provides
+interactive menus for sorting and filtering.  These can be accessed with:
+
+@itemize @bullet
+@item
+@kbd{S} --- Sort menu (shows all sort options and current state)
+@item
+@kbd{\} --- Filter menu (shows all filter options and current filters)
+@end itemize
+
+To disable transient menus even when transient is installed, don't load
+@file{dired-image-thumbnail-transient.el}.
+
+@node Performance Notes
+@chapter Performance Notes
+
+@section Subdirectory Insertion
+
+When working with large directory trees:
+
+@itemize @bullet
+@item
+Use @code{dired-image-thumbnail-insert-image-subdirs} (@kbd{C-t s}) instead of @code{dired-image-thumbnail-insert-subdir-recursive} (@kbd{C-t z})
+@item
+The ``smart'' insertion only processes subdirectories containing images, which is much faster
+@item
+For very large collections, manually insert specific subdirectories with @kbd{i} as needed
+@end itemize
+
+@section Thumbnail Generation
+
+First-time thumbnail generation can be slow for large images.  Thumbnails
+are cached by @code{image-dired}, so subsequent viewing is fast.
+
+@section Display Quality and Speed
+
+Lower display quality levels (@code{faster}, @code{draft}) generate smaller
+preview files using external tools, significantly reducing image decode
+time.  For large photo collections, set the quality to @code{draft} for
+the fastest navigation, then switch to @code{full} when you want to
+examine an image in detail.
+
+@node Troubleshooting
+@chapter Troubleshooting
+
+@section Images not appearing
+
+@itemize @bullet
+@item
+Ensure @code{image-dired} is working: test with @kbd{C-t d} in a directory with images
+@item
+Check that file extensions are in @code{dired-image-thumbnail-image-extensions}
+@item
+Verify thumbnails are being created in @code{image-dired-dir}
+@item
+If images have correct extensions but are corrupt, try setting @code{dired-image-thumbnail-validate-headers} to @code{nil}
+@end itemize
+
+@section Subdirectories not showing images
+
+@itemize @bullet
+@item
+Ensure subdirectories are actually inserted in the Dired buffer (use @kbd{i} or helper commands)
+@item
+Check that @code{dired-image-thumbnail-insert-image-subdirs} found subdirectories (watch for message)
+@item
+Verify files in subdirectories have recognized image extensions
+@end itemize
+
+@section Slow performance with many directories
+
+@itemize @bullet
+@item
+Use @kbd{C-t s} (insert image subdirs only) instead of @kbd{C-t z} (insert all subdirs)
+@item
+Manually insert specific subdirectories with @kbd{i} as needed
+@item
+Consider filtering to reduce the number of visible thumbnails
+@item
+Lower the display quality with @kbd{Q} for faster navigation
+@end itemize
+
+@section Layout not splitting correctly
+
+@itemize @bullet
+@item
+Ensure @code{dired-image-thumbnail-window-layout} is set to a layout symbol (default @code{left-right})
+@item
+Try a different layout preset: @code{top-bottom}, @code{right-left}, etc.
+@item
+Set to @code{nil} and manage windows manually if other packages conflict
+@item
+Manually delete other windows with @kbd{C-x 1} before launching
+@end itemize
+
+@section Auto-display not working
+
+@itemize @bullet
+@item
+Ensure @code{dired-image-thumbnail-auto-display-on-navigate} is @code{t} (default)
+@item
+The feature requires the split-screen layout to be active
+@item
+Try pressing @key{RET} on a thumbnail to manually trigger display
+@end itemize
+
+@node Related Packages
+@chapter Related Packages
+
+@itemize @bullet
+@item
+@uref{https://www.gnu.org/software/emacs/manual/html_node/emacs/Image_002dDired.html, image-dired} --- Built-in image thumbnail browser for Dired (extended by this package)
+@item
+@uref{https://github.com/captainflasmr/dired-video-thumbnail, dired-video-thumbnail} --- Video thumbnail browser (inspiration for this package)
+@item
+@uref{https://github.com/alexluigit/dirvish, dirvish} --- A modern file manager for Emacs with preview support
+@end itemize
+
+@node License
+@chapter License
+
+GPL-3.0-or-later
+
+@bye

@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html>
+<!-- Created by GNU Texinfo 7.2, https://www.gnu.org/software/texinfo/ -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<!-- Copyright © 2025-2026 James Dyer
+
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts. -->
+<title>dired-image-thumbnail User Manual</title>
+
+<meta name="description" content="dired-image-thumbnail User Manual">
+<meta name="keywords" content="dired-image-thumbnail User Manual">
+<meta name="resource-type" content="document">
+<meta name="distribution" content="global">
+<meta name="Generator" content="makeinfo">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<link href="#Top" rel="start" title="Top">
+<link href="#SEC_Contents" rel="contents" title="Table of Contents">
+<link href="#Introduction" rel="next" title="Introduction">
+<style type="text/css">
+<!--
+a.copiable-link {visibility: hidden; text-decoration: none; line-height: 0em}
+div.example {margin-left: 3.2em}
+kbd.kbd {font-style: oblique}
+kbd.key {font-style: normal}
+span:hover a.copiable-link {visibility: visible}
+ul.mark-bullet {list-style-type: disc}
+ul.toc-numbered-mark {list-style: none}
+-->
+</style>
+
+
+</head>
+
+<body lang="en">
+
+
+
+
+
+<div class="top-level-extent" id="Top">
+<div class="nav-panel">
+<p>
+Next: <a href="#Introduction" accesskey="n" rel="next">Introduction</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h1 class="top" id="dired_002dimage_002dthumbnail"><span>dired-image-thumbnail<a class="copiable-link" href="#dired_002dimage_002dthumbnail"> &para;</a></span></h1>
+
+<p><code class="code">dired-image-thumbnail</code> is an Emacs package that extends
+<code class="code">image-dired</code> with an enhanced workflow inspired by
+<code class="code">dired-video-thumbnail</code>.  It adds powerful sorting, filtering,
+subdirectory management, and flexible display options to the standard
+<code class="code">image-dired</code> thumbnail viewer.
+</p>
+
+
+<div class="region-contents" id="SEC_Contents">
+<h2 class="contents-heading">Table of Contents</h2>
+
+<div class="contents">
+
+<ul class="toc-numbered-mark">
+  <li><a id="toc-Introduction" href="#Introduction">1 Introduction</a></li>
+  <li><a id="toc-Features" href="#Features">2 Features</a></li>
+  <li><a id="toc-Requirements" href="#Requirements">3 Requirements</a></li>
+  <li><a id="toc-Installation" href="#Installation">4 Installation</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-Manual" href="#Manual-Installation">4.1 Manual</a></li>
+    <li><a id="toc-use_002dpackage" href="#use_002dpackage">4.2 use-package</a></li>
+    <li><a id="toc-straight_002eel" href="#straight_002eel">4.3 straight.el</a></li>
+  </ul></li>
+  <li><a id="toc-Usage" href="#Usage">5 Usage</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-Quick-Start" href="#Quick-Start">5.1 Quick Start</a></li>
+    <li><a id="toc-Working-with-Subdirectories" href="#Working-with-Subdirectories">5.2 Working with Subdirectories</a></li>
+    <li><a id="toc-From-Standard-image_002ddired" href="#From-Standard-image_002ddired">5.3 From Standard image-dired</a></li>
+  </ul></li>
+  <li><a id="toc-Enhanced-Workflow" href="#Enhanced-Workflow">6 Enhanced Workflow</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-Automatic-Split_002dScreen-Layout" href="#Automatic-Split_002dScreen-Layout">6.1 Automatic Split-Screen Layout</a></li>
+    <li><a id="toc-Auto_002dDisplay-Navigation" href="#Auto_002dDisplay-Navigation">6.2 Auto-Display Navigation</a></li>
+    <li><a id="toc-Quick-Deletion-Workflow" href="#Quick-Deletion-Workflow">6.3 Quick Deletion Workflow</a></li>
+  </ul></li>
+  <li><a id="toc-Keybindings" href="#Keybindings">7 Keybindings</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-In-Dired-Buffer" href="#Dired-Buffer-Keys">7.1 In Dired Buffer</a></li>
+    <li><a id="toc-In-Thumbnail-Buffer" href="#Thumbnail-Buffer-Keys">7.2 In Thumbnail Buffer</a></li>
+    <li><a id="toc-In-Image-Display-Buffer" href="#Image-Display-Buffer-Keys">7.3 In Image Display Buffer</a></li>
+  </ul></li>
+  <li><a id="toc-Header-Line" href="#Header-Line">8 Header Line</a></li>
+  <li><a id="toc-Customization" href="#Customization">9 Customization</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-Default-Sort-Settings" href="#Default-Sort-Settings">9.1 Default Sort Settings</a></li>
+    <li><a id="toc-Display-Options" href="#Display-Options">9.2 Display Options</a></li>
+    <li><a id="toc-Window-Layout" href="#Window-Layout">9.3 Window Layout</a></li>
+    <li><a id="toc-Display-Quality" href="#Display-Quality">9.4 Display Quality</a></li>
+    <li><a id="toc-Image-Validation" href="#Image-Validation">9.5 Image Validation</a></li>
+    <li><a id="toc-External-Editor" href="#External-Editor">9.6 External Editor</a></li>
+    <li><a id="toc-Navigation-Behavior" href="#Navigation-Behavior">9.7 Navigation Behavior</a></li>
+    <li><a id="toc-Auto_002dAccepting-Actions" href="#Auto_002dAccepting-Actions">9.8 Auto-Accepting Actions</a></li>
+    <li><a id="toc-Image-Extensions" href="#Image-Extensions">9.9 Image Extensions</a></li>
+  </ul></li>
+  <li><a id="toc-Example-Configuration" href="#Example-Configuration">10 Example Configuration</a></li>
+  <li><a id="toc-Workflow-Examples" href="#Workflow-Examples">11 Workflow Examples</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-Reviewing-a-Photo-Collection" href="#Reviewing-a-Photo-Collection">11.1 Reviewing a Photo Collection</a></li>
+    <li><a id="toc-Finding-Large-Images" href="#Finding-Large-Images">11.2 Finding Large Images</a></li>
+    <li><a id="toc-Quick-Culling-Workflow" href="#Quick-Culling-Workflow">11.3 Quick Culling Workflow</a></li>
+    <li><a id="toc-Finding-High_002dResolution-Images" href="#Finding-High_002dResolution-Images">11.4 Finding High-Resolution Images</a></li>
+    <li><a id="toc-Working-with-Subdirectories-1" href="#Working-with-Subdirectories-Example">11.5 Working with Subdirectories</a></li>
+    <li><a id="toc-Organizing-by-Date" href="#Organizing-by-Date">11.6 Organizing by Date</a></li>
+  </ul></li>
+  <li><a id="toc-Comparison-with-Standard-image_002ddired" href="#Comparison-with-Standard-image_002ddired">12 Comparison with Standard image-dired</a></li>
+  <li><a id="toc-Transient-Menu-Support" href="#Transient-Menu-Support">13 Transient Menu Support</a></li>
+  <li><a id="toc-Performance-Notes" href="#Performance-Notes">14 Performance Notes</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-Subdirectory-Insertion" href="#Subdirectory-Insertion">14.1 Subdirectory Insertion</a></li>
+    <li><a id="toc-Thumbnail-Generation" href="#Thumbnail-Generation">14.2 Thumbnail Generation</a></li>
+    <li><a id="toc-Display-Quality-and-Speed" href="#Display-Quality-and-Speed">14.3 Display Quality and Speed</a></li>
+  </ul></li>
+  <li><a id="toc-Troubleshooting" href="#Troubleshooting">15 Troubleshooting</a>
+  <ul class="toc-numbered-mark">
+    <li><a id="toc-Images-not-appearing" href="#Images-not-appearing">15.1 Images not appearing</a></li>
+    <li><a id="toc-Subdirectories-not-showing-images" href="#Subdirectories-not-showing-images">15.2 Subdirectories not showing images</a></li>
+    <li><a id="toc-Slow-performance-with-many-directories" href="#Slow-performance-with-many-directories">15.3 Slow performance with many directories</a></li>
+    <li><a id="toc-Layout-not-splitting-correctly" href="#Layout-not-splitting-correctly">15.4 Layout not splitting correctly</a></li>
+    <li><a id="toc-Auto_002ddisplay-not-working" href="#Auto_002ddisplay-not-working">15.5 Auto-display not working</a></li>
+  </ul></li>
+  <li><a id="toc-Related-Packages" href="#Related-Packages">16 Related Packages</a></li>
+  <li><a id="toc-License" href="#License">17 License</a></li>
+</ul>
+</div>
+</div>
+<hr>
+<div class="chapter-level-extent" id="Introduction">
+<div class="nav-panel">
+<p>
+Next: <a href="#Features" accesskey="n" rel="next">Features</a>, Previous: <a href="#Top" accesskey="p" rel="prev">dired-image-thumbnail</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Introduction-1"><span>1 Introduction<a class="copiable-link" href="#Introduction-1"> &para;</a></span></h2>
+
+<p><code class="code">dired-image-thumbnail</code> is an Emacs package that extends
+<code class="code">image-dired</code> with an enhanced workflow inspired by
+<code class="code">dired-video-thumbnail</code>.  It adds powerful sorting, filtering,
+subdirectory management, and flexible display options to the standard
+<code class="code">image-dired</code> thumbnail viewer.
+</p>
+<hr>
+</div>
+<div class="chapter-level-extent" id="Features">
+<div class="nav-panel">
+<p>
+Next: <a href="#Requirements" accesskey="n" rel="next">Requirements</a>, Previous: <a href="#Introduction" accesskey="p" rel="prev">Introduction</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Features-1"><span>2 Features<a class="copiable-link" href="#Features-1"> &para;</a></span></h2>
+
+<ul class="itemize mark-bullet">
+<li><strong class="strong">Sorting</strong> &mdash; Sort thumbnails by name, date, size, or image dimensions
+</li><li><strong class="strong">Filtering</strong> &mdash; Filter by name regexp, file size range, or dimension range
+</li><li><strong class="strong">Subdirectory support</strong> &mdash; Works seamlessly with Dired&rsquo;s inserted subdirectories
+</li><li><strong class="strong">Subdirectory helpers</strong> &mdash; Commands to quickly insert/remove subdirectories
+</li><li><strong class="strong">Wrap display mode</strong> &mdash; Thumbnails flow naturally and wrap to window width
+</li><li><strong class="strong">Enhanced header line</strong> &mdash; Shows current image info, dimensions, sort/filter status, and quality level
+</li><li><strong class="strong">Configurable window layout</strong> &mdash; Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
+</li><li><strong class="strong">Display quality levels</strong> &mdash; Five quality tiers (full/high/fast/faster/draft) for speed vs fidelity trade-off
+</li><li><strong class="strong">External-tool preview generation</strong> &mdash; Uses <code class="code">djpeg</code>/<code class="code">cjpeg</code> or <code class="code">magick</code> for genuinely faster image previews
+</li><li><strong class="strong">Image file validation</strong> &mdash; Magic-byte header checks and minimum file size to exclude corrupt files
+</li><li><strong class="strong">Open in external editor</strong> &mdash; Press <kbd class="kbd">W</kbd> to open an image in GIMP, Krita, or your system default
+</li><li><strong class="strong">Auto-display navigation</strong> &mdash; Navigate with <kbd class="kbd">n</kbd>/<kbd class="kbd">p</kbd> to automatically show full-size images
+</li><li><strong class="strong">Enhanced deletion</strong> &mdash; Delete and advance with <kbd class="kbd">C-d</kbd> in both thumbnail and image buffers
+</li><li><strong class="strong">Full integration</strong> &mdash; Works seamlessly with existing <code class="code">image-dired</code> functionality
+</li><li><strong class="strong">Transient menus</strong> &mdash; Optional <code class="code">transient.el</code> integration for discoverability
+</li></ul>
+
+<hr>
+</div>
+<div class="chapter-level-extent" id="Requirements">
+<div class="nav-panel">
+<p>
+Next: <a href="#Installation" accesskey="n" rel="next">Installation</a>, Previous: <a href="#Features" accesskey="p" rel="prev">Features</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Requirements-1"><span>3 Requirements<a class="copiable-link" href="#Requirements-1"> &para;</a></span></h2>
+
+<ul class="itemize mark-bullet">
+<li>Emacs 28.1 or later
+</li><li><code class="code">image-dired</code> (built-in)
+</li><li><code class="code">transient</code> (optional, for transient menu support)
+</li></ul>
+
+<hr>
+</div>
+<div class="chapter-level-extent" id="Installation">
+<div class="nav-panel">
+<p>
+Next: <a href="#Usage" accesskey="n" rel="next">Usage</a>, Previous: <a href="#Requirements" accesskey="p" rel="prev">Requirements</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Installation-1"><span>4 Installation<a class="copiable-link" href="#Installation-1"> &para;</a></span></h2>
+
+
+<ul class="mini-toc">
+<li><a href="#Manual-Installation" accesskey="1">Manual</a></li>
+<li><a href="#use_002dpackage" accesskey="2">use-package</a></li>
+<li><a href="#straight_002eel" accesskey="3">straight.el</a></li>
+</ul>
+<hr>
+<div class="section-level-extent" id="Manual-Installation">
+<div class="nav-panel">
+<p>
+Next: <a href="#use_002dpackage" accesskey="n" rel="next">use-package</a>, Up: <a href="#Installation" accesskey="u" rel="up">Installation</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Manual"><span>4.1 Manual<a class="copiable-link" href="#Manual"> &para;</a></span></h3>
+
+<p>Download <samp class="file">dired-image-thumbnail.el</samp> and place it in your load-path:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(add-to-list 'load-path &quot;/path/to/dired-image-thumbnail/&quot;)
+(require 'dired-image-thumbnail)
+</pre></div>
+
+<hr>
+</div>
+<div class="section-level-extent" id="use_002dpackage">
+<div class="nav-panel">
+<p>
+Next: <a href="#straight_002eel" accesskey="n" rel="next">straight.el</a>, Previous: <a href="#Manual-Installation" accesskey="p" rel="prev">Manual</a>, Up: <a href="#Installation" accesskey="u" rel="up">Installation</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="use_002dpackage-1"><span>4.2 use-package<a class="copiable-link" href="#use_002dpackage-1"> &para;</a></span></h3>
+
+<div class="example lisp">
+<pre class="lisp-preformatted">(use-package dired-image-thumbnail
+  :load-path &quot;/path/to/dired-image-thumbnail/&quot;
+  :demand t)
+</pre></div>
+
+<hr>
+</div>
+<div class="section-level-extent" id="straight_002eel">
+<div class="nav-panel">
+<p>
+Previous: <a href="#use_002dpackage" accesskey="p" rel="prev">use-package</a>, Up: <a href="#Installation" accesskey="u" rel="up">Installation</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="straight_002eel-1"><span>4.3 straight.el<a class="copiable-link" href="#straight_002eel-1"> &para;</a></span></h3>
+
+<div class="example lisp">
+<pre class="lisp-preformatted">(straight-use-package
+ '(dired-image-thumbnail :type git :host github
+                         :repo &quot;captainflasmr/dired-image-thumbnail&quot;))
+</pre></div>
+
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Usage">
+<div class="nav-panel">
+<p>
+Next: <a href="#Enhanced-Workflow" accesskey="n" rel="next">Enhanced Workflow</a>, Previous: <a href="#Installation" accesskey="p" rel="prev">Installation</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Usage-1"><span>5 Usage<a class="copiable-link" href="#Usage-1"> &para;</a></span></h2>
+
+
+<ul class="mini-toc">
+<li><a href="#Quick-Start" accesskey="1">Quick Start</a></li>
+<li><a href="#Working-with-Subdirectories" accesskey="2">Working with Subdirectories</a></li>
+<li><a href="#From-Standard-image_002ddired" accesskey="3">From Standard image-dired</a></li>
+</ul>
+<hr>
+<div class="section-level-extent" id="Quick-Start">
+<div class="nav-panel">
+<p>
+Next: <a href="#Working-with-Subdirectories" accesskey="n" rel="next">Working with Subdirectories</a>, Up: <a href="#Usage" accesskey="u" rel="up">Usage</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Quick-Start-1"><span>5.1 Quick Start<a class="copiable-link" href="#Quick-Start-1"> &para;</a></span></h3>
+
+<p>The simplest way to use <code class="code">dired-image-thumbnail</code> is from a Dired buffer:
+</p>
+<ol class="enumerate">
+<li> Navigate to a directory containing images
+</li><li> Press <kbd class="kbd">C-t d</kbd> (or <kbd class="kbd">C-t m</kbd>) to view thumbnails
+</li><li> Thumbnails appear on the left, full-size image on the right
+</li><li> Navigate with <kbd class="kbd">n</kbd>/<kbd class="kbd">p</kbd> to automatically view each image
+</li><li> Use the enhanced keybindings for sorting, filtering, etc.
+</li></ol>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Working-with-Subdirectories">
+<div class="nav-panel">
+<p>
+Next: <a href="#From-Standard-image_002ddired" accesskey="n" rel="next">From Standard image-dired</a>, Previous: <a href="#Quick-Start" accesskey="p" rel="prev">Quick Start</a>, Up: <a href="#Usage" accesskey="u" rel="up">Usage</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Working-with-Subdirectories-1"><span>5.2 Working with Subdirectories<a class="copiable-link" href="#Working-with-Subdirectories-1"> &para;</a></span></h3>
+
+<p><code class="code">dired-image-thumbnail</code> works with Dired&rsquo;s subdirectory insertion
+feature.  You have several options:
+</p>
+<h4 class="subheading" id="Manual-insertion"><span>Manual insertion<a class="copiable-link" href="#Manual-insertion"> &para;</a></span></h4>
+
+<p>Use Dired&rsquo;s built-in <kbd class="kbd">i</kbd> (<code class="code">dired-maybe-insert-subdir</code>) on any
+subdirectory to make its contents visible, then run
+<code class="code">dired-image-thumbnail</code>.
+</p>
+<h4 class="subheading" id="Helper-commands"><span>Helper commands<a class="copiable-link" href="#Helper-commands"> &para;</a></span></h4>
+
+<ul class="itemize mark-bullet">
+<li><kbd class="kbd">C-t s</kbd> (<code class="code">dired-image-thumbnail-insert-image-subdirs</code>) &mdash; Insert only subdirectories containing images (recommended)
+</li><li><kbd class="kbd">C-t z</kbd> (<code class="code">dired-image-thumbnail-insert-subdir-recursive</code>) &mdash; Insert all subdirectories
+</li><li><kbd class="kbd">C-t k</kbd> (<code class="code">dired-image-thumbnail-kill-all-subdirs</code>) &mdash; Remove all inserted subdirectories
+</li></ul>
+
+<hr>
+</div>
+<div class="section-level-extent" id="From-Standard-image_002ddired">
+<div class="nav-panel">
+<p>
+Previous: <a href="#Working-with-Subdirectories" accesskey="p" rel="prev">Working with Subdirectories</a>, Up: <a href="#Usage" accesskey="u" rel="up">Usage</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="From-Standard-image_002ddired-1"><span>5.3 From Standard image-dired<a class="copiable-link" href="#From-Standard-image_002ddired-1"> &para;</a></span></h3>
+
+<p>You can also use the standard <code class="code">image-dired</code> commands (<kbd class="kbd">C-t d</kbd>,
+<kbd class="kbd">C-t a</kbd>, etc.) &mdash; <code class="code">dired-image-thumbnail</code> automatically enhances
+the thumbnail buffer with new keybindings.
+</p>
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Enhanced-Workflow">
+<div class="nav-panel">
+<p>
+Next: <a href="#Keybindings" accesskey="n" rel="next">Keybindings</a>, Previous: <a href="#Usage" accesskey="p" rel="prev">Usage</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Enhanced-Workflow-1"><span>6 Enhanced Workflow<a class="copiable-link" href="#Enhanced-Workflow-1"> &para;</a></span></h2>
+
+<p><code class="code">dired-image-thumbnail</code> provides an enhanced grid-view workflow that
+improves upon standard <code class="code">image-dired</code>.
+</p>
+
+<ul class="mini-toc">
+<li><a href="#Automatic-Split_002dScreen-Layout" accesskey="1">Automatic Split-Screen Layout</a></li>
+<li><a href="#Auto_002dDisplay-Navigation" accesskey="2">Auto-Display Navigation</a></li>
+<li><a href="#Quick-Deletion-Workflow" accesskey="3">Quick Deletion Workflow</a></li>
+</ul>
+<hr>
+<div class="section-level-extent" id="Automatic-Split_002dScreen-Layout">
+<div class="nav-panel">
+<p>
+Next: <a href="#Auto_002dDisplay-Navigation" accesskey="n" rel="next">Auto-Display Navigation</a>, Up: <a href="#Enhanced-Workflow" accesskey="u" rel="up">Enhanced Workflow</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Automatic-Split_002dScreen-Layout-1"><span>6.1 Automatic Split-Screen Layout<a class="copiable-link" href="#Automatic-Split_002dScreen-Layout-1"> &para;</a></span></h3>
+
+<p>When you launch <code class="code">dired-image-thumbnail</code> (or use standard
+<code class="code">image-dired</code> with this package loaded):
+</p>
+<div class="example">
+<pre class="example-preformatted">+------------------+------------------------+
+|  Thumbnails      |  Full-size Image       |
+|  (Left 40%)      |  (Right 60%)           |
+|                  |                        |
+|  [img1] &lt;--      |  +------------------+  |
+|  [img2]          |  |                  |  |
+|  [img3]          |  |   Current Image  |  |
+|  [img4]          |  |                  |  |
+|  [img5]          |  +------------------+  |
+|                  |                        |
++------------------+------------------------+
+</pre></div>
+
+<p>The layout is controlled by <code class="code">dired-image-thumbnail-window-layout</code>
+(default <code class="code">left-right</code>) and <code class="code">dired-image-thumbnail-window-ratio</code>
+(default <code class="code">0.4</code>).
+</p>
+<hr>
+</div>
+<div class="section-level-extent" id="Auto_002dDisplay-Navigation">
+<div class="nav-panel">
+<p>
+Next: <a href="#Quick-Deletion-Workflow" accesskey="n" rel="next">Quick Deletion Workflow</a>, Previous: <a href="#Automatic-Split_002dScreen-Layout" accesskey="p" rel="prev">Automatic Split-Screen Layout</a>, Up: <a href="#Enhanced-Workflow" accesskey="u" rel="up">Enhanced Workflow</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Auto_002dDisplay-Navigation-1"><span>6.2 Auto-Display Navigation<a class="copiable-link" href="#Auto_002dDisplay-Navigation-1"> &para;</a></span></h3>
+
+<p>With <code class="code">dired-image-thumbnail-auto-display-on-navigate</code> enabled (default):
+</p>
+<ul class="itemize mark-bullet">
+<li>Press <kbd class="kbd">n</kbd> or <kbd class="kbd">p</kbd> to navigate thumbnails
+</li><li>The full-size image automatically updates on the right
+</li><li>No need to press <kbd class="key">RET</kbd> or <kbd class="kbd">C-<kbd class="key">RET</kbd></kbd> for each image
+</li><li>Smooth, fluid browsing experience
+</li></ul>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Quick-Deletion-Workflow">
+<div class="nav-panel">
+<p>
+Previous: <a href="#Auto_002dDisplay-Navigation" accesskey="p" rel="prev">Auto-Display Navigation</a>, Up: <a href="#Enhanced-Workflow" accesskey="u" rel="up">Enhanced Workflow</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Quick-Deletion-Workflow-1"><span>6.3 Quick Deletion Workflow<a class="copiable-link" href="#Quick-Deletion-Workflow-1"> &para;</a></span></h3>
+
+<p>Press <kbd class="kbd">C-d</kbd> in either the thumbnail or image display buffer to:
+</p>
+<ol class="enumerate">
+<li> Get a confirmation prompt (unless <code class="code">dired-image-thumbnail-auto-accept</code> is enabled)
+</li><li> Delete the current image file
+</li><li> Automatically advance to the next image
+</li><li> Continue browsing seamlessly
+</li></ol>
+
+<p>This makes culling large photo collections much faster than the standard workflow.
+</p>
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Keybindings">
+<div class="nav-panel">
+<p>
+Next: <a href="#Header-Line" accesskey="n" rel="next">Header Line</a>, Previous: <a href="#Enhanced-Workflow" accesskey="p" rel="prev">Enhanced Workflow</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Keybindings-1"><span>7 Keybindings<a class="copiable-link" href="#Keybindings-1"> &para;</a></span></h2>
+
+
+<ul class="mini-toc">
+<li><a href="#Dired-Buffer-Keys" accesskey="1">In Dired Buffer</a></li>
+<li><a href="#Thumbnail-Buffer-Keys" accesskey="2">In Thumbnail Buffer</a></li>
+<li><a href="#Image-Display-Buffer-Keys" accesskey="3">In Image Display Buffer</a></li>
+</ul>
+<hr>
+<div class="section-level-extent" id="Dired-Buffer-Keys">
+<div class="nav-panel">
+<p>
+Next: <a href="#Thumbnail-Buffer-Keys" accesskey="n" rel="next">In Thumbnail Buffer</a>, Up: <a href="#Keybindings" accesskey="u" rel="up">Keybindings</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="In-Dired-Buffer"><span>7.1 In Dired Buffer<a class="copiable-link" href="#In-Dired-Buffer"> &para;</a></span></h3>
+
+<dl class="table">
+<dt><kbd class="kbd">C-t d</kbd></dt>
+<dd><p>Launch standard image-dired enhanced (<code class="code">image-dired</code> + <code class="code">dired-image-thumbnail-refresh</code>)
+</p></dd>
+<dt><kbd class="kbd">C-t m</kbd></dt>
+<dd><p>Launch enhanced thumbnail viewer (<code class="code">dired-image-thumbnail</code>)
+</p></dd>
+<dt><kbd class="kbd">C-t s</kbd></dt>
+<dd><p>Insert subdirs with images (<code class="code">dired-image-thumbnail-insert-image-subdirs</code>)
+</p></dd>
+<dt><kbd class="kbd">C-t z</kbd></dt>
+<dd><p>Insert all subdirs recursively (<code class="code">dired-image-thumbnail-insert-subdir-recursive</code>)
+</p></dd>
+<dt><kbd class="kbd">C-t k</kbd></dt>
+<dd><p>Remove all inserted subdirs (<code class="code">dired-image-thumbnail-kill-all-subdirs</code>)
+</p></dd>
+</dl>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Thumbnail-Buffer-Keys">
+<div class="nav-panel">
+<p>
+Next: <a href="#Image-Display-Buffer-Keys" accesskey="n" rel="next">In Image Display Buffer</a>, Previous: <a href="#Dired-Buffer-Keys" accesskey="p" rel="prev">In Dired Buffer</a>, Up: <a href="#Keybindings" accesskey="u" rel="up">Keybindings</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="In-Thumbnail-Buffer"><span>7.2 In Thumbnail Buffer<a class="copiable-link" href="#In-Thumbnail-Buffer"> &para;</a></span></h3>
+
+<h4 class="subheading" id="Navigation"><span>Navigation<a class="copiable-link" href="#Navigation"> &para;</a></span></h4>
+
+<dl class="table">
+<dt><kbd class="kbd">n</kbd></dt>
+<dt><kbd class="kbd"><kbd class="key">RIGHT</kbd></kbd></dt>
+<dd><p>Next image (auto-display when enabled)
+</p></dd>
+<dt><kbd class="kbd">p</kbd></dt>
+<dt><kbd class="kbd"><kbd class="key">LEFT</kbd></kbd></dt>
+<dd><p>Previous image (auto-display when enabled)
+</p></dd>
+<dt><kbd class="kbd">+</kbd></dt>
+<dd><p>Increase thumbnail size
+</p></dd>
+<dt><kbd class="kbd">-</kbd></dt>
+<dd><p>Decrease thumbnail size
+</p></dd>
+</dl>
+
+<p>When <code class="code">dired-image-thumbnail-auto-display-on-navigate</code> is enabled (default),
+pressing <kbd class="kbd">n</kbd> or <kbd class="kbd">p</kbd> automatically displays the full-size image.
+</p>
+<h4 class="subheading" id="Sorting"><span>Sorting<a class="copiable-link" href="#Sorting"> &para;</a></span></h4>
+
+<dl class="table">
+<dt><kbd class="kbd">s b</kbd></dt>
+<dd><p>Sort by Dired buffer order
+</p></dd>
+<dt><kbd class="kbd">s n</kbd></dt>
+<dd><p>Sort by filename
+</p></dd>
+<dt><kbd class="kbd">s d</kbd></dt>
+<dd><p>Sort by modification date
+</p></dd>
+<dt><kbd class="kbd">s s</kbd></dt>
+<dd><p>Sort by file size
+</p></dd>
+<dt><kbd class="kbd">s D</kbd></dt>
+<dd><p>Sort by image dimensions (area)
+</p></dd>
+<dt><kbd class="kbd">s r</kbd></dt>
+<dd><p>Reverse sort order
+</p></dd>
+<dt><kbd class="kbd">S</kbd></dt>
+<dd><p>Interactive sort selection (transient)
+</p></dd>
+</dl>
+
+<h4 class="subheading" id="Filtering"><span>Filtering<a class="copiable-link" href="#Filtering"> &para;</a></span></h4>
+
+<dl class="table">
+<dt><kbd class="kbd">/ n</kbd></dt>
+<dd><p>Filter by name regexp
+</p></dd>
+<dt><kbd class="kbd">/ s</kbd></dt>
+<dd><p>Filter by file size range
+</p></dd>
+<dt><kbd class="kbd">/ d</kbd></dt>
+<dd><p>Filter by dimension range
+</p></dd>
+<dt><kbd class="kbd">/ /</kbd></dt>
+<dt><kbd class="kbd">/ c</kbd></dt>
+<dd><p>Clear all filters
+</p></dd>
+<dt><kbd class="kbd">\</kbd></dt>
+<dd><p>Interactive filter menu (transient)
+</p></dd>
+</dl>
+
+<h4 class="subheading" id="Display"><span>Display<a class="copiable-link" href="#Display"> &para;</a></span></h4>
+
+<dl class="table">
+<dt><kbd class="kbd">w</kbd></dt>
+<dd><p>Toggle wrap display mode
+</p></dd>
+<dt><kbd class="kbd">r</kbd></dt>
+<dt><kbd class="kbd">g</kbd></dt>
+<dd><p>Refresh the display
+</p></dd>
+<dt><kbd class="kbd">G</kbd></dt>
+<dd><p>Clear cache and refresh (hard refresh)
+</p></dd>
+<dt><kbd class="kbd">+</kbd></dt>
+<dd><p>Increase thumbnail size
+</p></dd>
+<dt><kbd class="kbd">-</kbd></dt>
+<dd><p>Decrease thumbnail size
+</p></dd>
+<dt><kbd class="kbd">Q</kbd></dt>
+<dd><p>Cycle display quality (full, high, fast, faster, draft)
+</p></dd>
+</dl>
+
+<h4 class="subheading" id="Marking"><span>Marking<a class="copiable-link" href="#Marking"> &para;</a></span></h4>
+
+<dl class="table">
+<dt><kbd class="kbd">m</kbd></dt>
+<dd><p>Mark image (uses image-dired&rsquo;s native marking with border)
+</p></dd>
+<dt><kbd class="kbd">u</kbd></dt>
+<dd><p>Unmark image
+</p></dd>
+<dt><kbd class="kbd">M</kbd></dt>
+<dd><p>Mark all images
+</p></dd>
+<dt><kbd class="kbd">U</kbd></dt>
+<dd><p>Unmark all
+</p></dd>
+<dt><kbd class="kbd">t</kbd></dt>
+<dd><p>Toggle all marks
+</p></dd>
+</dl>
+
+<h4 class="subheading" id="File-Operations"><span>File Operations<a class="copiable-link" href="#File-Operations"> &para;</a></span></h4>
+
+<dl class="table">
+<dt><kbd class="kbd">D</kbd></dt>
+<dd><p>Delete image at point
+</p></dd>
+<dt><kbd class="kbd">C-d</kbd></dt>
+<dd><p>Delete image and move to next
+</p></dd>
+<dt><kbd class="kbd">x</kbd></dt>
+<dd><p>Delete all marked images
+</p></dd>
+<dt><kbd class="kbd">d</kbd></dt>
+<dd><p>Jump to file in Dired
+</p></dd>
+</dl>
+
+<h4 class="subheading" id="Other"><span>Other<a class="copiable-link" href="#Other"> &para;</a></span></h4>
+
+<dl class="table">
+<dt><kbd class="kbd">W</kbd></dt>
+<dd><p>Open in external editor
+</p></dd>
+<dt><kbd class="kbd">?</kbd></dt>
+<dt><kbd class="kbd">h</kbd></dt>
+<dd><p>Show help
+</p></dd>
+</dl>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Image-Display-Buffer-Keys">
+<div class="nav-panel">
+<p>
+Previous: <a href="#Thumbnail-Buffer-Keys" accesskey="p" rel="prev">In Thumbnail Buffer</a>, Up: <a href="#Keybindings" accesskey="u" rel="up">Keybindings</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="In-Image-Display-Buffer"><span>7.3 In Image Display Buffer<a class="copiable-link" href="#In-Image-Display-Buffer"> &para;</a></span></h3>
+
+<dl class="table">
+<dt><kbd class="kbd">C-d</kbd></dt>
+<dd><p>Delete image and move to next
+</p></dd>
+</dl>
+
+<p>All standard <code class="code">image-dired</code> keybindings (<kbd class="kbd">n</kbd>, <kbd class="kbd">p</kbd>, <kbd class="kbd">m</kbd>,
+<kbd class="kbd">u</kbd>, <kbd class="kbd">U</kbd>, etc.) continue to work as expected.
+</p>
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Header-Line">
+<div class="nav-panel">
+<p>
+Next: <a href="#Customization" accesskey="n" rel="next">Customization</a>, Previous: <a href="#Keybindings" accesskey="p" rel="prev">Keybindings</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Header-Line-1"><span>8 Header Line<a class="copiable-link" href="#Header-Line-1"> &para;</a></span></h2>
+
+<p>The enhanced header line displays:
+</p>
+<ul class="itemize mark-bullet">
+<li><strong class="strong">Mark indicator</strong> &mdash; A &lsquo;<samp class="samp">*</samp>&rsquo; if the current image is marked
+</li><li><strong class="strong">Filename</strong> &mdash; Relative to source directory when subdirectories are inserted
+</li><li><strong class="strong">Image count</strong> &mdash; Current position / total (e.g., &lsquo;<samp class="samp">23/156</samp>&rsquo;)
+</li><li><strong class="strong">Dimensions</strong> &mdash; Width x Height in pixels (e.g., &lsquo;<samp class="samp">1920x1080</samp>&rsquo;)
+</li><li><strong class="strong">File size</strong> &mdash; Human-readable size (e.g., &lsquo;<samp class="samp">2.4M</samp>&rsquo;)
+</li><li><strong class="strong">Sort indicator</strong> &mdash; Current sort field and direction (e.g., &lsquo;<samp class="samp">[name &lt;]</samp>&rsquo;)
+</li><li><strong class="strong">Display quality</strong> &mdash; Current quality level (e.g., &lsquo;<samp class="samp">[fast]</samp>&rsquo;)
+</li><li><strong class="strong">Active filters</strong> &mdash; Description of any active filters
+</li><li><strong class="strong">Marked count</strong> &mdash; Number of marked images (e.g., &lsquo;<samp class="samp">[3 marked]</samp>&rsquo;)
+</li></ul>
+
+<hr>
+</div>
+<div class="chapter-level-extent" id="Customization">
+<div class="nav-panel">
+<p>
+Next: <a href="#Example-Configuration" accesskey="n" rel="next">Example Configuration</a>, Previous: <a href="#Header-Line" accesskey="p" rel="prev">Header Line</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Customization-1"><span>9 Customization<a class="copiable-link" href="#Customization-1"> &para;</a></span></h2>
+
+<p>All customization options are in the <code class="code">dired-image-thumbnail</code> group.
+Use <kbd class="kbd">M-x customize-group <kbd class="key">RET</kbd> dired-image-thumbnail <kbd class="key">RET</kbd></kbd>
+to browse them interactively.
+</p>
+
+<ul class="mini-toc">
+<li><a href="#Default-Sort-Settings" accesskey="1">Default Sort Settings</a></li>
+<li><a href="#Display-Options" accesskey="2">Display Options</a></li>
+<li><a href="#Window-Layout" accesskey="3">Window Layout</a></li>
+<li><a href="#Display-Quality" accesskey="4">Display Quality</a></li>
+<li><a href="#Image-Validation" accesskey="5">Image Validation</a></li>
+<li><a href="#External-Editor" accesskey="6">External Editor</a></li>
+<li><a href="#Navigation-Behavior" accesskey="7">Navigation Behavior</a></li>
+<li><a href="#Auto_002dAccepting-Actions" accesskey="8">Auto-Accepting Actions</a></li>
+<li><a href="#Image-Extensions" accesskey="9">Image Extensions</a></li>
+</ul>
+<hr>
+<div class="section-level-extent" id="Default-Sort-Settings">
+<div class="nav-panel">
+<p>
+Next: <a href="#Display-Options" accesskey="n" rel="next">Display Options</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Default-Sort-Settings-1"><span>9.1 Default Sort Settings<a class="copiable-link" href="#Default-Sort-Settings-1"> &para;</a></span></h3>
+
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-sort-by 'dired)       ; 'dired, 'name, 'date, 'size, or 'dimensions
+(setq dired-image-thumbnail-sort-order 'ascending) ; 'ascending or 'descending
+</pre></div>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Display-Options">
+<div class="nav-panel">
+<p>
+Next: <a href="#Window-Layout" accesskey="n" rel="next">Window Layout</a>, Previous: <a href="#Default-Sort-Settings" accesskey="p" rel="prev">Default Sort Settings</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Display-Options-1"><span>9.2 Display Options<a class="copiable-link" href="#Display-Options-1"> &para;</a></span></h3>
+
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-wrap-display nil) ; Enable wrap display by default
+</pre></div>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Window-Layout">
+<div class="nav-panel">
+<p>
+Next: <a href="#Display-Quality" accesskey="n" rel="next">Display Quality</a>, Previous: <a href="#Display-Options" accesskey="p" rel="prev">Display Options</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Window-Layout-1"><span>9.3 Window Layout<a class="copiable-link" href="#Window-Layout-1"> &para;</a></span></h3>
+
+<p>Control the split-screen layout and thumbnail/image ratio:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-window-layout 'left-right) ; 'left-right, 'right-left, 'top-bottom, 'bottom-top, 'thumb-only, or nil
+(setq dired-image-thumbnail-window-ratio 0.4)          ; Fraction of frame for thumbnails
+</pre></div>
+
+<p>Set to <code class="code">nil</code> to disable automatic layout management and use your own
+<code class="code">display-buffer-alist</code> rules.
+</p>
+<hr>
+</div>
+<div class="section-level-extent" id="Display-Quality">
+<div class="nav-panel">
+<p>
+Next: <a href="#Image-Validation" accesskey="n" rel="next">Image Validation</a>, Previous: <a href="#Window-Layout" accesskey="p" rel="prev">Window Layout</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Display-Quality-1"><span>9.4 Display Quality<a class="copiable-link" href="#Display-Quality-1"> &para;</a></span></h3>
+
+<p>Control the speed/fidelity trade-off when navigating with <kbd class="kbd">n</kbd>/<kbd class="kbd">p</kbd>:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-display-quality 'fast) ; 'full, 'high, 'fast, 'faster, or 'draft
+</pre></div>
+
+<p>Lower quality levels use external tools (<code class="code">djpeg</code>/<code class="code">cjpeg</code> for
+JPEGs, <code class="code">magick</code> for others) to generate small preview files, so Emacs
+decodes less data.  Press <kbd class="kbd">Q</kbd> in the thumbnail buffer to cycle through
+levels interactively.
+</p>
+<hr>
+</div>
+<div class="section-level-extent" id="Image-Validation">
+<div class="nav-panel">
+<p>
+Next: <a href="#External-Editor" accesskey="n" rel="next">External Editor</a>, Previous: <a href="#Display-Quality" accesskey="p" rel="prev">Display Quality</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Image-Validation-1"><span>9.5 Image Validation<a class="copiable-link" href="#Image-Validation-1"> &para;</a></span></h3>
+
+<p>Control which files are accepted as images:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-minimum-file-size 100) ; Minimum bytes (0 to disable)
+(setq dired-image-thumbnail-validate-headers t)    ; Check magic bytes
+</pre></div>
+
+<p>When <code class="code">dired-image-thumbnail-validate-headers</code> is non-nil, each
+candidate file is opened briefly to verify that its first few bytes match a
+known image format signature (JPEG, PNG, GIF, BMP, TIFF, WEBP, ICO,
+HEIC/HEIF).  SVG files are accepted without a byte check since they are XML
+text.
+</p>
+<hr>
+</div>
+<div class="section-level-extent" id="External-Editor">
+<div class="nav-panel">
+<p>
+Next: <a href="#Navigation-Behavior" accesskey="n" rel="next">Navigation Behavior</a>, Previous: <a href="#Image-Validation" accesskey="p" rel="prev">Image Validation</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="External-Editor-1"><span>9.6 External Editor<a class="copiable-link" href="#External-Editor-1"> &para;</a></span></h3>
+
+<p>Set a specific program for <kbd class="kbd">W</kbd> to open images with:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-external-editor &quot;gimp&quot;) ; nil for system default
+</pre></div>
+
+<p>When <code class="code">nil</code> (default), the system default application is used via
+<code class="code">xdg-open</code> on Linux, <code class="code">open</code> on macOS, or <code class="code">start</code> on
+Windows.
+</p>
+<hr>
+</div>
+<div class="section-level-extent" id="Navigation-Behavior">
+<div class="nav-panel">
+<p>
+Next: <a href="#Auto_002dAccepting-Actions" accesskey="n" rel="next">Auto-Accepting Actions</a>, Previous: <a href="#External-Editor" accesskey="p" rel="prev">External Editor</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Navigation-Behavior-1"><span>9.7 Navigation Behavior<a class="copiable-link" href="#Navigation-Behavior-1"> &para;</a></span></h3>
+
+<p>Control whether navigating with <kbd class="kbd">n</kbd>/<kbd class="kbd">p</kbd> automatically displays
+full-size images:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-auto-display-on-navigate t) ; Auto-display on n/p
+</pre></div>
+
+<p>When enabled (default), pressing <kbd class="kbd">n</kbd> or <kbd class="kbd">p</kbd> in the thumbnail
+buffer automatically updates the image display buffer.  When disabled, you
+must press <kbd class="key">RET</kbd> or <kbd class="kbd">C-<kbd class="key">RET</kbd></kbd> to view full-size images.
+</p>
+<hr>
+</div>
+<div class="section-level-extent" id="Auto_002dAccepting-Actions">
+<div class="nav-panel">
+<p>
+Next: <a href="#Image-Extensions" accesskey="n" rel="next">Image Extensions</a>, Previous: <a href="#Navigation-Behavior" accesskey="p" rel="prev">Navigation Behavior</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Auto_002dAccepting-Actions-1"><span>9.8 Auto-Accepting Actions<a class="copiable-link" href="#Auto_002dAccepting-Actions-1"> &para;</a></span></h3>
+
+<p>Control whether to skip confirmation prompts for file actions:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-auto-accept nil) ; Require confirmation (default)
+</pre></div>
+
+<p>When enabled, actions like deleting files (<kbd class="kbd">D</kbd>, <kbd class="kbd">C-d</kbd>, <kbd class="kbd">x</kbd>)
+will proceed without asking for confirmation.
+</p>
+<hr>
+</div>
+<div class="section-level-extent" id="Image-Extensions">
+<div class="nav-panel">
+<p>
+Previous: <a href="#Auto_002dAccepting-Actions" accesskey="p" rel="prev">Auto-Accepting Actions</a>, Up: <a href="#Customization" accesskey="u" rel="up">Customization</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Image-Extensions-1"><span>9.9 Image Extensions<a class="copiable-link" href="#Image-Extensions-1"> &para;</a></span></h3>
+
+<p>Add or modify recognized image file extensions:
+</p>
+<div class="example lisp">
+<pre class="lisp-preformatted">(setq dired-image-thumbnail-image-extensions
+      '(&quot;jpg&quot; &quot;jpeg&quot; &quot;png&quot; &quot;gif&quot; &quot;bmp&quot; &quot;tiff&quot; &quot;tif&quot; &quot;webp&quot; &quot;svg&quot; &quot;ico&quot; &quot;heic&quot; &quot;heif&quot;))
+</pre></div>
+
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Example-Configuration">
+<div class="nav-panel">
+<p>
+Next: <a href="#Workflow-Examples" accesskey="n" rel="next">Workflow Examples</a>, Previous: <a href="#Customization" accesskey="p" rel="prev">Customization</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Example-Configuration-1"><span>10 Example Configuration<a class="copiable-link" href="#Example-Configuration-1"> &para;</a></span></h2>
+
+<div class="example lisp">
+<pre class="lisp-preformatted">(use-package dired-image-thumbnail
+  :load-path &quot;/path/to/dired-image-thumbnail/&quot;
+  :demand t
+  :custom
+  (dired-image-thumbnail-sort-by 'date)
+  (dired-image-thumbnail-sort-order 'descending)
+  (dired-image-thumbnail-wrap-display t)
+  (dired-image-thumbnail-window-layout 'left-right)
+  (dired-image-thumbnail-auto-display-on-navigate t)
+  :bind
+  (:map dired-mode-map
+   (&quot;C-t d&quot; . (lambda () (interactive)
+                (image-dired default-directory)
+                (dired-image-thumbnail-refresh)))
+   (&quot;C-t m&quot; . dired-image-thumbnail)
+   (&quot;C-t s&quot; . dired-image-thumbnail-insert-image-subdirs)
+   (&quot;C-t z&quot; . dired-image-thumbnail-insert-subdir-recursive)
+   (&quot;C-t k&quot; . dired-image-thumbnail-kill-all-subdirs)))
+</pre></div>
+
+<hr>
+</div>
+<div class="chapter-level-extent" id="Workflow-Examples">
+<div class="nav-panel">
+<p>
+Next: <a href="#Comparison-with-Standard-image_002ddired" accesskey="n" rel="next">Comparison with Standard image-dired</a>, Previous: <a href="#Example-Configuration" accesskey="p" rel="prev">Example Configuration</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Workflow-Examples-1"><span>11 Workflow Examples<a class="copiable-link" href="#Workflow-Examples-1"> &para;</a></span></h2>
+
+
+<ul class="mini-toc">
+<li><a href="#Reviewing-a-Photo-Collection" accesskey="1">Reviewing a Photo Collection</a></li>
+<li><a href="#Finding-Large-Images" accesskey="2">Finding Large Images</a></li>
+<li><a href="#Quick-Culling-Workflow" accesskey="3">Quick Culling Workflow</a></li>
+<li><a href="#Finding-High_002dResolution-Images" accesskey="4">Finding High-Resolution Images</a></li>
+<li><a href="#Working-with-Subdirectories-Example" accesskey="5">Working with Subdirectories</a></li>
+<li><a href="#Organizing-by-Date" accesskey="6">Organizing by Date</a></li>
+</ul>
+<hr>
+<div class="section-level-extent" id="Reviewing-a-Photo-Collection">
+<div class="nav-panel">
+<p>
+Next: <a href="#Finding-Large-Images" accesskey="n" rel="next">Finding Large Images</a>, Up: <a href="#Workflow-Examples" accesskey="u" rel="up">Workflow Examples</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Reviewing-a-Photo-Collection-1"><span>11.1 Reviewing a Photo Collection<a class="copiable-link" href="#Reviewing-a-Photo-Collection-1"> &para;</a></span></h3>
+
+<ol class="enumerate">
+<li> Open directory in Dired: <kbd class="kbd">C-x d ~/Photos <kbd class="key">RET</kbd></kbd>
+</li><li> Insert subdirectories with images: <kbd class="kbd">C-t s</kbd>
+</li><li> View thumbnails: <kbd class="kbd">C-t m</kbd>
+</li><li> Thumbnails appear on the left, full-size view on the right
+</li><li> Sort by date (newest first): <kbd class="kbd">s d</kbd> then <kbd class="kbd">s r</kbd>
+</li><li> Browse with <kbd class="kbd">n</kbd> / <kbd class="kbd">p</kbd> &mdash; images automatically update on the right
+</li><li> Mark keepers with <kbd class="kbd">m</kbd>, jump to Dired with <kbd class="kbd">d</kbd>
+</li></ol>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Finding-Large-Images">
+<div class="nav-panel">
+<p>
+Next: <a href="#Quick-Culling-Workflow" accesskey="n" rel="next">Quick Culling Workflow</a>, Previous: <a href="#Reviewing-a-Photo-Collection" accesskey="p" rel="prev">Reviewing a Photo Collection</a>, Up: <a href="#Workflow-Examples" accesskey="u" rel="up">Workflow Examples</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Finding-Large-Images-1"><span>11.2 Finding Large Images<a class="copiable-link" href="#Finding-Large-Images-1"> &para;</a></span></h3>
+
+<ol class="enumerate">
+<li> View thumbnails: <kbd class="kbd">C-t m</kbd>
+</li><li> Grid appears on left, image display on right
+</li><li> Filter by size: <kbd class="kbd">/ s</kbd> and enter &lsquo;<samp class="samp">1M</samp>&rsquo; for minimum, leave maximum empty
+</li><li> Sort by size (largest first): <kbd class="kbd">s s</kbd> then <kbd class="kbd">s r</kbd>
+</li><li> Navigate with <kbd class="kbd">n</kbd>/<kbd class="kbd">p</kbd> to review each image
+</li><li> Mark images for deletion with <kbd class="kbd">m</kbd>, delete with <kbd class="kbd">x</kbd>
+</li><li> Or use <kbd class="kbd">C-d</kbd> to delete current image and advance to next
+</li></ol>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Quick-Culling-Workflow">
+<div class="nav-panel">
+<p>
+Next: <a href="#Finding-High_002dResolution-Images" accesskey="n" rel="next">Finding High-Resolution Images</a>, Previous: <a href="#Finding-Large-Images" accesskey="p" rel="prev">Finding Large Images</a>, Up: <a href="#Workflow-Examples" accesskey="u" rel="up">Workflow Examples</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Quick-Culling-Workflow-1"><span>11.3 Quick Culling Workflow<a class="copiable-link" href="#Quick-Culling-Workflow-1"> &para;</a></span></h3>
+
+<ol class="enumerate">
+<li> View thumbnails: <kbd class="kbd">C-t m</kbd>
+</li><li> Navigate through images with <kbd class="kbd">n</kbd> and <kbd class="kbd">p</kbd>
+</li><li> Press <kbd class="kbd">C-d</kbd> on images you want to delete
+</li><li> Confirmation prompt appears for each deletion
+</li><li> Automatically advances to next image after deletion
+</li><li> Continue until finished
+</li></ol>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Finding-High_002dResolution-Images">
+<div class="nav-panel">
+<p>
+Next: <a href="#Working-with-Subdirectories-Example" accesskey="n" rel="next">Working with Subdirectories</a>, Previous: <a href="#Quick-Culling-Workflow" accesskey="p" rel="prev">Quick Culling Workflow</a>, Up: <a href="#Workflow-Examples" accesskey="u" rel="up">Workflow Examples</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Finding-High_002dResolution-Images-1"><span>11.4 Finding High-Resolution Images<a class="copiable-link" href="#Finding-High_002dResolution-Images-1"> &para;</a></span></h3>
+
+<ol class="enumerate">
+<li> View thumbnails: <kbd class="kbd">C-t m</kbd>
+</li><li> Filter by dimensions: <kbd class="kbd">/ d</kbd> and enter minimum width &lsquo;<samp class="samp">1920</samp>&rsquo;, minimum height &lsquo;<samp class="samp">1080</samp>&rsquo;
+</li><li> Browse only HD+ images
+</li><li> Use <kbd class="kbd">/ c</kbd> to clear the filter when done
+</li></ol>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Working-with-Subdirectories-Example">
+<div class="nav-panel">
+<p>
+Next: <a href="#Organizing-by-Date" accesskey="n" rel="next">Organizing by Date</a>, Previous: <a href="#Finding-High_002dResolution-Images" accesskey="p" rel="prev">Finding High-Resolution Images</a>, Up: <a href="#Workflow-Examples" accesskey="u" rel="up">Workflow Examples</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Working-with-Subdirectories-2"><span>11.5 Working with Subdirectories<a class="copiable-link" href="#Working-with-Subdirectories-2"> &para;</a></span></h3>
+
+<ol class="enumerate">
+<li> Open parent directory in Dired
+</li><li> Use <kbd class="kbd">C-t s</kbd> to insert only subdirectories containing images (fast)
+</li><li> Or use <kbd class="kbd">C-t z</kbd> to insert all subdirectories (may be slow with many dirs)
+</li><li> View thumbnails with <kbd class="kbd">C-t m</kbd>
+</li><li> Images from all visible subdirectories will be shown
+</li><li> Use <kbd class="kbd">C-t k</kbd> to remove all subdirectories and return to top-level view
+</li></ol>
+
+<hr>
+</div>
+<div class="section-level-extent" id="Organizing-by-Date">
+<div class="nav-panel">
+<p>
+Previous: <a href="#Working-with-Subdirectories-Example" accesskey="p" rel="prev">Working with Subdirectories</a>, Up: <a href="#Workflow-Examples" accesskey="u" rel="up">Workflow Examples</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h3 class="section" id="Organizing-by-Date-1"><span>11.6 Organizing by Date<a class="copiable-link" href="#Organizing-by-Date-1"> &para;</a></span></h3>
+
+<ol class="enumerate">
+<li> Open directory in Dired
+</li><li> Insert subdirectories if needed: <kbd class="kbd">C-t s</kbd>
+</li><li> View thumbnails: <kbd class="kbd">C-t m</kbd>
+</li><li> Sort by date: <kbd class="kbd">s d</kbd>
+</li><li> Use the header line to see file dates as you browse
+</li></ol>
+
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Comparison-with-Standard-image_002ddired">
+<div class="nav-panel">
+<p>
+Next: <a href="#Transient-Menu-Support" accesskey="n" rel="next">Transient Menu Support</a>, Previous: <a href="#Workflow-Examples" accesskey="p" rel="prev">Workflow Examples</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Comparison-with-Standard-image_002ddired-1"><span>12 Comparison with Standard image-dired<a class="copiable-link" href="#Comparison-with-Standard-image_002ddired-1"> &para;</a></span></h2>
+
+<table class="multitable">
+<thead><tr><th width="35%">Feature</th><th width="15%">image-dired</th><th width="30%">dired-image-thumbnail</th></tr></thead>
+<tbody><tr><td width="35%">Thumbnail display</td><td width="15%">Yes</td><td width="30%">Yes</td></tr>
+<tr><td width="35%">Dired integration</td><td width="15%">Yes</td><td width="30%">Yes</td></tr>
+<tr><td width="35%">Sorting</td><td width="15%">No</td><td width="30%">Yes (4 criteria)</td></tr>
+<tr><td width="35%">Filtering</td><td width="15%">No</td><td width="30%">Yes (name, size, dims)</td></tr>
+<tr><td width="35%">Subdirectory support</td><td width="15%">No</td><td width="30%">Yes (via insertion)</td></tr>
+<tr><td width="35%">Helper commands</td><td width="15%">No</td><td width="30%">Yes</td></tr>
+<tr><td width="35%">Wrap display</td><td width="15%">No</td><td width="30%">Yes</td></tr>
+<tr><td width="35%">Enhanced header line</td><td width="15%">Basic</td><td width="30%">Enhanced + quality</td></tr>
+<tr><td width="35%">Auto-display on n/p</td><td width="15%">No</td><td width="30%">Yes</td></tr>
+<tr><td width="35%">Configurable layout</td><td width="15%">No</td><td width="30%">Yes (6 presets)</td></tr>
+<tr><td width="35%">Display quality levels</td><td width="15%">No</td><td width="30%">Yes (5 levels)</td></tr>
+<tr><td width="35%">Image file validation</td><td width="15%">No</td><td width="30%">Yes (magic bytes)</td></tr>
+<tr><td width="35%">Open external editor</td><td width="15%">No</td><td width="30%">Yes (W)</td></tr>
+<tr><td width="35%">Delete and advance</td><td width="15%">No</td><td width="30%">Yes (C-d)</td></tr>
+<tr><td width="35%">Transient menus</td><td width="15%">No</td><td width="30%">Yes (optional)</td></tr>
+</tbody>
+</table>
+
+<hr>
+</div>
+<div class="chapter-level-extent" id="Transient-Menu-Support">
+<div class="nav-panel">
+<p>
+Next: <a href="#Performance-Notes" accesskey="n" rel="next">Performance Notes</a>, Previous: <a href="#Comparison-with-Standard-image_002ddired" accesskey="p" rel="prev">Comparison with Standard image-dired</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Transient-Menu-Support-1"><span>13 Transient Menu Support<a class="copiable-link" href="#Transient-Menu-Support-1"> &para;</a></span></h2>
+
+<p>If <code class="code">transient</code> is available, <code class="code">dired-image-thumbnail</code> provides
+interactive menus for sorting and filtering.  These can be accessed with:
+</p>
+<ul class="itemize mark-bullet">
+<li><kbd class="kbd">S</kbd> &mdash; Sort menu (shows all sort options and current state)
+</li><li><kbd class="kbd">\</kbd> &mdash; Filter menu (shows all filter options and current filters)
+</li></ul>
+
+<p>To disable transient menus even when transient is installed, don&rsquo;t load
+<samp class="file">dired-image-thumbnail-transient.el</samp>.
+</p>
+<hr>
+</div>
+<div class="chapter-level-extent" id="Performance-Notes">
+<div class="nav-panel">
+<p>
+Next: <a href="#Troubleshooting" accesskey="n" rel="next">Troubleshooting</a>, Previous: <a href="#Transient-Menu-Support" accesskey="p" rel="prev">Transient Menu Support</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Performance-Notes-1"><span>14 Performance Notes<a class="copiable-link" href="#Performance-Notes-1"> &para;</a></span></h2>
+
+<ul class="mini-toc">
+<li><a href="#Subdirectory-Insertion" accesskey="1">Subdirectory Insertion</a></li>
+<li><a href="#Thumbnail-Generation" accesskey="2">Thumbnail Generation</a></li>
+<li><a href="#Display-Quality-and-Speed" accesskey="3">Display Quality and Speed</a></li>
+</ul>
+<div class="section-level-extent" id="Subdirectory-Insertion">
+<h3 class="section"><span>14.1 Subdirectory Insertion<a class="copiable-link" href="#Subdirectory-Insertion"> &para;</a></span></h3>
+
+<p>When working with large directory trees:
+</p>
+<ul class="itemize mark-bullet">
+<li>Use <code class="code">dired-image-thumbnail-insert-image-subdirs</code> (<kbd class="kbd">C-t s</kbd>) instead of <code class="code">dired-image-thumbnail-insert-subdir-recursive</code> (<kbd class="kbd">C-t z</kbd>)
+</li><li>The &ldquo;smart&rdquo; insertion only processes subdirectories containing images, which is much faster
+</li><li>For very large collections, manually insert specific subdirectories with <kbd class="kbd">i</kbd> as needed
+</li></ul>
+
+</div>
+<div class="section-level-extent" id="Thumbnail-Generation">
+<h3 class="section"><span>14.2 Thumbnail Generation<a class="copiable-link" href="#Thumbnail-Generation"> &para;</a></span></h3>
+
+<p>First-time thumbnail generation can be slow for large images.  Thumbnails
+are cached by <code class="code">image-dired</code>, so subsequent viewing is fast.
+</p>
+</div>
+<div class="section-level-extent" id="Display-Quality-and-Speed">
+<h3 class="section"><span>14.3 Display Quality and Speed<a class="copiable-link" href="#Display-Quality-and-Speed"> &para;</a></span></h3>
+
+<p>Lower display quality levels (<code class="code">faster</code>, <code class="code">draft</code>) generate smaller
+preview files using external tools, significantly reducing image decode
+time.  For large photo collections, set the quality to <code class="code">draft</code> for
+the fastest navigation, then switch to <code class="code">full</code> when you want to
+examine an image in detail.
+</p>
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Troubleshooting">
+<div class="nav-panel">
+<p>
+Next: <a href="#Related-Packages" accesskey="n" rel="next">Related Packages</a>, Previous: <a href="#Performance-Notes" accesskey="p" rel="prev">Performance Notes</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Troubleshooting-1"><span>15 Troubleshooting<a class="copiable-link" href="#Troubleshooting-1"> &para;</a></span></h2>
+
+<ul class="mini-toc">
+<li><a href="#Images-not-appearing" accesskey="1">Images not appearing</a></li>
+<li><a href="#Subdirectories-not-showing-images" accesskey="2">Subdirectories not showing images</a></li>
+<li><a href="#Slow-performance-with-many-directories" accesskey="3">Slow performance with many directories</a></li>
+<li><a href="#Layout-not-splitting-correctly" accesskey="4">Layout not splitting correctly</a></li>
+<li><a href="#Auto_002ddisplay-not-working" accesskey="5">Auto-display not working</a></li>
+</ul>
+<div class="section-level-extent" id="Images-not-appearing">
+<h3 class="section"><span>15.1 Images not appearing<a class="copiable-link" href="#Images-not-appearing"> &para;</a></span></h3>
+
+<ul class="itemize mark-bullet">
+<li>Ensure <code class="code">image-dired</code> is working: test with <kbd class="kbd">C-t d</kbd> in a directory with images
+</li><li>Check that file extensions are in <code class="code">dired-image-thumbnail-image-extensions</code>
+</li><li>Verify thumbnails are being created in <code class="code">image-dired-dir</code>
+</li><li>If images have correct extensions but are corrupt, try setting <code class="code">dired-image-thumbnail-validate-headers</code> to <code class="code">nil</code>
+</li></ul>
+
+</div>
+<div class="section-level-extent" id="Subdirectories-not-showing-images">
+<h3 class="section"><span>15.2 Subdirectories not showing images<a class="copiable-link" href="#Subdirectories-not-showing-images"> &para;</a></span></h3>
+
+<ul class="itemize mark-bullet">
+<li>Ensure subdirectories are actually inserted in the Dired buffer (use <kbd class="kbd">i</kbd> or helper commands)
+</li><li>Check that <code class="code">dired-image-thumbnail-insert-image-subdirs</code> found subdirectories (watch for message)
+</li><li>Verify files in subdirectories have recognized image extensions
+</li></ul>
+
+</div>
+<div class="section-level-extent" id="Slow-performance-with-many-directories">
+<h3 class="section"><span>15.3 Slow performance with many directories<a class="copiable-link" href="#Slow-performance-with-many-directories"> &para;</a></span></h3>
+
+<ul class="itemize mark-bullet">
+<li>Use <kbd class="kbd">C-t s</kbd> (insert image subdirs only) instead of <kbd class="kbd">C-t z</kbd> (insert all subdirs)
+</li><li>Manually insert specific subdirectories with <kbd class="kbd">i</kbd> as needed
+</li><li>Consider filtering to reduce the number of visible thumbnails
+</li><li>Lower the display quality with <kbd class="kbd">Q</kbd> for faster navigation
+</li></ul>
+
+</div>
+<div class="section-level-extent" id="Layout-not-splitting-correctly">
+<h3 class="section"><span>15.4 Layout not splitting correctly<a class="copiable-link" href="#Layout-not-splitting-correctly"> &para;</a></span></h3>
+
+<ul class="itemize mark-bullet">
+<li>Ensure <code class="code">dired-image-thumbnail-window-layout</code> is set to a layout symbol (default <code class="code">left-right</code>)
+</li><li>Try a different layout preset: <code class="code">top-bottom</code>, <code class="code">right-left</code>, etc.
+</li><li>Set to <code class="code">nil</code> and manage windows manually if other packages conflict
+</li><li>Manually delete other windows with <kbd class="kbd">C-x 1</kbd> before launching
+</li></ul>
+
+</div>
+<div class="section-level-extent" id="Auto_002ddisplay-not-working">
+<h3 class="section"><span>15.5 Auto-display not working<a class="copiable-link" href="#Auto_002ddisplay-not-working"> &para;</a></span></h3>
+
+<ul class="itemize mark-bullet">
+<li>Ensure <code class="code">dired-image-thumbnail-auto-display-on-navigate</code> is <code class="code">t</code> (default)
+</li><li>The feature requires the split-screen layout to be active
+</li><li>Try pressing <kbd class="key">RET</kbd> on a thumbnail to manually trigger display
+</li></ul>
+
+<hr>
+</div>
+</div>
+<div class="chapter-level-extent" id="Related-Packages">
+<div class="nav-panel">
+<p>
+Next: <a href="#License" accesskey="n" rel="next">License</a>, Previous: <a href="#Troubleshooting" accesskey="p" rel="prev">Troubleshooting</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="Related-Packages-1"><span>16 Related Packages<a class="copiable-link" href="#Related-Packages-1"> &para;</a></span></h2>
+
+<ul class="itemize mark-bullet">
+<li><a class="uref" href="https://www.gnu.org/software/emacs/manual/html_node/emacs/Image_002dDired.html">image-dired</a> &mdash; Built-in image thumbnail browser for Dired (extended by this package)
+</li><li><a class="uref" href="https://github.com/captainflasmr/dired-video-thumbnail">dired-video-thumbnail</a> &mdash; Video thumbnail browser (inspiration for this package)
+</li><li><a class="uref" href="https://github.com/alexluigit/dirvish">dirvish</a> &mdash; A modern file manager for Emacs with preview support
+</li></ul>
+
+<hr>
+</div>
+<div class="chapter-level-extent" id="License">
+<div class="nav-panel">
+<p>
+Previous: <a href="#Related-Packages" accesskey="p" rel="prev">Related Packages</a>, Up: <a href="#Top" accesskey="u" rel="up">dired-image-thumbnail</a> &nbsp; [<a href="#SEC_Contents" title="Table of contents" rel="contents">Contents</a>]</p>
+</div>
+<h2 class="chapter" id="License-1"><span>17 License<a class="copiable-link" href="#License-1"> &para;</a></span></h2>
+
+<p>GPL-3.0-or-later
+</p>
+</div>
+</div>
+
+
+
+</body>
+</html>

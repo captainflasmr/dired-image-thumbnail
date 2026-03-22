@@ -1,0 +1,1257 @@
+<<Top>>
+
+Next: [[#Introduction][Introduction]]   [[[#SEC_Contents][Contents]]]
+
+* dired-image-thumbnail [[#dired_002dimage_002dthumbnail][¶]]
+:PROPERTIES:
+:CUSTOM_ID: dired_002dimage_002dthumbnail
+:CLASS: top
+:END:
+=dired-image-thumbnail= is an Emacs package that extends =image-dired=
+with an enhanced workflow inspired by =dired-video-thumbnail=. It adds
+powerful sorting, filtering, subdirectory management, and flexible
+display options to the standard =image-dired= thumbnail viewer.
+
+<<SEC_Contents>>
+** Table of Contents
+:PROPERTIES:
+:CUSTOM_ID: table-of-contents
+:CLASS: contents-heading
+:END:
+
+- [[#Introduction][1 Introduction]]
+- [[#Features][2 Features]]
+- [[#Requirements][3 Requirements]]
+- [[#Installation][4 Installation]]
+  - [[#Manual-Installation][4.1 Manual]]
+  - [[#use_002dpackage][4.2 use-package]]
+  - [[#straight_002eel][4.3 straight.el]]
+- [[#Usage][5 Usage]]
+  - [[#Quick-Start][5.1 Quick Start]]
+  - [[#Working-with-Subdirectories][5.2 Working with Subdirectories]]
+  - [[#From-Standard-image_002ddired][5.3 From Standard image-dired]]
+- [[#Enhanced-Workflow][6 Enhanced Workflow]]
+  - [[#Automatic-Split_002dScreen-Layout][6.1 Automatic Split-Screen
+    Layout]]
+  - [[#Auto_002dDisplay-Navigation][6.2 Auto-Display Navigation]]
+  - [[#Quick-Deletion-Workflow][6.3 Quick Deletion Workflow]]
+- [[#Keybindings][7 Keybindings]]
+  - [[#Dired-Buffer-Keys][7.1 In Dired Buffer]]
+  - [[#Thumbnail-Buffer-Keys][7.2 In Thumbnail Buffer]]
+  - [[#Image-Display-Buffer-Keys][7.3 In Image Display Buffer]]
+- [[#Header-Line][8 Header Line]]
+- [[#Customization][9 Customization]]
+  - [[#Default-Sort-Settings][9.1 Default Sort Settings]]
+  - [[#Display-Options][9.2 Display Options]]
+  - [[#Window-Layout][9.3 Window Layout]]
+  - [[#Display-Quality][9.4 Display Quality]]
+  - [[#Image-Validation][9.5 Image Validation]]
+  - [[#External-Editor][9.6 External Editor]]
+  - [[#Navigation-Behavior][9.7 Navigation Behavior]]
+  - [[#Auto_002dAccepting-Actions][9.8 Auto-Accepting Actions]]
+  - [[#Image-Extensions][9.9 Image Extensions]]
+- [[#Example-Configuration][10 Example Configuration]]
+- [[#Workflow-Examples][11 Workflow Examples]]
+  - [[#Reviewing-a-Photo-Collection][11.1 Reviewing a Photo Collection]]
+  - [[#Finding-Large-Images][11.2 Finding Large Images]]
+  - [[#Quick-Culling-Workflow][11.3 Quick Culling Workflow]]
+  - [[#Finding-High_002dResolution-Images][11.4 Finding High-Resolution
+    Images]]
+  - [[#Working-with-Subdirectories-Example][11.5 Working with
+    Subdirectories]]
+  - [[#Organizing-by-Date][11.6 Organizing by Date]]
+- [[#Comparison-with-Standard-image_002ddired][12 Comparison with
+  Standard image-dired]]
+- [[#Transient-Menu-Support][13 Transient Menu Support]]
+- [[#Performance-Notes][14 Performance Notes]]
+  - [[#Subdirectory-Insertion][14.1 Subdirectory Insertion]]
+  - [[#Thumbnail-Generation][14.2 Thumbnail Generation]]
+  - [[#Display-Quality-and-Speed][14.3 Display Quality and Speed]]
+- [[#Troubleshooting][15 Troubleshooting]]
+  - [[#Images-not-appearing][15.1 Images not appearing]]
+  - [[#Subdirectories-not-showing-images][15.2 Subdirectories not
+    showing images]]
+  - [[#Slow-performance-with-many-directories][15.3 Slow performance
+    with many directories]]
+  - [[#Layout-not-splitting-correctly][15.4 Layout not splitting
+    correctly]]
+  - [[#Auto_002ddisplay-not-working][15.5 Auto-display not working]]
+- [[#Related-Packages][16 Related Packages]]
+- [[#License][17 License]]
+
+--------------
+
+<<Introduction>>
+
+Next: [[#Features][Features]], Previous:
+[[#Top][dired-image-thumbnail]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 1 Introduction [[#Introduction-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Introduction-1
+:CLASS: chapter
+:END:
+=dired-image-thumbnail= is an Emacs package that extends =image-dired=
+with an enhanced workflow inspired by =dired-video-thumbnail=. It adds
+powerful sorting, filtering, subdirectory management, and flexible
+display options to the standard =image-dired= thumbnail viewer.
+
+--------------
+
+<<Features>>
+
+Next: [[#Requirements][Requirements]], Previous:
+[[#Introduction][Introduction]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 2 Features [[#Features-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Features-1
+:CLASS: chapter
+:END:
+- *Sorting* --- Sort thumbnails by name, date, size, or image dimensions
+- *Filtering* --- Filter by name regexp, file size range, or dimension
+  range
+- *Subdirectory support* --- Works seamlessly with Dired's inserted
+  subdirectories
+- *Subdirectory helpers* --- Commands to quickly insert/remove
+  subdirectories
+- *Wrap display mode* --- Thumbnails flow naturally and wrap to window
+  width
+- *Enhanced header line* --- Shows current image info, dimensions,
+  sort/filter status, and quality level
+- *Configurable window layout* --- Six layout presets (left-right,
+  right-left, top-bottom, bottom-top, thumb-only, manual)
+- *Display quality levels* --- Five quality tiers
+  (full/high/fast/faster/draft) for speed vs fidelity trade-off
+- *External-tool preview generation* --- Uses =djpeg=/=cjpeg= or
+  =magick= for genuinely faster image previews
+- *Image file validation* --- Magic-byte header checks and minimum file
+  size to exclude corrupt files
+- *Open in external editor* --- Press W to open an image in GIMP, Krita,
+  or your system default
+- *Auto-display navigation* --- Navigate with n/p to automatically show
+  full-size images
+- *Enhanced deletion* --- Delete and advance with C-d in both thumbnail
+  and image buffers
+- *Full integration* --- Works seamlessly with existing =image-dired=
+  functionality
+- *Transient menus* --- Optional =transient.el= integration for
+  discoverability
+
+--------------
+
+<<Requirements>>
+
+Next: [[#Installation][Installation]], Previous:
+[[#Features][Features]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 3 Requirements [[#Requirements-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Requirements-1
+:CLASS: chapter
+:END:
+- Emacs 28.1 or later
+- =image-dired= (built-in)
+- =transient= (optional, for transient menu support)
+
+--------------
+
+<<Installation>>
+
+Next: [[#Usage][Usage]], Previous: [[#Requirements][Requirements]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 4 Installation [[#Installation-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Installation-1
+:CLASS: chapter
+:END:
+- [[#Manual-Installation][Manual]]
+- [[#use_002dpackage][use-package]]
+- [[#straight_002eel][straight.el]]
+
+--------------
+
+<<Manual-Installation>>
+
+Next: [[#use_002dpackage][use-package]], Up:
+[[#Installation][Installation]]   [[[#SEC_Contents][Contents]]]
+
+*** 4.1 Manual [[#Manual][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Manual
+:CLASS: section
+:END:
+Download =dired-image-thumbnail.el= and place it in your load-path:
+
+#+begin_src lisp-preformatted
+(add-to-list 'load-path "/path/to/dired-image-thumbnail/")
+(require 'dired-image-thumbnail)
+#+end_src
+
+--------------
+
+<<use_002dpackage>>
+
+Next: [[#straight_002eel][straight.el]], Previous:
+[[#Manual-Installation][Manual]], Up: [[#Installation][Installation]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 4.2 use-package [[#use_002dpackage-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: use_002dpackage-1
+:CLASS: section
+:END:
+
+#+begin_src lisp-preformatted
+(use-package dired-image-thumbnail
+  :load-path "/path/to/dired-image-thumbnail/"
+  :demand t)
+#+end_src
+
+--------------
+
+<<straight_002eel>>
+
+Previous: [[#use_002dpackage][use-package]], Up:
+[[#Installation][Installation]]   [[[#SEC_Contents][Contents]]]
+
+*** 4.3 straight.el [[#straight_002eel-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: straight_002eel-1
+:CLASS: section
+:END:
+
+#+begin_src lisp-preformatted
+(straight-use-package
+ '(dired-image-thumbnail :type git :host github
+                         :repo "captainflasmr/dired-image-thumbnail"))
+#+end_src
+
+--------------
+
+<<Usage>>
+
+Next: [[#Enhanced-Workflow][Enhanced Workflow]], Previous:
+[[#Installation][Installation]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 5 Usage [[#Usage-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Usage-1
+:CLASS: chapter
+:END:
+- [[#Quick-Start][Quick Start]]
+- [[#Working-with-Subdirectories][Working with Subdirectories]]
+- [[#From-Standard-image_002ddired][From Standard image-dired]]
+
+--------------
+
+<<Quick-Start>>
+
+Next: [[#Working-with-Subdirectories][Working with Subdirectories]], Up:
+[[#Usage][Usage]]   [[[#SEC_Contents][Contents]]]
+
+*** 5.1 Quick Start [[#Quick-Start-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Quick-Start-1
+:CLASS: section
+:END:
+The simplest way to use =dired-image-thumbnail= is from a Dired buffer:
+
+1. Navigate to a directory containing images
+2. Press C-t d (or C-t m) to view thumbnails
+3. Thumbnails appear on the left, full-size image on the right
+4. Navigate with n/p to automatically view each image
+5. Use the enhanced keybindings for sorting, filtering, etc.
+
+--------------
+
+<<Working-with-Subdirectories>>
+
+Next: [[#From-Standard-image_002ddired][From Standard image-dired]],
+Previous: [[#Quick-Start][Quick Start]], Up: [[#Usage][Usage]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 5.2 Working with Subdirectories [[#Working-with-Subdirectories-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Working-with-Subdirectories-1
+:CLASS: section
+:END:
+=dired-image-thumbnail= works with Dired's subdirectory insertion
+feature. You have several options:
+
+**** Manual insertion [[#Manual-insertion][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Manual-insertion
+:CLASS: subheading
+:END:
+Use Dired's built-in i (=dired-maybe-insert-subdir=) on any subdirectory
+to make its contents visible, then run =dired-image-thumbnail=.
+
+**** Helper commands [[#Helper-commands][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Helper-commands
+:CLASS: subheading
+:END:
+- C-t s (=dired-image-thumbnail-insert-image-subdirs=) --- Insert only
+  subdirectories containing images (recommended)
+- C-t z (=dired-image-thumbnail-insert-subdir-recursive=) --- Insert all
+  subdirectories
+- C-t k (=dired-image-thumbnail-kill-all-subdirs=) --- Remove all
+  inserted subdirectories
+
+--------------
+
+<<From-Standard-image_002ddired>>
+
+Previous: [[#Working-with-Subdirectories][Working with Subdirectories]],
+Up: [[#Usage][Usage]]   [[[#SEC_Contents][Contents]]]
+
+*** 5.3 From Standard image-dired [[#From-Standard-image_002ddired-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: From-Standard-image_002ddired-1
+:CLASS: section
+:END:
+You can also use the standard =image-dired= commands (C-t d, C-t a,
+etc.) --- =dired-image-thumbnail= automatically enhances the thumbnail
+buffer with new keybindings.
+
+--------------
+
+<<Enhanced-Workflow>>
+
+Next: [[#Keybindings][Keybindings]], Previous: [[#Usage][Usage]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 6 Enhanced Workflow [[#Enhanced-Workflow-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Enhanced-Workflow-1
+:CLASS: chapter
+:END:
+=dired-image-thumbnail= provides an enhanced grid-view workflow that
+improves upon standard =image-dired=.
+
+- [[#Automatic-Split_002dScreen-Layout][Automatic Split-Screen Layout]]
+- [[#Auto_002dDisplay-Navigation][Auto-Display Navigation]]
+- [[#Quick-Deletion-Workflow][Quick Deletion Workflow]]
+
+--------------
+
+<<Automatic-Split_002dScreen-Layout>>
+
+Next: [[#Auto_002dDisplay-Navigation][Auto-Display Navigation]], Up:
+[[#Enhanced-Workflow][Enhanced Workflow]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 6.1 Automatic Split-Screen Layout [[#Automatic-Split_002dScreen-Layout-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Automatic-Split_002dScreen-Layout-1
+:CLASS: section
+:END:
+When you launch =dired-image-thumbnail= (or use standard =image-dired=
+with this package loaded):
+
+#+begin_src example-preformatted
++------------------+------------------------+
+|  Thumbnails      |  Full-size Image       |
+|  (Left 40%)      |  (Right 60%)           |
+|                  |                        |
+|  [img1] <--      |  +------------------+  |
+|  [img2]          |  |                  |  |
+|  [img3]          |  |   Current Image  |  |
+|  [img4]          |  |                  |  |
+|  [img5]          |  +------------------+  |
+|                  |                        |
++------------------+------------------------+
+#+end_src
+
+The layout is controlled by =dired-image-thumbnail-window-layout=
+(default =left-right=) and =dired-image-thumbnail-window-ratio= (default
+=0.4=).
+
+--------------
+
+<<Auto_002dDisplay-Navigation>>
+
+Next: [[#Quick-Deletion-Workflow][Quick Deletion Workflow]], Previous:
+[[#Automatic-Split_002dScreen-Layout][Automatic Split-Screen Layout]],
+Up: [[#Enhanced-Workflow][Enhanced Workflow]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 6.2 Auto-Display Navigation [[#Auto_002dDisplay-Navigation-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Auto_002dDisplay-Navigation-1
+:CLASS: section
+:END:
+With =dired-image-thumbnail-auto-display-on-navigate= enabled (default):
+
+- Press n or p to navigate thumbnails
+- The full-size image automatically updates on the right
+- No need to press RET or C-RET for each image
+- Smooth, fluid browsing experience
+
+--------------
+
+<<Quick-Deletion-Workflow>>
+
+Previous: [[#Auto_002dDisplay-Navigation][Auto-Display Navigation]], Up:
+[[#Enhanced-Workflow][Enhanced Workflow]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 6.3 Quick Deletion Workflow [[#Quick-Deletion-Workflow-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Quick-Deletion-Workflow-1
+:CLASS: section
+:END:
+Press C-d in either the thumbnail or image display buffer to:
+
+1. Get a confirmation prompt (unless =dired-image-thumbnail-auto-accept=
+   is enabled)
+2. Delete the current image file
+3. Automatically advance to the next image
+4. Continue browsing seamlessly
+
+This makes culling large photo collections much faster than the standard
+workflow.
+
+--------------
+
+<<Keybindings>>
+
+Next: [[#Header-Line][Header Line]], Previous:
+[[#Enhanced-Workflow][Enhanced Workflow]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 7 Keybindings [[#Keybindings-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Keybindings-1
+:CLASS: chapter
+:END:
+- [[#Dired-Buffer-Keys][In Dired Buffer]]
+- [[#Thumbnail-Buffer-Keys][In Thumbnail Buffer]]
+- [[#Image-Display-Buffer-Keys][In Image Display Buffer]]
+
+--------------
+
+<<Dired-Buffer-Keys>>
+
+Next: [[#Thumbnail-Buffer-Keys][In Thumbnail Buffer]], Up:
+[[#Keybindings][Keybindings]]   [[[#SEC_Contents][Contents]]]
+
+*** 7.1 In Dired Buffer [[#In-Dired-Buffer][¶]]
+:PROPERTIES:
+:CUSTOM_ID: In-Dired-Buffer
+:CLASS: section
+:END:
+- C-t d :: Launch standard image-dired enhanced (=image-dired= +
+  =dired-image-thumbnail-refresh=)
+
+- C-t m :: Launch enhanced thumbnail viewer (=dired-image-thumbnail=)
+
+- C-t s :: Insert subdirs with images
+  (=dired-image-thumbnail-insert-image-subdirs=)
+
+- C-t z :: Insert all subdirs recursively
+  (=dired-image-thumbnail-insert-subdir-recursive=)
+
+- C-t k :: Remove all inserted subdirs
+  (=dired-image-thumbnail-kill-all-subdirs=)
+
+--------------
+
+<<Thumbnail-Buffer-Keys>>
+
+Next: [[#Image-Display-Buffer-Keys][In Image Display Buffer]], Previous:
+[[#Dired-Buffer-Keys][In Dired Buffer]], Up:
+[[#Keybindings][Keybindings]]   [[[#SEC_Contents][Contents]]]
+
+*** 7.2 In Thumbnail Buffer [[#In-Thumbnail-Buffer][¶]]
+:PROPERTIES:
+:CUSTOM_ID: In-Thumbnail-Buffer
+:CLASS: section
+:END:
+**** Navigation [[#Navigation][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Navigation
+:CLASS: subheading
+:END:
+- n\\
+  RIGHT :: Next image (auto-display when enabled)
+
+- p\\
+  LEFT :: Previous image (auto-display when enabled)
+
+- + :: Increase thumbnail size
+
+- - :: Decrease thumbnail size
+
+When =dired-image-thumbnail-auto-display-on-navigate= is enabled
+(default), pressing n or p automatically displays the full-size image.
+
+**** Sorting [[#Sorting][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Sorting
+:CLASS: subheading
+:END:
+- s b :: Sort by Dired buffer order
+
+- s n :: Sort by filename
+
+- s d :: Sort by modification date
+
+- s s :: Sort by file size
+
+- s D :: Sort by image dimensions (area)
+
+- s r :: Reverse sort order
+
+- S :: Interactive sort selection (transient)
+
+**** Filtering [[#Filtering][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Filtering
+:CLASS: subheading
+:END:
+- / n :: Filter by name regexp
+
+- / s :: Filter by file size range
+
+- / d :: Filter by dimension range
+
+- / /\\
+  / c :: Clear all filters
+
+- \ :: Interactive filter menu (transient)
+
+**** Display [[#Display][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Display
+:CLASS: subheading
+:END:
+- w :: Toggle wrap display mode
+
+- r\\
+  g :: Refresh the display
+
+- G :: Clear cache and refresh (hard refresh)
+
+- + :: Increase thumbnail size
+
+- - :: Decrease thumbnail size
+
+- Q :: Cycle display quality (full, high, fast, faster, draft)
+
+**** Marking [[#Marking][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Marking
+:CLASS: subheading
+:END:
+- m :: Mark image (uses image-dired's native marking with border)
+
+- u :: Unmark image
+
+- M :: Mark all images
+
+- U :: Unmark all
+
+- t :: Toggle all marks
+
+**** File Operations [[#File-Operations][¶]]
+:PROPERTIES:
+:CUSTOM_ID: File-Operations
+:CLASS: subheading
+:END:
+- D :: Delete image at point
+
+- C-d :: Delete image and move to next
+
+- x :: Delete all marked images
+
+- d :: Jump to file in Dired
+
+**** Other [[#Other][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Other
+:CLASS: subheading
+:END:
+- W :: Open in external editor
+
+- ?\\
+  h :: Show help
+
+--------------
+
+<<Image-Display-Buffer-Keys>>
+
+Previous: [[#Thumbnail-Buffer-Keys][In Thumbnail Buffer]], Up:
+[[#Keybindings][Keybindings]]   [[[#SEC_Contents][Contents]]]
+
+*** 7.3 In Image Display Buffer [[#In-Image-Display-Buffer][¶]]
+:PROPERTIES:
+:CUSTOM_ID: In-Image-Display-Buffer
+:CLASS: section
+:END:
+- C-d :: Delete image and move to next
+
+All standard =image-dired= keybindings (n, p, m, u, U, etc.) continue to
+work as expected.
+
+--------------
+
+<<Header-Line>>
+
+Next: [[#Customization][Customization]], Previous:
+[[#Keybindings][Keybindings]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 8 Header Line [[#Header-Line-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Header-Line-1
+:CLASS: chapter
+:END:
+The enhanced header line displays:
+
+- *Mark indicator* --- A ‘=*=' if the current image is marked
+- *Filename* --- Relative to source directory when subdirectories are
+  inserted
+- *Image count* --- Current position / total (e.g., ‘=23/156=')
+- *Dimensions* --- Width x Height in pixels (e.g., ‘=1920x1080=')
+- *File size* --- Human-readable size (e.g., ‘=2.4M=')
+- *Sort indicator* --- Current sort field and direction (e.g.,
+  ‘=[name <]=')
+- *Display quality* --- Current quality level (e.g., ‘=[fast]=')
+- *Active filters* --- Description of any active filters
+- *Marked count* --- Number of marked images (e.g., ‘=[3 marked]=')
+
+--------------
+
+<<Customization>>
+
+Next: [[#Example-Configuration][Example Configuration]], Previous:
+[[#Header-Line][Header Line]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 9 Customization [[#Customization-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Customization-1
+:CLASS: chapter
+:END:
+All customization options are in the =dired-image-thumbnail= group. Use
+M-x customize-group RET dired-image-thumbnail RET to browse them
+interactively.
+
+- [[#Default-Sort-Settings][Default Sort Settings]]
+- [[#Display-Options][Display Options]]
+- [[#Window-Layout][Window Layout]]
+- [[#Display-Quality][Display Quality]]
+- [[#Image-Validation][Image Validation]]
+- [[#External-Editor][External Editor]]
+- [[#Navigation-Behavior][Navigation Behavior]]
+- [[#Auto_002dAccepting-Actions][Auto-Accepting Actions]]
+- [[#Image-Extensions][Image Extensions]]
+
+--------------
+
+<<Default-Sort-Settings>>
+
+Next: [[#Display-Options][Display Options]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.1 Default Sort Settings [[#Default-Sort-Settings-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Default-Sort-Settings-1
+:CLASS: section
+:END:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-sort-by 'dired)       ; 'dired, 'name, 'date, 'size, or 'dimensions
+(setq dired-image-thumbnail-sort-order 'ascending) ; 'ascending or 'descending
+#+end_src
+
+--------------
+
+<<Display-Options>>
+
+Next: [[#Window-Layout][Window Layout]], Previous:
+[[#Default-Sort-Settings][Default Sort Settings]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.2 Display Options [[#Display-Options-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Display-Options-1
+:CLASS: section
+:END:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-wrap-display nil) ; Enable wrap display by default
+#+end_src
+
+--------------
+
+<<Window-Layout>>
+
+Next: [[#Display-Quality][Display Quality]], Previous:
+[[#Display-Options][Display Options]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.3 Window Layout [[#Window-Layout-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Window-Layout-1
+:CLASS: section
+:END:
+Control the split-screen layout and thumbnail/image ratio:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-window-layout 'left-right) ; 'left-right, 'right-left, 'top-bottom, 'bottom-top, 'thumb-only, or nil
+(setq dired-image-thumbnail-window-ratio 0.4)          ; Fraction of frame for thumbnails
+#+end_src
+
+Set to =nil= to disable automatic layout management and use your own
+=display-buffer-alist= rules.
+
+--------------
+
+<<Display-Quality>>
+
+Next: [[#Image-Validation][Image Validation]], Previous:
+[[#Window-Layout][Window Layout]], Up: [[#Customization][Customization]]
+  [[[#SEC_Contents][Contents]]]
+
+*** 9.4 Display Quality [[#Display-Quality-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Display-Quality-1
+:CLASS: section
+:END:
+Control the speed/fidelity trade-off when navigating with n/p:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-display-quality 'fast) ; 'full, 'high, 'fast, 'faster, or 'draft
+#+end_src
+
+Lower quality levels use external tools (=djpeg=/=cjpeg= for JPEGs,
+=magick= for others) to generate small preview files, so Emacs decodes
+less data. Press Q in the thumbnail buffer to cycle through levels
+interactively.
+
+--------------
+
+<<Image-Validation>>
+
+Next: [[#External-Editor][External Editor]], Previous:
+[[#Display-Quality][Display Quality]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.5 Image Validation [[#Image-Validation-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Image-Validation-1
+:CLASS: section
+:END:
+Control which files are accepted as images:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-minimum-file-size 100) ; Minimum bytes (0 to disable)
+(setq dired-image-thumbnail-validate-headers t)    ; Check magic bytes
+#+end_src
+
+When =dired-image-thumbnail-validate-headers= is non-nil, each candidate
+file is opened briefly to verify that its first few bytes match a known
+image format signature (JPEG, PNG, GIF, BMP, TIFF, WEBP, ICO,
+HEIC/HEIF). SVG files are accepted without a byte check since they are
+XML text.
+
+--------------
+
+<<External-Editor>>
+
+Next: [[#Navigation-Behavior][Navigation Behavior]], Previous:
+[[#Image-Validation][Image Validation]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.6 External Editor [[#External-Editor-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: External-Editor-1
+:CLASS: section
+:END:
+Set a specific program for W to open images with:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-external-editor "gimp") ; nil for system default
+#+end_src
+
+When =nil= (default), the system default application is used via
+=xdg-open= on Linux, =open= on macOS, or =start= on Windows.
+
+--------------
+
+<<Navigation-Behavior>>
+
+Next: [[#Auto_002dAccepting-Actions][Auto-Accepting Actions]], Previous:
+[[#External-Editor][External Editor]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.7 Navigation Behavior [[#Navigation-Behavior-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Navigation-Behavior-1
+:CLASS: section
+:END:
+Control whether navigating with n/p automatically displays full-size
+images:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-auto-display-on-navigate t) ; Auto-display on n/p
+#+end_src
+
+When enabled (default), pressing n or p in the thumbnail buffer
+automatically updates the image display buffer. When disabled, you must
+press RET or C-RET to view full-size images.
+
+--------------
+
+<<Auto_002dAccepting-Actions>>
+
+Next: [[#Image-Extensions][Image Extensions]], Previous:
+[[#Navigation-Behavior][Navigation Behavior]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.8 Auto-Accepting Actions [[#Auto_002dAccepting-Actions-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Auto_002dAccepting-Actions-1
+:CLASS: section
+:END:
+Control whether to skip confirmation prompts for file actions:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-auto-accept nil) ; Require confirmation (default)
+#+end_src
+
+When enabled, actions like deleting files (D, C-d, x) will proceed
+without asking for confirmation.
+
+--------------
+
+<<Image-Extensions>>
+
+Previous: [[#Auto_002dAccepting-Actions][Auto-Accepting Actions]], Up:
+[[#Customization][Customization]]   [[[#SEC_Contents][Contents]]]
+
+*** 9.9 Image Extensions [[#Image-Extensions-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Image-Extensions-1
+:CLASS: section
+:END:
+Add or modify recognized image file extensions:
+
+#+begin_src lisp-preformatted
+(setq dired-image-thumbnail-image-extensions
+      '("jpg" "jpeg" "png" "gif" "bmp" "tiff" "tif" "webp" "svg" "ico" "heic" "heif"))
+#+end_src
+
+--------------
+
+<<Example-Configuration>>
+
+Next: [[#Workflow-Examples][Workflow Examples]], Previous:
+[[#Customization][Customization]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 10 Example Configuration [[#Example-Configuration-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Example-Configuration-1
+:CLASS: chapter
+:END:
+
+#+begin_src lisp-preformatted
+(use-package dired-image-thumbnail
+  :load-path "/path/to/dired-image-thumbnail/"
+  :demand t
+  :custom
+  (dired-image-thumbnail-sort-by 'date)
+  (dired-image-thumbnail-sort-order 'descending)
+  (dired-image-thumbnail-wrap-display t)
+  (dired-image-thumbnail-window-layout 'left-right)
+  (dired-image-thumbnail-auto-display-on-navigate t)
+  :bind
+  (:map dired-mode-map
+   ("C-t d" . (lambda () (interactive)
+                (image-dired default-directory)
+                (dired-image-thumbnail-refresh)))
+   ("C-t m" . dired-image-thumbnail)
+   ("C-t s" . dired-image-thumbnail-insert-image-subdirs)
+   ("C-t z" . dired-image-thumbnail-insert-subdir-recursive)
+   ("C-t k" . dired-image-thumbnail-kill-all-subdirs)))
+#+end_src
+
+--------------
+
+<<Workflow-Examples>>
+
+Next: [[#Comparison-with-Standard-image_002ddired][Comparison with
+Standard image-dired]], Previous: [[#Example-Configuration][Example
+Configuration]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 11 Workflow Examples [[#Workflow-Examples-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Workflow-Examples-1
+:CLASS: chapter
+:END:
+- [[#Reviewing-a-Photo-Collection][Reviewing a Photo Collection]]
+- [[#Finding-Large-Images][Finding Large Images]]
+- [[#Quick-Culling-Workflow][Quick Culling Workflow]]
+- [[#Finding-High_002dResolution-Images][Finding High-Resolution
+  Images]]
+- [[#Working-with-Subdirectories-Example][Working with Subdirectories]]
+- [[#Organizing-by-Date][Organizing by Date]]
+
+--------------
+
+<<Reviewing-a-Photo-Collection>>
+
+Next: [[#Finding-Large-Images][Finding Large Images]], Up:
+[[#Workflow-Examples][Workflow Examples]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 11.1 Reviewing a Photo Collection [[#Reviewing-a-Photo-Collection-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Reviewing-a-Photo-Collection-1
+:CLASS: section
+:END:
+1. Open directory in Dired: C-x d ~/Photos RET
+2. Insert subdirectories with images: C-t s
+3. View thumbnails: C-t m
+4. Thumbnails appear on the left, full-size view on the right
+5. Sort by date (newest first): s d then s r
+6. Browse with n / p --- images automatically update on the right
+7. Mark keepers with m, jump to Dired with d
+
+--------------
+
+<<Finding-Large-Images>>
+
+Next: [[#Quick-Culling-Workflow][Quick Culling Workflow]], Previous:
+[[#Reviewing-a-Photo-Collection][Reviewing a Photo Collection]], Up:
+[[#Workflow-Examples][Workflow Examples]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 11.2 Finding Large Images [[#Finding-Large-Images-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Finding-Large-Images-1
+:CLASS: section
+:END:
+1. View thumbnails: C-t m
+2. Grid appears on left, image display on right
+3. Filter by size: / s and enter ‘=1M=' for minimum, leave maximum empty
+4. Sort by size (largest first): s s then s r
+5. Navigate with n/p to review each image
+6. Mark images for deletion with m, delete with x
+7. Or use C-d to delete current image and advance to next
+
+--------------
+
+<<Quick-Culling-Workflow>>
+
+Next: [[#Finding-High_002dResolution-Images][Finding High-Resolution
+Images]], Previous: [[#Finding-Large-Images][Finding Large Images]], Up:
+[[#Workflow-Examples][Workflow Examples]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 11.3 Quick Culling Workflow [[#Quick-Culling-Workflow-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Quick-Culling-Workflow-1
+:CLASS: section
+:END:
+1. View thumbnails: C-t m
+2. Navigate through images with n and p
+3. Press C-d on images you want to delete
+4. Confirmation prompt appears for each deletion
+5. Automatically advances to next image after deletion
+6. Continue until finished
+
+--------------
+
+<<Finding-High_002dResolution-Images>>
+
+Next: [[#Working-with-Subdirectories-Example][Working with
+Subdirectories]], Previous: [[#Quick-Culling-Workflow][Quick Culling
+Workflow]], Up: [[#Workflow-Examples][Workflow Examples]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 11.4 Finding High-Resolution Images [[#Finding-High_002dResolution-Images-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Finding-High_002dResolution-Images-1
+:CLASS: section
+:END:
+1. View thumbnails: C-t m
+2. Filter by dimensions: / d and enter minimum width ‘=1920=', minimum
+   height ‘=1080='
+3. Browse only HD+ images
+4. Use / c to clear the filter when done
+
+--------------
+
+<<Working-with-Subdirectories-Example>>
+
+Next: [[#Organizing-by-Date][Organizing by Date]], Previous:
+[[#Finding-High_002dResolution-Images][Finding High-Resolution Images]],
+Up: [[#Workflow-Examples][Workflow Examples]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 11.5 Working with Subdirectories [[#Working-with-Subdirectories-2][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Working-with-Subdirectories-2
+:CLASS: section
+:END:
+1. Open parent directory in Dired
+2. Use C-t s to insert only subdirectories containing images (fast)
+3. Or use C-t z to insert all subdirectories (may be slow with many
+   dirs)
+4. View thumbnails with C-t m
+5. Images from all visible subdirectories will be shown
+6. Use C-t k to remove all subdirectories and return to top-level view
+
+--------------
+
+<<Organizing-by-Date>>
+
+Previous: [[#Working-with-Subdirectories-Example][Working with
+Subdirectories]], Up: [[#Workflow-Examples][Workflow Examples]]  
+[[[#SEC_Contents][Contents]]]
+
+*** 11.6 Organizing by Date [[#Organizing-by-Date-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Organizing-by-Date-1
+:CLASS: section
+:END:
+1. Open directory in Dired
+2. Insert subdirectories if needed: C-t s
+3. View thumbnails: C-t m
+4. Sort by date: s d
+5. Use the header line to see file dates as you browse
+
+--------------
+
+<<Comparison-with-Standard-image_002ddired>>
+
+Next: [[#Transient-Menu-Support][Transient Menu Support]], Previous:
+[[#Workflow-Examples][Workflow Examples]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 12 Comparison with Standard image-dired [[#Comparison-with-Standard-image_002ddired-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Comparison-with-Standard-image_002ddired-1
+:CLASS: chapter
+:END:
+| Feature                | image-dired | dired-image-thumbnail  |
+|------------------------+-------------+------------------------|
+| Thumbnail display      | Yes         | Yes                    |
+| Dired integration      | Yes         | Yes                    |
+| Sorting                | No          | Yes (4 criteria)       |
+| Filtering              | No          | Yes (name, size, dims) |
+| Subdirectory support   | No          | Yes (via insertion)    |
+| Helper commands        | No          | Yes                    |
+| Wrap display           | No          | Yes                    |
+| Enhanced header line   | Basic       | Enhanced + quality     |
+| Auto-display on n/p    | No          | Yes                    |
+| Configurable layout    | No          | Yes (6 presets)        |
+| Display quality levels | No          | Yes (5 levels)         |
+| Image file validation  | No          | Yes (magic bytes)      |
+| Open external editor   | No          | Yes (W)                |
+| Delete and advance     | No          | Yes (C-d)              |
+| Transient menus        | No          | Yes (optional)         |
+
+--------------
+
+<<Transient-Menu-Support>>
+
+Next: [[#Performance-Notes][Performance Notes]], Previous:
+[[#Comparison-with-Standard-image_002ddired][Comparison with Standard
+image-dired]], Up: [[#Top][dired-image-thumbnail]]  
+[[[#SEC_Contents][Contents]]]
+
+** 13 Transient Menu Support [[#Transient-Menu-Support-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Transient-Menu-Support-1
+:CLASS: chapter
+:END:
+If =transient= is available, =dired-image-thumbnail= provides
+interactive menus for sorting and filtering. These can be accessed with:
+
+- S --- Sort menu (shows all sort options and current state)
+- \ --- Filter menu (shows all filter options and current filters)
+
+To disable transient menus even when transient is installed, don't load
+=dired-image-thumbnail-transient.el=.
+
+--------------
+
+<<Performance-Notes>>
+
+Next: [[#Troubleshooting][Troubleshooting]], Previous:
+[[#Transient-Menu-Support][Transient Menu Support]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 14 Performance Notes [[#Performance-Notes-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Performance-Notes-1
+:CLASS: chapter
+:END:
+- [[#Subdirectory-Insertion][Subdirectory Insertion]]
+- [[#Thumbnail-Generation][Thumbnail Generation]]
+- [[#Display-Quality-and-Speed][Display Quality and Speed]]
+
+<<Subdirectory-Insertion>>
+*** 14.1 Subdirectory Insertion [[#Subdirectory-Insertion][¶]]
+:PROPERTIES:
+:CUSTOM_ID: subdirectory-insertion
+:CLASS: section
+:END:
+When working with large directory trees:
+
+- Use =dired-image-thumbnail-insert-image-subdirs= (C-t s) instead of
+  =dired-image-thumbnail-insert-subdir-recursive= (C-t z)
+- The “smart” insertion only processes subdirectories containing images,
+  which is much faster
+- For very large collections, manually insert specific subdirectories
+  with i as needed
+
+<<Thumbnail-Generation>>
+*** 14.2 Thumbnail Generation [[#Thumbnail-Generation][¶]]
+:PROPERTIES:
+:CUSTOM_ID: thumbnail-generation
+:CLASS: section
+:END:
+First-time thumbnail generation can be slow for large images. Thumbnails
+are cached by =image-dired=, so subsequent viewing is fast.
+
+<<Display-Quality-and-Speed>>
+*** 14.3 Display Quality and Speed [[#Display-Quality-and-Speed][¶]]
+:PROPERTIES:
+:CUSTOM_ID: display-quality-and-speed
+:CLASS: section
+:END:
+Lower display quality levels (=faster=, =draft=) generate smaller
+preview files using external tools, significantly reducing image decode
+time. For large photo collections, set the quality to =draft= for the
+fastest navigation, then switch to =full= when you want to examine an
+image in detail.
+
+--------------
+
+<<Troubleshooting>>
+
+Next: [[#Related-Packages][Related Packages]], Previous:
+[[#Performance-Notes][Performance Notes]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 15 Troubleshooting [[#Troubleshooting-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Troubleshooting-1
+:CLASS: chapter
+:END:
+- [[#Images-not-appearing][Images not appearing]]
+- [[#Subdirectories-not-showing-images][Subdirectories not showing
+  images]]
+- [[#Slow-performance-with-many-directories][Slow performance with many
+  directories]]
+- [[#Layout-not-splitting-correctly][Layout not splitting correctly]]
+- [[#Auto_002ddisplay-not-working][Auto-display not working]]
+
+<<Images-not-appearing>>
+*** 15.1 Images not appearing [[#Images-not-appearing][¶]]
+:PROPERTIES:
+:CUSTOM_ID: images-not-appearing
+:CLASS: section
+:END:
+- Ensure =image-dired= is working: test with C-t d in a directory with
+  images
+- Check that file extensions are in
+  =dired-image-thumbnail-image-extensions=
+- Verify thumbnails are being created in =image-dired-dir=
+- If images have correct extensions but are corrupt, try setting
+  =dired-image-thumbnail-validate-headers= to =nil=
+
+<<Subdirectories-not-showing-images>>
+*** 15.2 Subdirectories not showing images [[#Subdirectories-not-showing-images][¶]]
+:PROPERTIES:
+:CUSTOM_ID: subdirectories-not-showing-images
+:CLASS: section
+:END:
+- Ensure subdirectories are actually inserted in the Dired buffer (use i
+  or helper commands)
+- Check that =dired-image-thumbnail-insert-image-subdirs= found
+  subdirectories (watch for message)
+- Verify files in subdirectories have recognized image extensions
+
+<<Slow-performance-with-many-directories>>
+*** 15.3 Slow performance with many directories [[#Slow-performance-with-many-directories][¶]]
+:PROPERTIES:
+:CUSTOM_ID: slow-performance-with-many-directories
+:CLASS: section
+:END:
+- Use C-t s (insert image subdirs only) instead of C-t z (insert all
+  subdirs)
+- Manually insert specific subdirectories with i as needed
+- Consider filtering to reduce the number of visible thumbnails
+- Lower the display quality with Q for faster navigation
+
+<<Layout-not-splitting-correctly>>
+*** 15.4 Layout not splitting correctly [[#Layout-not-splitting-correctly][¶]]
+:PROPERTIES:
+:CUSTOM_ID: layout-not-splitting-correctly
+:CLASS: section
+:END:
+- Ensure =dired-image-thumbnail-window-layout= is set to a layout symbol
+  (default =left-right=)
+- Try a different layout preset: =top-bottom=, =right-left=, etc.
+- Set to =nil= and manage windows manually if other packages conflict
+- Manually delete other windows with C-x 1 before launching
+
+<<Auto_002ddisplay-not-working>>
+*** 15.5 Auto-display not working [[#Auto_002ddisplay-not-working][¶]]
+:PROPERTIES:
+:CUSTOM_ID: auto-display-not-working
+:CLASS: section
+:END:
+- Ensure =dired-image-thumbnail-auto-display-on-navigate= is =t=
+  (default)
+- The feature requires the split-screen layout to be active
+- Try pressing RET on a thumbnail to manually trigger display
+
+--------------
+
+<<Related-Packages>>
+
+Next: [[#License][License]], Previous:
+[[#Troubleshooting][Troubleshooting]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 16 Related Packages [[#Related-Packages-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: Related-Packages-1
+:CLASS: chapter
+:END:
+- [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Image_002dDired.html][image-dired]]
+  --- Built-in image thumbnail browser for Dired (extended by this
+  package)
+- [[https://github.com/captainflasmr/dired-video-thumbnail][dired-video-thumbnail]]
+  --- Video thumbnail browser (inspiration for this package)
+- [[https://github.com/alexluigit/dirvish][dirvish]] --- A modern file
+  manager for Emacs with preview support
+
+--------------
+
+<<License>>
+
+Previous: [[#Related-Packages][Related Packages]], Up:
+[[#Top][dired-image-thumbnail]]   [[[#SEC_Contents][Contents]]]
+
+** 17 License [[#License-1][¶]]
+:PROPERTIES:
+:CUSTOM_ID: License-1
+:CLASS: chapter
+:END:
+GPL-3.0-or-later
