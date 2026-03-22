@@ -13,8 +13,12 @@
 - *Subdirectory support* - Works seamlessly with Dired's inserted subdirectories
 - *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
-- *Enhanced header line* - Shows current image info, dimensions, sort/filter status
-- *Window layout management* - Automatic split-screen layout (thumbnails left, image right)
+- *Enhanced header line* - Shows current image info, dimensions, sort/filter status, and quality level
+- *Configurable window layout* - Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
+- *Display quality levels* - Five quality tiers (full/high/fast/faster/draft) for speed vs fidelity trade-off
+- *External-tool preview generation* - Uses =djpeg=/=cjpeg= or =magick= for genuinely faster image previews
+- *Image file validation* - Magic-byte header checks and minimum file size to exclude corrupt files
+- *Open in external editor* - Press =W= to open an image in GIMP, Krita, or your system default
 - *Auto-display navigation* - Navigate with n/p to automatically show full-size images
 - *Enhanced deletion* - Delete and advance with C-d in both thumbnail and image buffers
 - *Full integration* - Works seamlessly with existing =image-dired= functionality
@@ -102,7 +106,7 @@ When you launch =dired-image-thumbnail= (or use standard =image-dired= with this
 └──────────────────┴────────────────────────┘
 #+end_example
 
-The layout is automatically configured via =display-buffer-alist= when =dired-image-thumbnail-manage-window-layout= is enabled (default).
+The layout is controlled by =dired-image-thumbnail-window-layout= (default =left-right=) and =dired-image-thumbnail-window-ratio= (default =0.4=).
 
 ** Auto-Display Navigation
 
@@ -174,13 +178,14 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 *** Display
 
-| Key | Command                              | Description              |
-|-----+--------------------------------------+--------------------------|
-| =w= | ~dired-image-thumbnail-toggle-wrap~    | Toggle wrap display mode |
-| =r=, =g= | ~dired-image-thumbnail-refresh~ | Refresh the display      |
-| =G=     | ~dired-image-thumbnail-hard-refresh~ | Clear cache and refresh  |
-| =+= | ~dired-image-thumbnail-increase-size~  | Increase thumbnail size  |
-| =-= | ~dired-image-thumbnail-decrease-size~  | Decrease thumbnail size  |
+| Key       | Command                                      | Description                    |
+|-----------+----------------------------------------------+--------------------------------|
+| =w=       | ~dired-image-thumbnail-toggle-wrap~            | Toggle wrap display mode       |
+| =r=, =g= | ~dired-image-thumbnail-refresh~                | Refresh the display            |
+| =G=       | ~dired-image-thumbnail-hard-refresh~           | Clear cache and refresh        |
+| =+=       | ~dired-image-thumbnail-increase-size~          | Increase thumbnail size        |
+| =-=       | ~dired-image-thumbnail-decrease-size~          | Decrease thumbnail size        |
+| =Q=       | ~dired-image-thumbnail-cycle-display-quality~  | Cycle quality (full→draft)     |
 
 *** Marking
 
@@ -200,9 +205,10 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 *** Other
 
-| Key   | Command                        | Description |
-|-------+--------------------------------+-------------|
-| =?/h= | ~dired-image-thumbnail-help~     | Show help   |
+| Key   | Command                                | Description                    |
+|-------+----------------------------------------+--------------------------------|
+| =W=   | ~dired-image-thumbnail-open-external~    | Open in external editor        |
+| =?/h= | ~dired-image-thumbnail-help~             | Show help                      |
 
 *In Image Display Buffer:*
 
@@ -222,6 +228,7 @@ The enhanced header line displays:
 - *Dimensions* - Width × Height in pixels (e.g., =1920x1080=)
 - *File size* - Human-readable size (e.g., =2.4M=)
 - *Sort indicator* - Current sort field and direction (e.g., =[name ↑]=)
+- *Display quality* - Current quality level (e.g., =[fast]=)
 - *Active filters* - Description of any active filters
 - *Marked count* - Number of marked images (e.g., =[3 marked]=)
 
@@ -244,13 +251,43 @@ All customization options are in the =dired-image-thumbnail= group. Use =M-x cus
 
 ** Window Layout
 
-Control the automatic split-screen layout:
+Control the split-screen layout and thumbnail/image ratio:
 
 #+begin_src emacs-lisp
-(setq dired-image-thumbnail-manage-window-layout t)  ; Enable split-screen layout
+(setq dired-image-thumbnail-window-layout 'left-right) ; 'left-right, 'right-left, 'top-bottom, 'bottom-top, 'thumb-only, or nil
+(setq dired-image-thumbnail-window-ratio 0.4)          ; Fraction of frame for thumbnails
 #+end_src
 
-When enabled (default), thumbnails appear on the left (50% width) and the full-size image display appears on the right (50% width).
+Set to =nil= to disable automatic layout management and use your own =display-buffer-alist= rules.
+
+** Display Quality
+
+Control the speed/fidelity trade-off when navigating with =n=/=p=:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-display-quality 'fast) ; 'full, 'high, 'fast, 'faster, or 'draft
+#+end_src
+
+Lower quality levels use external tools (=djpeg=/=cjpeg= for JPEGs, =magick= for
+others) to generate small preview files, so Emacs decodes less data.  Press =Q=
+in the thumbnail buffer to cycle through levels interactively.
+
+** Image Validation
+
+Control which files are accepted as images:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-minimum-file-size 100) ; Minimum bytes (0 to disable)
+(setq dired-image-thumbnail-validate-headers t)    ; Check magic bytes
+#+end_src
+
+** External Editor
+
+Set a specific program for =W= to open images with:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-external-editor "gimp") ; nil for system default
+#+end_src
 
 ** Navigation Behavior
 
@@ -291,7 +328,7 @@ Add or modify recognized image file extensions:
   (dired-image-thumbnail-sort-by 'date)
   (dired-image-thumbnail-sort-order 'descending)
   (dired-image-thumbnail-wrap-display t)
-  (dired-image-thumbnail-manage-window-layout t)      ; Split-screen layout
+  (dired-image-thumbnail-window-layout 'left-right)   ; Split-screen layout
   (dired-image-thumbnail-auto-display-on-navigate t)  ; Auto-display on n/p
   :bind
   (:map dired-mode-map
@@ -388,9 +425,12 @@ Add or modify recognized image file extensions:
 | Subdirectory support   | ✗           | ✓ (via insertion)     |
 | Helper commands        | ✗           | ✓                     |
 | Wrap display           | ✗           | ✓                     |
-| Enhanced header line   | Basic       | Enhanced              |
+| Enhanced header line   | Basic       | Enhanced + quality    |
 | Auto-display on n/p    | ✗           | ✓                     |
-| Split-screen layout    | ✗           | ✓ (automatic)         |
+| Configurable layout    | ✗           | ✓ (6 presets)         |
+| Display quality levels | ✗           | ✓ (5 levels)          |
+| Image file validation  | ✗           | ✓ (magic bytes)       |
+| Open external editor   | ✗           | ✓ (W)                 |
 | Delete and advance     | ✗           | ✓ (C-d)               |
 | Transient menus        | ✗           | ✓ (optional)          |
 
@@ -439,9 +479,9 @@ First-time thumbnail generation can be slow for large images. Thumbnails are cac
 
 ** Layout not splitting correctly
 
-- Ensure =dired-image-thumbnail-manage-window-layout= is =t= (default)
-- Check that no other packages are overriding =display-buffer-alist=
-- Try =M-x display-buffer-alist= to inspect the current rules
+- Ensure =dired-image-thumbnail-window-layout= is set to a layout symbol (default =left-right=)
+- Try a different layout preset: =top-bottom=, =right-left=, etc.
+- Set to =nil= and manage windows manually if other packages conflict
 - Manually delete other windows with =C-x 1= before launching
 
 ** Auto-display not working

@@ -11,6 +11,51 @@ project's main git repository.
 
 * Versions
 
+** <2026-03-22 Sat> *2.0.0*
+
+Major release: configurable window layouts, multi-level display quality with
+external-tool preview generation, image file validation, and open-in-external-editor.
+
+*** New Features
+
+- *Configurable window layout* -- New =dired-image-thumbnail-window-layout=
+  defcustom with presets: =left-right= (default), =right-left=, =top-bottom=,
+  =bottom-top=, =thumb-only=, or =nil= (manual).  Replaces the old boolean
+  =dired-image-thumbnail-manage-window-layout=.
+- *Window size ratio* -- New =dired-image-thumbnail-window-ratio= (default
+  0.4) controls how much of the frame the thumbnail buffer occupies.
+- *Display quality levels (Q)* -- New =dired-image-thumbnail-display-quality=
+  defcustom with five levels: =full=, =high=, =fast= (default), =faster=,
+  =draft=.  Press =Q= in the thumbnail buffer to cycle through them.  Lower
+  quality means faster navigation through large photo collections.
+- *External-tool preview generation* -- For quality levels below =full=, preview
+  images are generated using =djpeg=/=cjpeg= (for JPEGs, DCT-domain scaling)
+  or =magick=/=convert= (for other formats).  This produces genuinely smaller
+  files so Emacs decodes less data, giving a real speed improvement.
+- *Image file validation* -- New =dired-image-thumbnail-minimum-file-size=
+  (default 100 bytes) and =dired-image-thumbnail-validate-headers= (default
+  =t=) defcustoms.  Files that are too small or lack valid image magic bytes
+  (JPEG, PNG, GIF, BMP, TIFF, WEBP, ICO, HEIC/HEIF) are silently excluded
+  from the thumbnail display.  Catches corrupt and truncated files.
+- *Open in external editor (W)* -- Press =W= to open the image at point in an
+  external application.  Configure =dired-image-thumbnail-external-editor= to
+  a specific program (e.g. =gimp=, =krita=), or leave =nil= to use the system
+  default (=xdg-open= / =open= / =start=).
+
+*** Improvements
+
+- *Quality shown in header line* -- The current display quality level is now
+  shown in the header line alongside sort/filter status.
+- *Header line updates on quality change* -- Pressing =Q= now immediately
+  updates the header line to reflect the new quality level.
+- *O(N) marked-file collection* -- Collecting marked files now uses a hash-set
+  approach instead of per-file =dired-goto-file=, eliminating O(N²) overhead.
+- *Robust async thumbnail sentinel* -- The identify-process sentinel now
+  captures buffer references in a lexical closure and guards against killed
+  buffers.
+- *Directory switching fixed* -- Opening =dired-image-thumbnail= in a new
+  directory now correctly clears stale state from the previous directory.
+
 ** <2026-03-13 Fri> *1.2.0*
 
 Hard Refresh and Cache Management.

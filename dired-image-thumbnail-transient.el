@@ -68,6 +68,7 @@
 (declare-function dired-image-thumbnail-refresh "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete-marked "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-open-external "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-help "dired-image-thumbnail")
 
 ;;; State description function
@@ -170,6 +171,7 @@
     ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)]
    ["Other"
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
+    ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
     ("A" "Auto-accept" (lambda () (interactive)
                          (setq dired-image-thumbnail-auto-accept
                                (not dired-image-thumbnail-auto-accept))

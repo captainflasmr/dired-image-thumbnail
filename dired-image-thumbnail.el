@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 1.2.0
+;; Version: 2.0.0
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -117,13 +117,34 @@ When nil, the standard `image-dired' line-up method is used."
   :safe #'booleanp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-manage-window-layout t
-  "Whether to manage window layout for thumbnail and image display buffers.
-When non-nil, thumbnail buffer appears on the left (50% width) and
-image display buffer appears on the right (50% width).
-When nil, use Emacs default window placement."
-  :type 'boolean
-  :safe #'booleanp
+(defcustom dired-image-thumbnail-window-layout 'left-right
+  "Window layout used when launching `dired-image-thumbnail'.
+
+  `left-right'  - Thumbnails on the left, image on the right (default).
+  `right-left'  - Image on the left, thumbnails on the right.
+  `top-bottom'  - Thumbnails on top, image on the bottom.
+  `bottom-top'  - Image on top, thumbnails on the bottom.
+  `thumb-only'  - Only show the thumbnail buffer; no image window.
+  nil           - Do not manage windows; use Emacs default placement
+                  or your own `display-buffer-alist' rules.
+
+The thumbnail/image size ratio is controlled by
+`dired-image-thumbnail-window-ratio'."
+  :type '(choice (const :tag "Thumbnails left, image right" left-right)
+                 (const :tag "Image left, thumbnails right" right-left)
+                 (const :tag "Thumbnails top, image bottom" top-bottom)
+                 (const :tag "Image top, thumbnails bottom" bottom-top)
+                 (const :tag "Thumbnails only" thumb-only)
+                 (const :tag "Manual (use display-buffer-alist)" nil))
+  :safe #'symbolp
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-window-ratio 0.4
+  "Fraction of the frame given to the thumbnail buffer.
+The image buffer gets the remainder.  Only used when
+`dired-image-thumbnail-window-layout' is non-nil."
+  :type 'float
+  :safe #'numberp
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-auto-display-on-navigate t
@@ -148,6 +169,56 @@ deleting files) will proceed without prompting."
   "List of image file extensions to recognise."
   :type '(repeat string)
   :safe (lambda (v) (and (listp v) (cl-every #'stringp v)))
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-minimum-file-size 100
+  "Minimum file size in bytes for an image to be included.
+Files smaller than this are assumed to be corrupt or empty and
+are silently excluded from the thumbnail display.  Set to 0 to
+disable this check."
+  :type 'natnum
+  :safe #'natnump
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-validate-headers t
+  "Whether to check image file magic bytes before including them.
+When non-nil, each candidate file is opened briefly to verify
+that its first few bytes match a known image format signature.
+This catches files that have an image extension but contain
+garbage or are truncated.  The check reads only the first 12
+bytes per file, so the overhead is small.  Set to nil if you
+trust all files in your directories or want maximum speed."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-external-editor nil
+  "External program used to open images with \\`W'.
+When nil, the system default application is used via `xdg-open'
+on Linux, `open' on macOS, or `start' on Windows."
+  :type '(choice (const :tag "System default" nil)
+                 (string :tag "Program name"))
+  :safe (lambda (v) (or (null v) (stringp v)))
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-display-quality 'fast
+  "Display quality when navigating thumbnails with n/p.
+Controls the trade-off between image quality and navigation speed.
+
+  `full'   - Original resolution via `image-dired-display-image'.
+             Slowest, but pixel-perfect.
+  `high'   - Scaled to fit the display window (1:1 window pixels).
+  `fast'   - Half the window dimensions.  Good balance.
+  `faster' - Quarter the window dimensions.  Noticeably quicker.
+  `draft'  - 1/8 the window dimensions.  Very fast, visibly soft.
+
+Changing this takes effect on the next n/p keypress."
+  :type '(choice (const :tag "Full resolution (slowest)" full)
+                 (const :tag "High - window size" high)
+                 (const :tag "Fast - 1/2 window (default)" fast)
+                 (const :tag "Faster - 1/4 window" faster)
+                 (const :tag "Draft - 1/8 window (fastest)" draft))
+  :safe #'symbolp
   :group 'dired-image-thumbnail)
 
 ;;; Internal variables
@@ -262,11 +333,76 @@ If not cached, launch an async process (`identify`) to fill the cache."
 
 ;;; Utility functions
 
+(defun dired-image-thumbnail--valid-header-p (file)
+  "Return non-nil if FILE begins with a recognised image magic signature.
+Reads only the first 12 bytes.  Recognised formats: JPEG, PNG, GIF,
+BMP, TIFF, WEBP, ICO, HEIC/HEIF.  SVG is accepted without a byte
+check since it is XML text."
+  (let ((ext (downcase (or (file-name-extension file) ""))))
+    (if (equal ext "svg")
+        t
+      (condition-case nil
+          (with-temp-buffer
+            (set-buffer-multibyte nil)
+            (insert-file-contents-literally file nil 0 12)
+            (let ((bytes (buffer-string)))
+              (when (>= (length bytes) 2)
+                (let ((b0 (aref bytes 0))
+                      (b1 (aref bytes 1)))
+                  (cond
+                   ;; JPEG: FF D8
+                   ((and (= b0 #xFF) (= b1 #xD8)) t)
+                   ;; PNG: 89 50 4E 47
+                   ((and (>= (length bytes) 4)
+                         (= b0 #x89) (= b1 #x50)
+                         (= (aref bytes 2) #x4E) (= (aref bytes 3) #x47))
+                    t)
+                   ;; GIF: "GIF8"
+                   ((and (>= (length bytes) 4)
+                         (= b0 ?G) (= b1 ?I)
+                         (= (aref bytes 2) ?F) (= (aref bytes 3) ?8))
+                    t)
+                   ;; BMP: "BM"
+                   ((and (= b0 ?B) (= b1 ?M)) t)
+                   ;; TIFF: "II" (little-endian) or "MM" (big-endian)
+                   ((and (>= (length bytes) 4)
+                         (or (and (= b0 #x49) (= b1 #x49)
+                                  (= (aref bytes 2) #x2A) (= (aref bytes 3) #x00))
+                             (and (= b0 #x4D) (= b1 #x4D)
+                                  (= (aref bytes 2) #x00) (= (aref bytes 3) #x2A))))
+                    t)
+                   ;; WEBP: "RIFF" + 4 bytes + "WEBP"
+                   ((and (>= (length bytes) 12)
+                         (= b0 ?R) (= b1 ?I)
+                         (= (aref bytes 2) ?F) (= (aref bytes 3) ?F)
+                         (= (aref bytes 8) ?W) (= (aref bytes 9) ?E)
+                         (= (aref bytes 10) ?B) (= (aref bytes 11) ?P))
+                    t)
+                   ;; ICO: 00 00 01 00
+                   ((and (>= (length bytes) 4)
+                         (= b0 #x00) (= b1 #x00)
+                         (= (aref bytes 2) #x01) (= (aref bytes 3) #x00))
+                    t)
+                   ;; HEIC/HEIF: bytes 4-11 contain "ftyp" for ISO BMFF
+                   ((and (>= (length bytes) 8)
+                         (= (aref bytes 4) ?f) (= (aref bytes 5) ?t)
+                         (= (aref bytes 6) ?y) (= (aref bytes 7) ?p))
+                    t))))))
+        (file-error nil)))))
+
 (defun dired-image-thumbnail--image-p (file)
-  "Return non-nil if FILE is an image file."
+  "Return non-nil if FILE is a valid image file.
+Checks extension, minimum file size, and optionally magic bytes."
   (and (file-regular-p file)
        (member (downcase (or (file-name-extension file) ""))
-               dired-image-thumbnail-image-extensions)))
+               dired-image-thumbnail-image-extensions)
+       (or (zerop dired-image-thumbnail-minimum-file-size)
+           (let ((attrs (file-attributes file)))
+             (and attrs
+                  (>= (file-attribute-size attrs)
+                      dired-image-thumbnail-minimum-file-size))))
+       (or (not dired-image-thumbnail-validate-headers)
+           (dired-image-thumbnail--valid-header-p file))))
 
 (defun dired-image-thumbnail--find-images (directory &optional recursive)
   "Find all image files in DIRECTORY.
@@ -511,7 +647,8 @@ Otherwise, fall back to the original function."
                             ""))
              (rel-name (dired-image-thumbnail--relative-name file))
              (size (dired-image-thumbnail--format-file-size file))
-             (dimensions (dired-image-thumbnail--format-image-dimensions file)))
+             (dimensions (dired-image-thumbnail--format-image-dimensions file))
+             (quality (symbol-name dired-image-thumbnail-display-quality)))
         (concat
          "  "
          (propertize rel-name 'face 'image-dired-thumb-header-file-name)
@@ -523,6 +660,8 @@ Otherwise, fall back to the original function."
          (propertize dimensions 'face 'shadow)
          "  "
          sort-info
+         "  "
+         (propertize (format "[%s]" quality) 'face 'shadow)
          (if (string-empty-p filter-info) "" (format "  %s" filter-info))
          marked-info))
     ;; Fall back to original function
@@ -844,6 +983,27 @@ the original files for crisp display (slower but higher quality)."
       (dired-image-thumbnail-refresh)
       (message "Deleted %d image(s)" (length files)))))
 
+(defun dired-image-thumbnail-open-external ()
+  "Open the image at point in an external editor.
+Uses `dired-image-thumbnail-external-editor' if set, otherwise
+the system default application."
+  (interactive)
+  (if-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
+      (let ((program dired-image-thumbnail-external-editor)
+            (expanded (expand-file-name file)))
+        (if program
+            (start-process "dit-external" nil program expanded)
+          (cond
+           ((eq system-type 'gnu/linux)
+            (start-process "dit-external" nil "xdg-open" expanded))
+           ((eq system-type 'darwin)
+            (start-process "dit-external" nil "open" expanded))
+           ((memq system-type '(windows-nt cygwin ms-dos))
+            (w32-shell-execute "open" expanded))
+           (t (start-process "dit-external" nil "xdg-open" expanded))))
+        (message "Opened %s externally" (file-name-nondirectory file)))
+    (message "No image at point")))
+
 (defun dired-image-thumbnail-delete ()
   "Delete the image at or near point."
   (interactive)
@@ -916,7 +1076,8 @@ the original files for crisp display (slower but higher quality)."
     (princ "Display:\n")
     (princ "  r, g         Refresh display\n")
     (princ "  G            Hard refresh (clear cache and reload)\n")
-    (princ "  w            Toggle wrap mode\n\n")
+    (princ "  w            Toggle wrap mode\n")
+    (princ "  Q            Cycle display quality (full/high/fast/faster/draft)\n\n")
     (princ "Sorting (s prefix):\n")
     (princ "  sb           Sort by Dired buffer order\n")
     (princ "  sn           Sort by name\n")
@@ -935,6 +1096,7 @@ the original files for crisp display (slower but higher quality)."
     (princ "In Image Display Buffer:\n")
     (princ "  C-d          Delete image and move to next\n\n")
     (princ "Other:\n")
+    (princ "  W            Open in external editor\n")
     (princ "  q            Quit window\n")
     (princ "  h, ?         This help\n")))
 
@@ -1035,7 +1197,12 @@ enhanced features like sorting and filtering."
         (setq dired-image-thumbnail--filter-size-min nil)
         (setq dired-image-thumbnail--filter-size-max nil)
         (dired-image-thumbnail-refresh)
-        (goto-char (point-min))))))
+        (goto-char (point-min)))
+      ;; Apply the configured window layout
+      (dired-image-thumbnail--apply-layout)
+      ;; Display the first image
+      (with-current-buffer thumb-buf
+        (dired-image-thumbnail--display-this)))))
 
 ;;;###autoload
 (defun dired-image-thumbnail-insert-subdir-recursive (&optional max-depth)
@@ -1139,11 +1306,159 @@ This returns the view to just the top-level directory."
   ;; Enhanced navigation (auto-display checked at runtime)
   (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
   (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
+  ;; Display quality
+  (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-cycle-display-quality)
+  ;; External
+  (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
   ;; Other
   (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-help)
   (define-key image-dired-thumbnail-mode-map (kbd "h") #'dired-image-thumbnail-help))
 
+;;; Fast image display
+
+(defun dired-image-thumbnail--quality-scale ()
+  "Return the scale factor for `dired-image-thumbnail-display-quality'."
+  (pcase dired-image-thumbnail-display-quality
+    ('high  1.0)
+    ('fast  0.5)
+    ('faster 0.25)
+    ('draft 0.125)
+    (_ nil)))
+
+(defvar dired-image-thumbnail--preview-dir nil
+  "Temporary directory for preview images.")
+
+(defun dired-image-thumbnail--preview-dir ()
+  "Return the temporary directory for preview images, creating it if needed."
+  (unless (and dired-image-thumbnail--preview-dir
+               (file-directory-p dired-image-thumbnail--preview-dir))
+    (setq dired-image-thumbnail--preview-dir
+          (make-temp-file "dired-image-preview-" t)))
+  dired-image-thumbnail--preview-dir)
+
+(defun dired-image-thumbnail--jpeg-p (file)
+  "Return non-nil if FILE is a JPEG."
+  (member (downcase (or (file-name-extension file) ""))
+          '("jpg" "jpeg")))
+
+(defun dired-image-thumbnail--djpeg-scale (quality-scale)
+  "Return the best djpeg DCT scale fraction for QUALITY-SCALE.
+djpeg supports 1/1, 1/2, 1/4, 1/8.  Maps the quality scale factor
+directly to the nearest djpeg fraction."
+  (cond ((<= quality-scale 0.125) "1/8")
+        ((<= quality-scale 0.25)  "1/4")
+        ((<= quality-scale 0.5)   "1/2")
+        (t                         "1/1")))
+
+(defun dired-image-thumbnail--make-preview (file width height)
+  "Create a preview of FILE at WIDTH x HEIGHT pixels.
+Returns the path to the preview file.
+For JPEGs, uses djpeg/cjpeg with DCT scaling (very fast).
+For other formats, uses magick/convert with -thumbnail."
+  (let* ((preview-name (concat (sha1 (concat file (number-to-string width)))
+                               ".jpg"))
+         (preview-path (expand-file-name preview-name
+                                         (dired-image-thumbnail--preview-dir))))
+    (unless (file-exists-p preview-path)
+      (let ((expanded (expand-file-name file)))
+        (if (and (dired-image-thumbnail--jpeg-p file)
+                 (executable-find "djpeg")
+                 (executable-find "cjpeg"))
+            ;; Fast path: djpeg DCT scaling + cjpeg (skips full decode)
+            (let ((scale-str (dired-image-thumbnail--djpeg-scale
+                              (dired-image-thumbnail--quality-scale))))
+              (call-process-shell-command
+               (format "djpeg -scale %s %s | cjpeg -quality 50 > %s"
+                       scale-str
+                       (shell-quote-argument expanded)
+                       (shell-quote-argument preview-path))
+               nil nil nil))
+          ;; Fallback: magick/convert -thumbnail
+          (let ((magick (or (executable-find "magick")
+                            (executable-find "convert"))))
+            (when magick
+              (call-process magick nil nil nil
+                            expanded
+                            "-thumbnail" (format "%dx%d" width height)
+                            "-quality" "50"
+                            preview-path))))))
+    (if (file-exists-p preview-path)
+        preview-path
+      file)))
+
+(defun dired-image-thumbnail--display-image-fast (file)
+  "Display FILE scaled according to `dired-image-thumbnail-display-quality'.
+For `high' quality, loads the file directly with window-fitting constraints.
+For lower qualities, produces a small preview via an external tool so that
+Emacs never decodes the full image."
+  (setq file (expand-file-name file))
+  (unless (file-exists-p file)
+    (error "No such file: %s" file))
+  (let* ((scale (dired-image-thumbnail--quality-scale))
+         (buf (get-buffer-create image-dired-display-image-buffer))
+         (cur-win (selected-window))
+         (display-win (or (get-buffer-window buf)
+                          (progn
+                            (display-buffer buf)
+                            (get-buffer-window buf))))
+         (win-width (or (and display-win (window-body-width display-win t)) 800))
+         (win-height (or (and display-win (window-body-height display-win t)) 600))
+         (decode-w (max 1 (truncate (* win-width scale))))
+         (decode-h (max 1 (truncate (* win-height scale))))
+         ;; For high quality, load original; otherwise make a small preview
+         (display-file (if (>= scale 1.0)
+                           file
+                         (dired-image-thumbnail--make-preview file decode-w decode-h)))
+         ;; Load the (possibly small) file and fit to window
+         (img (create-image display-file nil nil
+                            :max-width win-width
+                            :max-height win-height)))
+    (with-current-buffer buf
+      ;; Use special-mode for a clean read-only buffer with q to quit.
+      ;; Do NOT use image-dired-image-mode or image-mode here — they
+      ;; set up image-fit-to-window timers that expect a file-visiting
+      ;; buffer and fail on our manually inserted image descriptor.
+      (unless (derived-mode-p 'special-mode)
+        (special-mode))
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert-image img)
+        (goto-char (point-min)))
+      (setq cursor-type nil))
+    (when display-win
+      (set-window-buffer display-win buf))
+    (select-window cur-win)))
+
+(defun dired-image-thumbnail--display-this ()
+  "Display the current thumbnail's image.
+Uses fast scaled display unless quality is `full'."
+  (if (dired-image-thumbnail--quality-scale)
+      (let ((file (image-dired-original-file-name)))
+        (cond ((not (image-dired-image-at-point-p))
+               (message "No thumbnail at point"))
+              ((not file)
+               (message "No original file name found"))
+              (t
+               (dired-image-thumbnail--display-image-fast file))))
+    (image-dired-display-this)))
+
 ;;; Enhanced navigation and deletion
+
+(defun dired-image-thumbnail-cycle-display-quality ()
+  "Cycle through display quality levels.
+Order: fast -> faster -> draft -> high -> full -> fast ..."
+  (interactive)
+  (setq dired-image-thumbnail-display-quality
+        (pcase dired-image-thumbnail-display-quality
+          ('full   'high)
+          ('high   'fast)
+          ('fast   'faster)
+          ('faster 'draft)
+          ('draft  'full)
+          (_       'fast)))
+  (message "Display quality: %s" dired-image-thumbnail-display-quality)
+  (image-dired--update-header-line)
+  (dired-image-thumbnail--display-this))
 
 (defun dired-image-thumbnail-next-image ()
   "Move to next thumbnail and optionally display full-size image.
@@ -1152,7 +1467,7 @@ the full-size image is automatically displayed."
   (interactive)
   (image-dired-forward-image)
   (when dired-image-thumbnail-auto-display-on-navigate
-    (image-dired-display-this)))
+    (dired-image-thumbnail--display-this)))
 
 (defun dired-image-thumbnail-previous-image ()
   "Move to previous thumbnail and optionally display full-size image.
@@ -1161,7 +1476,7 @@ the full-size image is automatically displayed."
   (interactive)
   (image-dired-backward-image)
   (when dired-image-thumbnail-auto-display-on-navigate
-    (image-dired-display-this)))
+    (dired-image-thumbnail--display-this)))
 
 (defun dired-image-thumbnail-delete-and-next ()
   "Delete current image file and move to next thumbnail.
@@ -1178,7 +1493,7 @@ This permanently deletes the file from disk and removes its thumbnail."
             (remove file-name dired-image-thumbnail--all-images))
       (image-dired-delete-char)
       (when (not (eobp))
-        (image-dired-display-this))
+        (dired-image-thumbnail--display-this))
       (message "Deleted %s" file-name))))
 
 (defun dired-image-thumbnail-delete-image-and-next ()
@@ -1202,29 +1517,73 @@ since the display buffer is not a file-visiting buffer."
           (setq dired-image-thumbnail--all-images
                 (remove current-file dired-image-thumbnail--all-images))
           (image-dired-forward-image)
-          (image-dired-display-this)))
+          (dired-image-thumbnail--display-this)))
       (delete-file current-file)
       (message "Deleted %s" current-file))))
 
 ;;; Window layout management
 
+(defun dired-image-thumbnail--apply-layout ()
+  "Set up the thumbnail and image windows according to `dired-image-thumbnail-window-layout'.
+Called from `dired-image-thumbnail' after buffers have been created."
+  (when-let ((layout dired-image-thumbnail-window-layout)
+             (thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+    (delete-other-windows)
+    (if (eq layout 'thumb-only)
+        (switch-to-buffer thumb-buf)
+      (let* ((ratio dired-image-thumbnail-window-ratio)
+             (horizontal (memq layout '(left-right right-left)))
+             (thumb-first (memq layout '(left-right top-bottom)))
+             (img-buf (get-buffer-create image-dired-display-image-buffer))
+             (first-buf (if thumb-first thumb-buf img-buf))
+             (second-buf (if thumb-first img-buf thumb-buf))
+             (size (if horizontal
+                       (round (* (frame-width) (if thumb-first ratio (- 1.0 ratio))))
+                     (round (* (frame-height) (if thumb-first ratio (- 1.0 ratio)))))))
+        (switch-to-buffer first-buf)
+        (if horizontal
+            (split-window-right size)
+          (split-window-below size))
+        (other-window 1)
+        (switch-to-buffer second-buf)
+        ;; Leave focus on the thumbnail buffer
+        (select-window (get-buffer-window thumb-buf))))))
+
 (defun dired-image-thumbnail-setup-display-buffer ()
-  "Configure display-buffer rules for thumbnail and image buffers."
-  (when dired-image-thumbnail-manage-window-layout
-    ;; Thumbnail buffer on the left
-    (add-to-list 'display-buffer-alist
-                 '("\\*image-dired\\*"
-                   display-buffer-in-direction
-                   (direction . left)
-                   (window . root)
-                   (window-width . 0.5)))
-    ;; Image display buffer on the right
-    (add-to-list 'display-buffer-alist
-                 '("\\*image-dired-display-image\\*"
-                   display-buffer-in-direction
-                   (direction . right)
-                   (window . root)
-                   (window-width . 0.5)))))
+  "Configure `display-buffer-alist' rules for thumbnail and image buffers.
+Only adds rules when `dired-image-thumbnail-window-layout' is non-nil,
+so that `display-buffer' respects the layout for subsequent pop-to-buffer
+calls (e.g. when the image window is reused during navigation)."
+  (when dired-image-thumbnail-window-layout
+    (let* ((layout dired-image-thumbnail-window-layout)
+           (horizontal (memq layout '(left-right right-left)))
+           (thumb-first (memq layout '(left-right top-bottom)))
+           (ratio dired-image-thumbnail-window-ratio)
+           (thumb-dir (if thumb-first
+                          (if horizontal 'left 'above)
+                        (if horizontal 'right 'below)))
+           (img-dir (if thumb-first
+                        (if horizontal 'right 'below)
+                      (if horizontal 'left 'above)))
+           (thumb-size (if horizontal
+                          `(window-width . ,ratio)
+                        `(window-height . ,ratio)))
+           (img-size (if horizontal
+                        `(window-width . ,(- 1.0 ratio))
+                      `(window-height . ,(- 1.0 ratio)))))
+      (add-to-list 'display-buffer-alist
+                   `("\\*image-dired\\*"
+                     display-buffer-in-direction
+                     (direction . ,thumb-dir)
+                     (window . root)
+                     ,thumb-size))
+      (unless (eq layout 'thumb-only)
+        (add-to-list 'display-buffer-alist
+                     `("\\*image-dired-display-image\\*"
+                       display-buffer-in-direction
+                       (direction . ,img-dir)
+                       (window . root)
+                       ,img-size))))))
 
 ;;;###autoload
 (with-eval-after-load 'image-dired
