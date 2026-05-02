@@ -605,7 +605,8 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
         (goto-char (point-min))
         (while (not (eobp))
           (when-let ((file (get-text-property (point) 'original-file-name)))
-            (push file images)
+            (when (dired-image-thumbnail--image-p file)
+              (push file images))
             (unless source-dir
               (setq source-dir (file-name-directory file))))
           (forward-char)))
@@ -1195,13 +1196,14 @@ enhanced features like sorting and filtering."
         (setq dired-image-thumbnail--source-dir source-dir)
         (setq dired-image-thumbnail--filter-name nil)
         (setq dired-image-thumbnail--filter-size-min nil)
-        (setq dired-image-thumbnail--filter-size-max nil)
-        (dired-image-thumbnail-refresh)
-        (goto-char (point-min)))
-      ;; Apply the configured window layout
+        (setq dired-image-thumbnail--filter-size-max nil))
+      ;; Apply the layout BEFORE refresh so that line-up sees the
+      ;; correct (narrower) window width for column calculation.
       (dired-image-thumbnail--apply-layout)
-      ;; Display the first image
       (with-current-buffer thumb-buf
+        (dired-image-thumbnail-refresh)
+        (goto-char (point-min))
+        ;; Display the first image
         (dired-image-thumbnail--display-this)))))
 
 ;;;###autoload
