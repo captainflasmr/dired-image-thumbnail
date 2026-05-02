@@ -670,14 +670,16 @@ Otherwise, fall back to the original function."
 
 ;;; Display functions
 
-(defun dired-image-thumbnail-refresh ()
-  "Refresh the thumbnail display with current images."
+(defun dired-image-thumbnail-refresh (&optional preferred-target)
+  "Refresh the thumbnail display with current images.
+If PREFERRED-TARGET is provided, attempt to move point to that file
+after refreshing. Otherwise, try to maintain position on the current file."
   (interactive)
-  ;; Initialize if not already done
+  ;; Initialize if not already done.  FORCE a scan if all-images is nil.
   (unless dired-image-thumbnail--all-images
-    (dired-image-thumbnail--initialize-buffer))
+    (dired-image-thumbnail--re-scan-internal))
   (when dired-image-thumbnail--all-images
-    (let ((current-file (image-dired-original-file-name))
+    (let ((current-file (or preferred-target (image-dired-original-file-name)))
           (dired-buf dired-image-thumbnail--dired-buffer)
           (source-dir dired-image-thumbnail--source-dir)
           (sort-by dired-image-thumbnail--sort-by)
@@ -780,6 +782,40 @@ in the thumbnail buffer."
       (with-current-buffer thumb-buf
         (when (derived-mode-p 'image-dired-thumbnail-mode)
           (dired-image-thumbnail--display-this))))))
+
+(defun dired-image-thumbnail-re-scan (&optional preferred-target)
+  "Re-scan disk for images in the current thumbnail buffer and refresh.
+Useful after files have been renamed or added externally.
+If PREFERRED-TARGET is provided, move point there after refresh."
+  (interactive)
+  (message "Dired-Image-Thumbnail: Re-scanning buffer %s..." (buffer-name))
+  (when (derived-mode-p 'image-dired-thumbnail-mode)
+    (dired-image-thumbnail--re-scan-internal)
+    (dired-image-thumbnail-refresh preferred-target)))
+
+(defun dired-image-thumbnail--re-scan-internal ()
+  "Internal function to re-populate `all-images' from disk."
+  (when-let ((source-dir (and (boundp 'dired-image-thumbnail--source-dir)
+                                dired-image-thumbnail--source-dir)))
+    (setq dired-image-thumbnail--all-images
+          (dired-image-thumbnail--find-images
+           source-dir
+           (and (boundp 'dired-image-thumbnail--recursive)
+                dired-image-thumbnail--recursive)))))
+
+(defun dired-image-thumbnail-refresh-all (&optional rename-alist)
+  "Re-scan and refresh all `dired-image-thumbnail' buffers.
+If RENAME-ALIST is provided, it should be an alist mapping old
+filenames to new filenames.  Each buffer will attempt to maintain
+its point position if the file at point was renamed."
+  (interactive)
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (derived-mode-p 'image-dired-thumbnail-mode)
+        (let* ((raw-file (image-dired-original-file-name))
+               (old-file (and raw-file (expand-file-name raw-file)))
+               (new-file (and old-file (cdr (assoc old-file rename-alist)))))
+          (dired-image-thumbnail-re-scan new-file))))))
 
 (defun dired-image-thumbnail-sort-by-dired ()
   "Sort thumbnails by Dired buffer order."
@@ -1473,6 +1509,8 @@ Uses fast scaled display unless quality is `full'."
               ((not file)
                (message "No original file name found"))
               (t
+               (when (fboundp 'clear-image-cache)
+                 (clear-image-cache file))
                (dired-image-thumbnail--display-image-fast file))))
     (image-dired-display-this)))
 
