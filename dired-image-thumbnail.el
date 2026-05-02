@@ -757,6 +757,30 @@ This deletes the contents of `image-dired-dir' and then calls
     (dired-image-thumbnail-refresh)
     (message "Thumbnail cache cleared and buffer refreshed.")))
 
+(defun dired-image-thumbnail-invalidate-dimensions ()
+  "Clear the dimension cache and re-query dimensions for all visible images.
+Useful after an external tool has resized images on disk."
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                 (bound-and-true-p dired-image-thumbnail--dimension-cache))
+        (clrhash dired-image-thumbnail--dimension-cache)
+        (clrhash dired-image-thumbnail--dimension-pending)
+        (when dired-image-thumbnail--current-images
+          (dolist (file dired-image-thumbnail--current-images)
+            (dired-image-thumbnail--get-image-dimensions file)))
+        (image-dired--update-header-line)))))
+
+(defun dired-image-thumbnail-refresh-current-display ()
+  "Refresh the full-size image display if it's active.
+Updates the `image-dired-display-image-buffer' based on the image at point
+in the thumbnail buffer."
+  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+    (when (and thumb-buf (buffer-live-p thumb-buf))
+      (with-current-buffer thumb-buf
+        (when (derived-mode-p 'image-dired-thumbnail-mode)
+          (dired-image-thumbnail--display-this))))))
+
 (defun dired-image-thumbnail-sort-by-dired ()
   "Sort thumbnails by Dired buffer order."
   (interactive)
@@ -1337,6 +1361,14 @@ This returns the view to just the top-level directory."
     (setq dired-image-thumbnail--preview-dir
           (make-temp-file "dired-image-preview-" t)))
   dired-image-thumbnail--preview-dir)
+
+(defun dired-image-thumbnail-clear-preview-cache ()
+  "Delete the temporary preview directory and all its contents."
+  (when (and (boundp 'dired-image-thumbnail--preview-dir)
+             dired-image-thumbnail--preview-dir
+             (file-directory-p dired-image-thumbnail--preview-dir))
+    (delete-directory dired-image-thumbnail--preview-dir t)
+    (setq dired-image-thumbnail--preview-dir nil)))
 
 (defun dired-image-thumbnail--jpeg-p (file)
   "Return non-nil if FILE is a JPEG."
