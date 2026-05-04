@@ -11,6 +11,20 @@ project's main git repository.
 
 * Versions
 
+** <2026-05-04 Mon> *2.1.0*
+
+Performance and Layout Refinement.
+
+*** New Features
+
+- *Targeted Dimension Invalidation* -- Added `dired-image-thumbnail-invalidate-files` to allow surgical clearing of the dimension cache. Significant speedup for batch operations like "crush" or "rotate" since the full cache no longer needs to be cleared.
+- *Robust Window Placement* -- New custom `display-buffer` action `dired-image-thumbnail-display-at-direction`. Ensures that the image display buffer always reuses the correct window at the side (e.g., right), even if that window is currently visiting a text file or other buffer, preventing unwanted splits during navigation.
+
+*** Improvements
+
+- *Aggressive Lock Cleanup* -- Better integration with `transmute` package for cleaning up orphaned Emacs `.#` lock files after operations.
+- *Dimension Query Optimization* -- Reduced redundant `identify` calls during batch refreshes.
+
 ** <2026-03-22 Sat> *2.0.0*
 
 Major release: configurable window layouts, multi-level display quality with

@@ -772,6 +772,22 @@ Useful after an external tool has resized images on disk."
           (dolist (file dired-image-thumbnail--current-images)
             (dired-image-thumbnail--get-image-dimensions file)))
         (image-dired--update-header-line)))))
+(defun dired-image-thumbnail-invalidate-files (files)
+  "Invalidate dimension cache for the specific list of FILES.
+FILES should be a list of expanded file names."
+  (let ((files (mapcar #'expand-file-name files)))
+    (dolist (buf (buffer-list))
+      (with-current-buffer buf
+        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                   (bound-and-true-p dired-image-thumbnail--dimension-cache))
+          (dolist (f files)
+            (remhash f dired-image-thumbnail--dimension-cache)
+            (remhash f dired-image-thumbnail--dimension-pending))
+          ;; Only re-query if the files are actually in this buffer
+          (dolist (f files)
+            (when (member f dired-image-thumbnail--current-images)
+              (dired-image-thumbnail--get-image-dimensions f)))
+          (image-dired--update-header-line))))))
 
 (defun dired-image-thumbnail-refresh-current-display ()
   "Refresh the full-size image display if it's active.
@@ -1621,6 +1637,19 @@ Called from `dired-image-thumbnail' after buffers have been created."
         ;; Leave focus on the thumbnail buffer
         (select-window (get-buffer-window thumb-buf))))))
 
+(defun dired-image-thumbnail-display-at-direction (buffer alist)
+  "Display BUFFER in the direction specified in ALIST, reusing existing windows.
+This is more aggressive than `display-buffer-in-direction' as it will
+take over an existing window in that direction even if it's visiting
+another buffer, which is ideal for the thumbnail/image split layout."
+  (let* ((direction (cdr (assoc 'direction alist)))
+         (target-win (window-in-direction direction)))
+    (if (and target-win (window-live-p target-win))
+        (progn
+          (window--display-buffer buffer target-win 'reuse alist)
+          target-win)
+      (display-buffer-in-direction buffer alist))))
+
 (defun dired-image-thumbnail-setup-display-buffer ()
   "Configure `display-buffer-alist' rules for thumbnail and image buffers.
 Only adds rules when `dired-image-thumbnail-window-layout' is non-nil,
@@ -1642,7 +1671,7 @@ calls (e.g. when the image window is reused during navigation)."
                         `(window-height . ,ratio)))
            (img-size (if horizontal
                         `(window-width . ,(- 1.0 ratio))
-                      `(window-height . ,(- 1.0 ratio)))))
+                       `(window-height . ,(- 1.0 ratio)))))
       (add-to-list 'display-buffer-alist
                    `("\\*image-dired\\*"
                      display-buffer-in-direction
@@ -1652,7 +1681,8 @@ calls (e.g. when the image window is reused during navigation)."
       (unless (eq layout 'thumb-only)
         (add-to-list 'display-buffer-alist
                      `("\\*image-dired-display-image\\*"
-                       display-buffer-in-direction
+                       (display-buffer-reuse-window
+                        dired-image-thumbnail-display-at-direction)
                        (direction . ,img-dir)
                        (window . root)
                        ,img-size))))))
