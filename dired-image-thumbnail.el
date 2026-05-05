@@ -799,6 +799,16 @@ in the thumbnail buffer."
         (when (derived-mode-p 'image-dired-thumbnail-mode)
           (dired-image-thumbnail--display-this))))))
 
+(defun dired-image-thumbnail-hide-display ()
+  "Hide the full-size image display window and bury its buffer."
+  (interactive)
+  (let ((buf (get-buffer image-dired-display-image-buffer)))
+    (when (and buf (buffer-live-p buf))
+      (let ((win (get-buffer-window buf)))
+        (when win
+          (delete-window win))
+        (bury-buffer buf)))))
+
 (defun dired-image-thumbnail-re-scan (&optional preferred-target)
   "Re-scan disk for images in the current thumbnail buffer and refresh.
 Useful after files have been renamed or added externally.
