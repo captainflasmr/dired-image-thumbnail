@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.0.0
+;; Version: 2.2.0
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -68,6 +68,7 @@
 ;;   M   - Mark all
 ;;   U   - Unmark all
 ;;   t   - Toggle all marks
+;;   B   - Block mark: mark all images in region (set region with C-SPC, move, then B)
 ;;   d   - Go to Dired buffer
 ;;   D   - Delete image at point
 ;;   C-d - Delete image and move to next
@@ -1025,6 +1026,69 @@ the original files for crisp display (slower but higher quality)."
   (image-dired--thumb-update-marks)
   (message "%d images now marked" (dired-image-thumbnail--count-marked)))
 
+(defun dired-image-thumbnail--images-in-region ()
+  "Return list of unique image files between point and mark in the current buffer.
+The region bounds are identified by `region-beginning' and `region-end'."
+  (let* ((start (region-beginning))
+         (end (region-end))
+         (images nil)
+         (seen (make-hash-table :test 'equal))
+         pos)
+    (save-excursion
+      (goto-char start)
+      (setq pos (if (get-text-property (point) 'original-file-name)
+                    (point)
+                  (let ((next (next-single-property-change (point) 'original-file-name nil end)))
+                    (when (and next (< next end)) next))))
+      (while (and pos (< pos end))
+        (let ((file (get-text-property pos 'original-file-name)))
+          (when (and file (not (gethash file seen)))
+            (puthash file t seen)
+            (push file images)))
+        (setq pos (next-single-property-change pos 'original-file-name nil end))))
+    (nreverse images)))
+
+(defun dired-image-thumbnail-mark-region ()
+  "Mark all images between point and mark in the associated dired buffer.
+This is useful for quickly marking a block/range of contiguous images.
+Set the mark with \\[set-mark-command] at one end of the range,
+move point to the other end, then run this command."
+  (interactive)
+  (unless (use-region-p)
+    (user-error "No region active; first set a mark with C-SPC"))
+  (dired-image-thumbnail--mark-unmark-region 'mark))
+
+(defun dired-image-thumbnail-unmark-region ()
+  "Unmark all images between point and mark in the associated dired buffer.
+Set the mark with \\[set-mark-command] at one end of the range,
+move point to the other end, then run this command."
+  (interactive)
+  (unless (use-region-p)
+    (user-error "No region active; first set a mark with C-SPC"))
+  (dired-image-thumbnail--mark-unmark-region 'unmark))
+
+(defun dired-image-thumbnail--mark-unmark-region (action)
+  "Mark or unmark all images in the current region.
+ACTION is `mark' or `unmark'."
+  (let ((images (dired-image-thumbnail--images-in-region)))
+    (if (null images)
+        (message "No images found in region")
+      (dolist (file images)
+        (when (and dired-image-thumbnail--dired-buffer
+                   (buffer-live-p dired-image-thumbnail--dired-buffer))
+          (with-current-buffer dired-image-thumbnail--dired-buffer
+            (save-excursion
+              (goto-char (point-min))
+              (when (dired-goto-file file)
+                (if (eq action 'mark)
+                    (dired-mark 1)
+                  (dired-unmark 1)))))))
+      (image-dired--thumb-update-marks)
+      (deactivate-mark)
+      (message "%s %d images in region"
+               (if (eq action 'mark) "Marked" "Unmarked")
+               (length images)))))
+
 ;;; File operations
 
 (defun dired-image-thumbnail-goto-dired ()
@@ -1154,7 +1218,9 @@ the system default application."
     (princ "  u            Unmark image\n")
     (princ "  U            Unmark all\n")
     (princ "  M            Mark all\n")
-    (princ "  t            Toggle all marks\n\n")
+    (princ "  t            Toggle all marks\n")
+    (princ "  B            Block mark: mark all images in region\n")
+    (princ "               Set region with C-SPC, move, then B\n\n")
     (princ "File Operations:\n")
     (princ "  D            Delete image at point\n")
     (princ "  C-d          Delete image and move to next\n")
@@ -1386,6 +1452,7 @@ This returns the view to just the top-level directory."
   ;; Marking
   (define-key image-dired-thumbnail-mode-map (kbd "M") #'dired-image-thumbnail-mark-all)
   (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
+  (define-key image-dired-thumbnail-mode-map (kbd "B") #'dired-image-thumbnail-mark-region)
   ;; File operations
   (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
   (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)

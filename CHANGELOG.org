@@ -11,6 +11,15 @@ project's main git repository.
 
 * Versions
 
+** <2026-05-14 Thu> *2.2.0*
+
+Block Mark and Region Selection.
+
+*** New Features
+
+- *Block Mark (B)* -- Added `dired-image-thumbnail-mark-region` (bound to `B`) to mark all images in a selected region. Set the region with `C-SPC`, navigate to the other end, then press `B` to mark all images in that block at once. Much faster than marking each image individually.
+- *Block Unmark* -- Added `dired-image-thumbnail-unmark-region` for symmetry (available via `M-x` or custom binding).
+
 ** <2026-05-04 Mon> *2.1.0*
 
 Performance and Layout Refinement.

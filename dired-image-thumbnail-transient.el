@@ -70,6 +70,7 @@
 (declare-function dired-image-thumbnail-delete-marked "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-open-external "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-help "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-mark-region "dired-image-thumbnail")
 
 ;;; State description function
 
@@ -158,12 +159,13 @@
    ["Delete"
     ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
     ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]]
-  [["Marking"
-    ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
-    ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
-    ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
-    ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
-    ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]
+   [["Marking"
+     ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
+     ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
+     ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
+     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
+     ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)
+     ("B" "Block mark (region)" dired-image-thumbnail-mark-region :transient nil)]
    ["Display"
     ("r" "Refresh" dired-image-thumbnail-refresh :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
