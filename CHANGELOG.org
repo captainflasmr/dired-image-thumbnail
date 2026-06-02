@@ -11,6 +11,23 @@ project's main git repository.
 
 * Versions
 
+** <2026-06-02 Tue> *2.2.1*
+
+Bug fixes and marking/header-line performance.
+
+*** Bug Fixes
+
+- *Subdirectory images no longer lost on re-scan* -- The internal =--recursive= flag is now set when subdirectories have been inserted into the Dired buffer, so re-scanning (=g=/=r=, =re-scan=, =refresh-all= after a rename) keeps images from inserted subdirectories instead of silently dropping them.
+- *=C-d= in the image display buffer now works at any quality* -- The fast scaled-display buffer previously used plain =special-mode=, so the =C-d= (delete-and-next) binding only worked at =full= quality. A dedicated =dired-image-thumbnail-display-mode= now carries the binding for every quality level.
+- *Consistent trash behaviour on delete* -- =C-d= delete commands now honour =delete-by-moving-to-trash= like =D= and =x= did, instead of permanently deleting.
+
+*** Improvements
+
+- *O(N) marking* -- =M= (mark all), =t= (toggle all), and block region marking now make a single pass over the Dired buffer using a hash set, replacing the previous per-file =dired-goto-file= scans (O(N²)).
+- *Cached marked count* -- The header-line marked count is cached and invalidated only when marks actually change, so navigating with =n=/=p= no longer rescans the Dired buffer on every keypress.
+- *Stable window layout rules* -- =display-buffer= rules are refreshed on each launch and de-duplicated, so they track the current =dired-image-thumbnail-window-layout= / =-window-ratio= values instead of going stale or stacking up.
+- *Cleaner byte-compilation* -- Removed redundant sort/filter recomputation, added missing variable/function declarations in the transient menu, and fixed a free-variable warning.
+
 ** <2026-05-14 Thu> *2.2.0*
 
 Block Mark and Region Selection.

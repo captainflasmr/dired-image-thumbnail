@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.2.0
+;; Version: 2.2.1
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -85,6 +85,8 @@
 (require 'cl-lib)
 
 (declare-function image-size "image.c" (spec &optional pixels frame))
+(declare-function dired-image-thumbnail-transient-setup-keys
+                  "dired-image-thumbnail-transient")
 
 ;;; Customization
 
@@ -262,6 +264,9 @@ Changing this takes effect on the next n/p keypress."
 
 (defvar-local dired-image-thumbnail--recursive nil
   "Non-nil if thumbnails include images from subdirectories.")
+
+(defvar-local dired-image-thumbnail--marked-count nil
+  "Cached count of marked images.  Nil means it needs recomputation.")
 
 (defun dired-image-thumbnail--get-image-dimensions (file)
   "Get dimensions of image FILE as (width . height), or (0 . 0) if unknown.
@@ -468,15 +473,29 @@ This collects all marks in a single pass through the dired buffer."
       "?")))
 
 (defun dired-image-thumbnail--count-marked ()
-  "Count the number of marked images."
-  (if dired-image-thumbnail--current-images
-      (let ((marked-set (dired-image-thumbnail--get-dired-marked-set))
-            (count 0))
-        (dolist (file dired-image-thumbnail--current-images)
-          (when (gethash file marked-set)
-            (setq count (1+ count))))
-        count)
-    0))
+  "Count the number of marked images.
+The result is cached in `dired-image-thumbnail--marked-count' and only
+recomputed when the cache has been invalidated (see
+`dired-image-thumbnail--invalidate-marked-count'), so the header line
+can be updated on every navigation without re-scanning the dired buffer."
+  (or dired-image-thumbnail--marked-count
+      (setq dired-image-thumbnail--marked-count
+            (if dired-image-thumbnail--current-images
+                (let ((marked-set (dired-image-thumbnail--get-dired-marked-set))
+                      (count 0))
+                  (dolist (file dired-image-thumbnail--current-images)
+                    (when (gethash file marked-set)
+                      (setq count (1+ count))))
+                  count)
+              0))))
+
+(defun dired-image-thumbnail--invalidate-marked-count (&rest _)
+  "Invalidate the cached marked count in the current thumbnail buffer.
+Installed as `:after' advice on `image-dired--thumb-update-marks', which
+is the common choke point for all mark changes (both ours and native
+image-dired commands)."
+  (when (derived-mode-p 'image-dired-thumbnail-mode)
+    (setq dired-image-thumbnail--marked-count nil)))
 
 ;;; Sorting functions
 
@@ -556,14 +575,12 @@ This collects all marks in a single pass through the dired buffer."
 ;;; Apply sort and filter
 
 (defun dired-image-thumbnail--apply-sort-and-filter ()
-  "Apply current sort and filter settings and refresh display."
-  ;; Initialize if not already done
+  "Apply current sort and filter settings and refresh display.
+The actual filtering and sorting is performed by
+`dired-image-thumbnail-refresh', so this only ensures the buffer is
+initialised before refreshing."
   (unless dired-image-thumbnail--all-images
     (dired-image-thumbnail--initialize-buffer))
-  (when dired-image-thumbnail--all-images
-    (let ((filtered (dired-image-thumbnail--filter-images dired-image-thumbnail--all-images)))
-      (setq dired-image-thumbnail--current-images
-            (dired-image-thumbnail--sort-images filtered))))
   (dired-image-thumbnail-refresh))
 
 ;;; Initialization for standard image-dired
@@ -977,23 +994,32 @@ the original files for crisp display (slower but higher quality)."
     (dired-image-thumbnail-refresh)
     (message "Thumbnail size: %d" dired-image-thumbnail--display-size)))
 
+(defun dired-image-thumbnail--current-images-set ()
+  "Return a hash set of expanded names of all current (visible) images."
+  (let ((set (make-hash-table :test 'equal)))
+    (dolist (file dired-image-thumbnail--current-images)
+      (puthash (expand-file-name file) t set))
+    set))
+
 (defun dired-image-thumbnail-mark-all ()
   "Mark all visible images in the thumbnail buffer."
   (interactive)
   (unless dired-image-thumbnail--all-images
     (dired-image-thumbnail--initialize-buffer))
-  (when dired-image-thumbnail--current-images
-    ;; Mark each file in dired
-    (dolist (file dired-image-thumbnail--current-images)
-      ;; Ensure subdir is in dired for recursive mode
-      ;; Mark in dired buffer
-      (when (and dired-image-thumbnail--dired-buffer
-                 (buffer-live-p dired-image-thumbnail--dired-buffer))
-        (with-current-buffer dired-image-thumbnail--dired-buffer
-          (save-excursion
-            (goto-char (point-min))
-            (when (dired-goto-file file)
-              (dired-mark 1))))))
+  (when (and dired-image-thumbnail--current-images
+             dired-image-thumbnail--dired-buffer
+             (buffer-live-p dired-image-thumbnail--dired-buffer))
+    ;; Single pass over the dired buffer (O(n) rather than O(n^2)).
+    (let ((targets (dired-image-thumbnail--current-images-set)))
+      (with-current-buffer dired-image-thumbnail--dired-buffer
+        (save-excursion
+          (goto-char (point-min))
+          (while (not (eobp))
+            (let ((file (dired-get-filename nil t)))
+              (if (and file (gethash (expand-file-name file) targets))
+                  ;; `dired-mark' marks this line and advances one line.
+                  (dired-mark 1)
+                (forward-line 1)))))))
     ;; Update all thumbnail marks using image-dired's function
     (image-dired--thumb-update-marks)
     (message "Marked all %d images" (length dired-image-thumbnail--current-images))))
@@ -1003,25 +1029,23 @@ the original files for crisp display (slower but higher quality)."
   (interactive)
   (unless dired-image-thumbnail--all-images
     (dired-image-thumbnail--initialize-buffer))
-  (dolist (file dired-image-thumbnail--current-images)
-    (let ((is-marked (dired-image-thumbnail--file-marked-p file)))
-      (if is-marked
-          ;; Unmark
-          (when (and dired-image-thumbnail--dired-buffer
-                     (buffer-live-p dired-image-thumbnail--dired-buffer))
-            (with-current-buffer dired-image-thumbnail--dired-buffer
-              (save-excursion
-                (goto-char (point-min))
-                (when (dired-goto-file file)
-                  (dired-unmark 1)))))
-        ;; Mark
-        (when (and dired-image-thumbnail--dired-buffer
-                   (buffer-live-p dired-image-thumbnail--dired-buffer))
-          (with-current-buffer dired-image-thumbnail--dired-buffer
-            (save-excursion
-              (goto-char (point-min))
-              (when (dired-goto-file file)
-                (dired-mark 1))))))))
+  (when (and dired-image-thumbnail--current-images
+             dired-image-thumbnail--dired-buffer
+             (buffer-live-p dired-image-thumbnail--dired-buffer))
+    ;; Single pass over the dired buffer (O(n) rather than O(n^2)).
+    (let ((targets (dired-image-thumbnail--current-images-set)))
+      (with-current-buffer dired-image-thumbnail--dired-buffer
+        (save-excursion
+          (goto-char (point-min))
+          (while (not (eobp))
+            (let ((file (dired-get-filename nil t)))
+              (cond
+               ((not (and file (gethash (expand-file-name file) targets)))
+                (forward-line 1))
+               ((image-dired-dired-file-marked-p)
+                (dired-unmark 1))
+               (t
+                (dired-mark 1)))))))))
   ;; Update all thumbnail marks using image-dired's function
   (image-dired--thumb-update-marks)
   (message "%d images now marked" (dired-image-thumbnail--count-marked)))
@@ -1073,16 +1097,22 @@ ACTION is `mark' or `unmark'."
   (let ((images (dired-image-thumbnail--images-in-region)))
     (if (null images)
         (message "No images found in region")
-      (dolist (file images)
-        (when (and dired-image-thumbnail--dired-buffer
-                   (buffer-live-p dired-image-thumbnail--dired-buffer))
+      (when (and dired-image-thumbnail--dired-buffer
+                 (buffer-live-p dired-image-thumbnail--dired-buffer))
+        ;; Single pass over the dired buffer (O(n) rather than O(region*n)).
+        (let ((targets (make-hash-table :test 'equal)))
+          (dolist (file images)
+            (puthash (expand-file-name file) t targets))
           (with-current-buffer dired-image-thumbnail--dired-buffer
             (save-excursion
               (goto-char (point-min))
-              (when (dired-goto-file file)
-                (if (eq action 'mark)
-                    (dired-mark 1)
-                  (dired-unmark 1)))))))
+              (while (not (eobp))
+                (let ((file (dired-get-filename nil t)))
+                  (if (and file (gethash (expand-file-name file) targets))
+                      (if (eq action 'mark)
+                          (dired-mark 1)
+                        (dired-unmark 1))
+                    (forward-line 1))))))))
       (image-dired--thumb-update-marks)
       (deactivate-mark)
       (message "%s %d images in region"
@@ -1329,7 +1359,10 @@ enhanced features like sorting and filtering."
   (unless (derived-mode-p 'dired-mode)
     (user-error "Not in a dired buffer"))
   (let ((dired-buf (current-buffer))
-        (source-dir default-directory))
+        (source-dir default-directory)
+        ;; More than one entry in `dired-subdir-alist' means subdirectories
+        ;; have been inserted, so images may live below `source-dir'.
+        (recursive (> (length dired-subdir-alist) 1)))
     ;; Store state for our hooks to use
     (setq-local dired-image-thumbnail--source-dir source-dir)
     (setq-local dired-image-thumbnail--dired-buffer dired-buf)
@@ -1346,11 +1379,14 @@ enhanced features like sorting and filtering."
         (setq dired-image-thumbnail--current-images nil)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
         (setq dired-image-thumbnail--source-dir source-dir)
+        (setq dired-image-thumbnail--recursive recursive)
         (setq dired-image-thumbnail--filter-name nil)
         (setq dired-image-thumbnail--filter-size-min nil)
         (setq dired-image-thumbnail--filter-size-max nil))
-      ;; Apply the layout BEFORE refresh so that line-up sees the
-      ;; correct (narrower) window width for column calculation.
+      ;; Refresh display-buffer rules so they track the current layout/ratio
+      ;; custom values, then apply the layout BEFORE refresh so that line-up
+      ;; sees the correct (narrower) window width for column calculation.
+      (dired-image-thumbnail-setup-display-buffer)
       (dired-image-thumbnail--apply-layout)
       (with-current-buffer thumb-buf
         (dired-image-thumbnail-refresh)
@@ -1549,6 +1585,18 @@ For other formats, uses magick/convert with -thumbnail."
         preview-path
       file)))
 
+(defvar dired-image-thumbnail-display-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map special-mode-map)
+    (define-key map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)
+    map)
+  "Keymap for the fast full-size image display buffer.")
+
+(define-derived-mode dired-image-thumbnail-display-mode special-mode "DIT-Image"
+  "Major mode for the `dired-image-thumbnail' full-size image display buffer.
+Used by the fast scaled-display path so that bindings such as \\`C-d'
+are available even though the buffer is not file-visiting.")
+
 (defun dired-image-thumbnail--display-image-fast (file)
   "Display FILE scaled according to `dired-image-thumbnail-display-quality'.
 For `high' quality, loads the file directly with window-fitting constraints.
@@ -1581,8 +1629,8 @@ Emacs never decodes the full image."
       ;; Do NOT use image-dired-image-mode or image-mode here — they
       ;; set up image-fit-to-window timers that expect a file-visiting
       ;; buffer and fail on our manually inserted image descriptor.
-      (unless (derived-mode-p 'special-mode)
-        (special-mode))
+      (unless (derived-mode-p 'dired-image-thumbnail-display-mode)
+        (dired-image-thumbnail-display-mode))
       (let ((inhibit-read-only t))
         (erase-buffer)
         (insert-image img)
@@ -1651,7 +1699,7 @@ This permanently deletes the file from disk and removes its thumbnail."
     (when (and file-name
                (or dired-image-thumbnail-auto-accept
                    (y-or-n-p (format "Delete %s? " (file-name-nondirectory file-name)))))
-      (delete-file file-name)
+      (delete-file file-name t)
       (setq dired-image-thumbnail--current-images
             (remove file-name dired-image-thumbnail--current-images))
       (setq dired-image-thumbnail--all-images
@@ -1683,7 +1731,7 @@ since the display buffer is not a file-visiting buffer."
                 (remove current-file dired-image-thumbnail--all-images))
           (image-dired-forward-image)
           (dired-image-thumbnail--display-this)))
-      (delete-file current-file)
+      (delete-file current-file t)
       (message "Deleted %s" current-file))))
 
 ;;; Window layout management
@@ -1731,7 +1779,19 @@ another buffer, which is ideal for the thumbnail/image split layout."
   "Configure `display-buffer-alist' rules for thumbnail and image buffers.
 Only adds rules when `dired-image-thumbnail-window-layout' is non-nil,
 so that `display-buffer' respects the layout for subsequent pop-to-buffer
-calls (e.g. when the image window is reused during navigation)."
+calls (e.g. when the image window is reused during navigation).
+
+Any rules previously installed by this function are removed first, so it
+is idempotent and can be re-run to track changes to
+`dired-image-thumbnail-window-layout' / `-window-ratio'."
+  ;; Drop any rules we installed earlier so re-running picks up current
+  ;; custom values rather than stacking stale entries.
+  (setq display-buffer-alist
+        (seq-remove (lambda (entry)
+                      (member (car-safe entry)
+                              '("\\*image-dired\\*"
+                                "\\*image-dired-display-image\\*")))
+                    display-buffer-alist))
   (when dired-image-thumbnail-window-layout
     (let* ((layout dired-image-thumbnail-window-layout)
            (horizontal (memq layout '(left-right right-left)))
@@ -1769,6 +1829,8 @@ calls (e.g. when the image window is reused during navigation)."
   (dired-image-thumbnail-setup-keys)
   (dired-image-thumbnail-setup-display-buffer)
   (advice-add 'image-dired-format-properties-string :around #'dired-image-thumbnail--format-properties-string)
+  ;; Invalidate the cached marked count whenever marks change.
+  (advice-add 'image-dired--thumb-update-marks :after #'dired-image-thumbnail--invalidate-marked-count)
   ;; Hook to initialize our variables when entering thumbnail mode
   (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer))
 
