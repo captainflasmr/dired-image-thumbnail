@@ -195,7 +195,7 @@
     (define-key image-dired-thumbnail-mode-map (kbd "C-c .") #'dired-image-thumbnail-transient)))
 
 (defun dired-image-thumbnail--in-thumbnail-buffer-p ()
-  "Return non-nil if current buffer is an image-dired thumbnail buffer with our enhancements."
+  "Return non-nil in an image-dired thumbnail buffer with our enhancements."
   (and (derived-mode-p 'image-dired-thumbnail-mode)
        (boundp 'dired-image-thumbnail--all-images)))
 

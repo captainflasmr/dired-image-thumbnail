@@ -83,10 +83,21 @@
 (require 'image)
 (require 'dired)
 (require 'cl-lib)
+(require 'subr-x)                       ; string-empty-p, string-trim
 
 (declare-function image-size "image.c" (spec &optional pixels frame))
+(declare-function w32-shell-execute "w32fns.c"
+                  (operation document &optional parameters show-flag))
 (declare-function dired-image-thumbnail-transient-setup-keys
                   "dired-image-thumbnail-transient")
+
+;; This package builds on a number of internal (double-dash) `image-dired'
+;; functions.  They are stable across the supported Emacs versions (28.1+)
+;; but are not part of image-dired's public API, so they are declared here
+;; both to document the dependency and to satisfy the byte-compiler.
+(declare-function image-dired--line-up-with-method "image-dired")
+(declare-function image-dired--thumb-update-marks "image-dired")
+(declare-function image-dired--update-header-line "image-dired")
 
 ;;; Customization
 
@@ -279,27 +290,30 @@ If not cached, launch an async process (`identify`) to fill the cache."
         ;; Fallback until process finishes
         (cons 0 0))))
 
+(defun dired-image-thumbnail--prop-search (pos forward)
+  "Find the nearest `original-file-name' property near POS.
+Search forward when FORWARD is non-nil, otherwise backward.  Jumps
+between property-change boundaries (O(runs)) rather than scanning one
+character at a time.  Returns the property value, or nil if none."
+  (let ((p pos)
+        (found (get-text-property pos 'original-file-name)))
+    (while (and (not found)
+                (if forward (< p (point-max)) (> p (point-min))))
+      (setq p (if forward
+                  (next-single-property-change p 'original-file-name nil (point-max))
+                (previous-single-property-change p 'original-file-name nil (point-min))))
+      (setq found (get-text-property p 'original-file-name)))
+    found))
+
 (defun dired-image-thumbnail--nearest-image-original-file-name (&optional pos)
-  "Return the 'original-file-name property at POS, or search nearby if not found."
+  "Return the `original-file-name' property at POS, or the nearest one.
+POS defaults to point.  If no thumbnail is exactly at POS, search
+backward first, then forward, for the closest position carrying the
+property."
   (let ((pos (or pos (point))))
     (or (get-text-property pos 'original-file-name)
-        ;; Search backward then forward for nearest image property
-        (save-excursion
-          (let ((found nil)
-                (limit (point-min)))
-            (goto-char pos)
-            (while (and (not found) (> (point) limit))
-              (setq found (get-text-property (point) 'original-file-name))
-              (unless found (backward-char)))
-            found))
-        (save-excursion
-          (let ((found nil)
-                (limit (point-max)))
-            (goto-char pos)
-            (while (and (not found) (< (point) limit))
-              (setq found (get-text-property (point) 'original-file-name))
-              (unless found (forward-char)))
-            found)))))
+        (dired-image-thumbnail--prop-search pos nil)
+        (dired-image-thumbnail--prop-search pos t))))
 
 (defun dired-image-thumbnail--start-identify-process (file)
   "Start an async process to get dimensions for FILE."
@@ -646,11 +660,11 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
 ;;; Header line
 
 (defun dired-image-thumbnail--format-properties-string (orig-fun buf file image-count props comment)
-  "Advice around `image-dired-format-properties-string' for enhanced header line.
-ORIG-FUN is the original function.
-BUF, FILE, IMAGE-COUNT, PROPS, and COMMENT are passed to the original function.
-When `dired-image-thumbnail--all-images' is set, return our enhanced header line.
-Otherwise, fall back to the original function."
+  "Advice around `image-dired-format-properties-string' for the header line.
+ORIG-FUN is the original function.  BUF, FILE, IMAGE-COUNT, PROPS, and
+COMMENT are passed to the original function.  When
+`dired-image-thumbnail--all-images' is set, return our enhanced header
+line.  Otherwise, fall back to the original function."
   (if dired-image-thumbnail--all-images
       ;; Use our enhanced header line
       (let* ((sort-info (format "[%s %s]"
@@ -747,14 +761,16 @@ after refreshing. Otherwise, try to maintain position on the current file."
       ;; Restore position before updating header line, so point is on a
       ;; valid thumbnail when the header line reads the file at point.
       (if current-file
-          (progn
-            (goto-char (point-min))
-            (let ((found nil))
-              (while (and (not found) (not (eobp)))
-                (when (equal (get-text-property (point) 'original-file-name) current-file)
-                  (setq found t))
-                (unless found (forward-char)))
-              (unless found (goto-char (point-min)))))
+          ;; Jump between property-change boundaries (O(thumbnails)) rather
+          ;; than scanning one character at a time.
+          (let ((pos (point-min))
+                (found nil))
+            (while (and (not found) pos (< pos (point-max)))
+              (if (equal (get-text-property pos 'original-file-name) current-file)
+                  (setq found pos)
+                (setq pos (next-single-property-change
+                           pos 'original-file-name nil (point-max)))))
+            (goto-char (or found (point-min))))
         (goto-char (point-min)))
       (image-dired--update-header-line))))
 
@@ -981,7 +997,7 @@ the original files for crisp display (slower but higher quality)."
   (let ((current (or dired-image-thumbnail--display-size 128)))
     (setq dired-image-thumbnail--display-size (min 512 (+ current 32)))
     (dired-image-thumbnail-refresh)
-    (if (> dired-image-thumbnail--display-size image-dired-thumb-height)
+    (if (> dired-image-thumbnail--display-size image-dired-thumb-size)
         (message "Thumbnail size: %d (using original images for quality)"
                  dired-image-thumbnail--display-size)
       (message "Thumbnail size: %d" dired-image-thumbnail--display-size))))
@@ -1287,17 +1303,17 @@ the system default application."
 
 (defun dired-image-thumbnail--find-subdirs (directory &optional max-depth)
   "Return a list of all subdirectories under DIRECTORY.
-Does not include DIRECTORY itself.
-Optional MAX-DEPTH limits recursion (nil means unlimited, 1 means direct children only)."
+Does not include DIRECTORY itself.  Optional MAX-DEPTH limits recursion
+\(nil means unlimited, 1 means direct children only)."
   (let ((subdirs nil)
         (dirs-to-process (list (cons directory 0))))
     (while dirs-to-process
       (let* ((item (pop dirs-to-process))
              (current-dir (car item))
              (current-depth (cdr item)))
+        ;; The "^[^.]" match already excludes "." and ".." (and other dotfiles).
         (dolist (file (directory-files current-dir t "^[^.]" t))
-          (when (and (file-directory-p file)
-                     (not (member (file-name-nondirectory file) '("." ".."))))
+          (when (file-directory-p file)
             (push file subdirs)
             ;; Only recurse if we haven't hit max depth
             (when (or (null max-depth) (< (1+ current-depth) max-depth))
@@ -1348,7 +1364,7 @@ SUBDIRS should be a list of directory paths."
 If files are marked, show thumbnails for marked images only.
 Otherwise, show thumbnails for all images visible in the dired buffer.
 
-This works with inserted subdirectories - use 'i' (`dired-maybe-insert-subdir`)
+This works with inserted subdirectories - use \\`i' (`dired-maybe-insert-subdir')
 to insert subdirectories before calling this command to include images from
 those subdirectories. See `dired-image-thumbnail-insert-subdir-recursive'
 for a helper to insert all subdirectories at once.
@@ -1737,8 +1753,9 @@ since the display buffer is not a file-visiting buffer."
 ;;; Window layout management
 
 (defun dired-image-thumbnail--apply-layout ()
-  "Set up the thumbnail and image windows according to `dired-image-thumbnail-window-layout'.
-Called from `dired-image-thumbnail' after buffers have been created."
+  "Set up the thumbnail and image windows.
+The arrangement follows `dired-image-thumbnail-window-layout'.  Called
+from `dired-image-thumbnail' after buffers have been created."
   (when-let ((layout dired-image-thumbnail-window-layout)
              (thumb-buf (get-buffer image-dired-thumbnail-buffer)))
     (delete-other-windows)
@@ -1839,6 +1856,29 @@ is idempotent and can be re-run to track changes to
   ;; Scope C-d to the image-dired display buffer only
   (when (boundp 'image-dired-display-image-mode-map)
     (define-key image-dired-display-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
+
+;; Clean up the temporary preview directory when Emacs exits.
+(add-hook 'kill-emacs-hook #'dired-image-thumbnail-clear-preview-cache)
+
+(defun dired-image-thumbnail-unload-function ()
+  "Tear down advice and hooks installed by dired-image-thumbnail.
+Called by `unload-feature'.  Returns nil so standard unloading proceeds."
+  (advice-remove 'image-dired-format-properties-string
+                 #'dired-image-thumbnail--format-properties-string)
+  (advice-remove 'image-dired--thumb-update-marks
+                 #'dired-image-thumbnail--invalidate-marked-count)
+  (remove-hook 'image-dired-thumbnail-mode-hook
+               #'dired-image-thumbnail--initialize-buffer)
+  (remove-hook 'kill-emacs-hook #'dired-image-thumbnail-clear-preview-cache)
+  (dired-image-thumbnail-clear-preview-cache)
+  ;; Drop the display-buffer rules we installed.
+  (setq display-buffer-alist
+        (seq-remove (lambda (entry)
+                      (member (car-safe entry)
+                              '("\\*image-dired\\*"
+                                "\\*image-dired-display-image\\*")))
+                    display-buffer-alist))
+  nil)
 
 ;; Load transient menu support if available
 (when (require 'dired-image-thumbnail-transient nil t)

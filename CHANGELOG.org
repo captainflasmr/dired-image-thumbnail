@@ -25,8 +25,11 @@ Bug fixes and marking/header-line performance.
 
 - *O(N) marking* -- =M= (mark all), =t= (toggle all), and block region marking now make a single pass over the Dired buffer using a hash set, replacing the previous per-file =dired-goto-file= scans (O(N²)).
 - *Cached marked count* -- The header-line marked count is cached and invalidated only when marks actually change, so navigating with =n=/=p= no longer rescans the Dired buffer on every keypress.
+- *Faster thumbnail navigation* -- Finding the image at/near point and restoring point after a refresh now jump between text-property boundaries instead of scanning one character at a time.
 - *Stable window layout rules* -- =display-buffer= rules are refreshed on each launch and de-duplicated, so they track the current =dired-image-thumbnail-window-layout= / =-window-ratio= values instead of going stale or stacking up.
-- *Cleaner byte-compilation* -- Removed redundant sort/filter recomputation, added missing variable/function declarations in the transient menu, and fixed a free-variable warning.
+- *Clean unload support* -- Added =dired-image-thumbnail-unload-function= so =unload-feature= removes all advice, hooks, and =display-buffer= rules the package installed.
+- *Preview cache cleaned on exit* -- The temporary preview directory is now removed automatically via =kill-emacs-hook=.
+- *Cleaner byte-compilation* -- Removed redundant sort/filter recomputation, added =subr-x= require and missing function declarations, replaced the obsolete =image-dired-thumb-height=, dropped a redundant dotfile check, and fixed docstring and free-variable warnings (both files now compile with zero warnings).
 
 ** <2026-05-14 Thu> *2.2.0*
 
