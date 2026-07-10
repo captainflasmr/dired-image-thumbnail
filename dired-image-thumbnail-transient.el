@@ -191,7 +191,8 @@
 ;;;###autoload
 (defun dired-image-thumbnail-transient-setup-keys ()
   "Set up keybindings for the transient menu."
-  (when (fboundp 'dired-image-thumbnail-transient)
+  (when (and (fboundp 'dired-image-thumbnail-transient)
+             (keymapp image-dired-thumbnail-mode-map))
     (define-key image-dired-thumbnail-mode-map (kbd "C-c .") #'dired-image-thumbnail-transient)))
 
 (defun dired-image-thumbnail--in-thumbnail-buffer-p ()

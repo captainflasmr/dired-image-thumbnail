@@ -1490,36 +1490,46 @@ This returns the view to just the top-level directory."
 
 ;;;###autoload
 (defun dired-image-thumbnail-setup-keys ()
-  "Add dired-image-thumbnail keybindings to `image-dired-thumbnail-mode-map'."
-  (define-key image-dired-thumbnail-mode-map (kbd "s") dired-image-thumbnail-sort-map)
-  (define-key image-dired-thumbnail-mode-map (kbd "S") #'dired-image-thumbnail-sort)
-  (define-key image-dired-thumbnail-mode-map (kbd "/") dired-image-thumbnail-filter-map)
-  (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
-  (define-key image-dired-thumbnail-mode-map (kbd "w") #'dired-image-thumbnail-toggle-wrap)
-  (define-key image-dired-thumbnail-mode-map (kbd "r") #'dired-image-thumbnail-refresh)
-  (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)
-  (define-key image-dired-thumbnail-mode-map (kbd "G") #'dired-image-thumbnail-hard-refresh)
-  (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
-  (define-key image-dired-thumbnail-mode-map (kbd "-") #'dired-image-thumbnail-decrease-size)
-  ;; Marking
-  (define-key image-dired-thumbnail-mode-map (kbd "M") #'dired-image-thumbnail-mark-all)
-  (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
-  (define-key image-dired-thumbnail-mode-map (kbd "B") #'dired-image-thumbnail-mark-region)
-  ;; File operations
-  (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
-  (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)
-  (define-key image-dired-thumbnail-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-and-next)
-  (define-key image-dired-thumbnail-mode-map (kbd "x") #'dired-image-thumbnail-delete-marked)
-  ;; Enhanced navigation (auto-display checked at runtime)
-  (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
-  (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
-  ;; Display quality
-  (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-cycle-display-quality)
-  ;; External
-  (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
-  ;; Other
-  (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-help)
-  (define-key image-dired-thumbnail-mode-map (kbd "h") #'dired-image-thumbnail-help))
+  "Add dired-image-thumbnail keybindings to `image-dired-thumbnail-mode-map'.
+If `image-dired-thumbnail-mode-map' is not a valid keymap (e.g. on
+some Emacs builds where `image-dired' does not define it at load
+time), a warning is displayed and no keybindings are installed."
+  (if (not (keymapp image-dired-thumbnail-mode-map))
+      (display-warning
+       '(dired-image-thumbnail setup-keys)
+       "`image-dired-thumbnail-mode-map' is not a keymap; \
+keybindings will not be installed.  This can happen when `image-dired'\
+ is not fully loaded.  Try (require 'image-dired) before loading\
+ `dired-image-thumbnail'.")
+    (define-key image-dired-thumbnail-mode-map (kbd "s") dired-image-thumbnail-sort-map)
+    (define-key image-dired-thumbnail-mode-map (kbd "S") #'dired-image-thumbnail-sort)
+    (define-key image-dired-thumbnail-mode-map (kbd "/") dired-image-thumbnail-filter-map)
+    (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
+    (define-key image-dired-thumbnail-mode-map (kbd "w") #'dired-image-thumbnail-toggle-wrap)
+    (define-key image-dired-thumbnail-mode-map (kbd "r") #'dired-image-thumbnail-refresh)
+    (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)
+    (define-key image-dired-thumbnail-mode-map (kbd "G") #'dired-image-thumbnail-hard-refresh)
+    (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
+    (define-key image-dired-thumbnail-mode-map (kbd "-") #'dired-image-thumbnail-decrease-size)
+    ;; Marking
+    (define-key image-dired-thumbnail-mode-map (kbd "M") #'dired-image-thumbnail-mark-all)
+    (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
+    (define-key image-dired-thumbnail-mode-map (kbd "B") #'dired-image-thumbnail-mark-region)
+    ;; File operations
+    (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
+    (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)
+    (define-key image-dired-thumbnail-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-and-next)
+    (define-key image-dired-thumbnail-mode-map (kbd "x") #'dired-image-thumbnail-delete-marked)
+    ;; Enhanced navigation (auto-display checked at runtime)
+    (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
+    (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
+    ;; Display quality
+    (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-cycle-display-quality)
+    ;; External
+    (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
+    ;; Other
+    (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-help)
+    (define-key image-dired-thumbnail-mode-map (kbd "h") #'dired-image-thumbnail-help)))
 
 ;;; Fast image display
 
@@ -1854,7 +1864,7 @@ is idempotent and can be re-run to track changes to
 ;;;###autoload
 (with-eval-after-load 'image-dired
   ;; Scope C-d to the image-dired display buffer only
-  (when (boundp 'image-dired-display-image-mode-map)
+  (when (keymapp image-dired-display-image-mode-map)
     (define-key image-dired-display-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
 
 ;; Clean up the temporary preview directory when Emacs exits.
