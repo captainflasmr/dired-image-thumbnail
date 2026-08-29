@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.2.1
+;; Version: 2.2.3
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -232,7 +232,20 @@ Changing this takes effect on the next n/p keypress."
                  (const :tag "Fast - 1/2 window (default)" fast)
                  (const :tag "Faster - 1/4 window" faster)
                  (const :tag "Draft - 1/8 window (fastest)" draft))
-  :safe #'symbolp
+:safe #'symbolp
+   :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-suppress-display-lockfiles t
+  "Whether to suppress Emacs lock files when displaying full-size images.
+When non-nil, no `.#filename' lock files are created on image files
+visited via `image-dired-display-image' (the standard `image-dired'
+display path used at `full' quality, and when
+`image-dired-marking-shows-next' advances after a mark/unmark).
+This prevents stale lock-file residue from accumulating in image
+directories, especially after abnormal Emacs exit.  Set to nil if
+you want the standard Emacs locking behaviour."
+  :type 'boolean
+  :safe #'booleanp
   :group 'dired-image-thumbnail)
 
 ;;; Internal variables
@@ -611,16 +624,19 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
           (dired-buf dired-image-thumbnail--dired-buffer)
           (source-dir dired-image-thumbnail--source-dir))
       
-      ;; If not explicitly passed, try to find from text properties
+      ;; If not explicitly passed, try to find from text properties.
+      ;; Jump between property-change boundaries (O(runs)) rather than
+      ;; scanning one character at a time.
       (unless dired-buf
         (save-excursion
           (goto-char (point-min))
-          (let ((found nil))
-            (while (and (not found) (not (eobp)))
-              (when-let ((buf (get-text-property (point) 'associated-dired-buffer)))
+          (let ((pos (point-min)) found)
+            (while (and (not found) pos (< pos (point-max)))
+              (when-let ((buf (get-text-property pos 'associated-dired-buffer)))
                 (setq dired-buf buf)
                 (setq found t))
-              (forward-char)))))
+              (setq pos (next-single-property-change
+                         pos 'associated-dired-buffer nil (point-max)))))))
 
       ;; If still not found, look for any live dired buffer that might be relevant
       (unless dired-buf
@@ -633,15 +649,19 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
                            (equal default-directory (buffer-local-value 'default-directory (current-buffer))))
                   (setq dired-buf buf)))))))
 
+      ;; Jump between property-change boundaries (O(thumbnails)) rather
+      ;; than scanning one character at a time.
       (save-excursion
         (goto-char (point-min))
-        (while (not (eobp))
-          (when-let ((file (get-text-property (point) 'original-file-name)))
-            (when (dired-image-thumbnail--image-p file)
-              (push file images))
-            (unless source-dir
-              (setq source-dir (file-name-directory file))))
-          (forward-char)))
+        (let ((pos (point-min)))
+          (while (< pos (point-max))
+            (when-let ((file (get-text-property pos 'original-file-name)))
+              (when (dired-image-thumbnail--image-p file)
+                (push file images))
+              (unless source-dir
+                (setq source-dir (file-name-directory file))))
+            (setq pos (next-single-property-change
+                       pos 'original-file-name nil (point-max))))))
 
       ;; Get source-dir from dired buffer if available
       (when (and dired-buf (buffer-live-p dired-buf))
@@ -699,6 +719,19 @@ line.  Otherwise, fall back to the original function."
          marked-info))
     ;; Fall back to original function
     (funcall orig-fun buf file image-count props comment)))
+
+(defun dired-image-thumbnail--display-image-no-lock (orig-fun &rest args)
+  "Advice around `image-dired-display-image' to suppress lock file creation.
+ORIG-FUN is the original function; ARGS are its arguments.  When
+`dired-image-thumbnail-suppress-display-lockfiles' is non-nil, bind
+`create-lockfiles' to nil so that visiting the image file does not
+create a `.#filename' lock symlink.  Image files are displayed
+read-only, so locking serves no purpose and stale lock files can
+accumulate as residue in image directories."
+  (if dired-image-thumbnail-suppress-display-lockfiles
+      (let ((create-lockfiles nil))
+        (apply orig-fun args))
+    (apply orig-fun args)))
 
 ;;; Display functions
 
@@ -834,14 +867,16 @@ in the thumbnail buffer."
           (dired-image-thumbnail--display-this))))))
 
 (defun dired-image-thumbnail-hide-display ()
-  "Hide the full-size image display window and bury its buffer."
+  "Hide the full-size image display window and kill its buffer.
+Killing the buffer (rather than burying it) releases the image data
+from memory and removes any lock file on the visited image."
   (interactive)
   (let ((buf (get-buffer image-dired-display-image-buffer)))
     (when (and buf (buffer-live-p buf))
       (let ((win (get-buffer-window buf)))
         (when win
           (delete-window win))
-        (bury-buffer buf)))))
+        (kill-buffer buf)))))
 
 (defun dired-image-thumbnail-re-scan (&optional preferred-target)
   "Re-scan disk for images in the current thumbnail buffer and refresh.
@@ -1580,8 +1615,13 @@ directly to the nearest djpeg fraction."
 Returns the path to the preview file.
 For JPEGs, uses djpeg/cjpeg with DCT scaling (very fast).
 For other formats, uses magick/convert with -thumbnail."
-  (let* ((preview-name (concat (sha1 (concat file (number-to-string width)))
-                               ".jpg"))
+  (let* ((preview-name (concat (sha1 (concat file
+                                              (number-to-string width)
+                                              (format-time-string
+                                               "%s"
+                                               (file-attribute-modification-time
+                                                (file-attributes file)))))
+                                ".jpg"))
          (preview-path (expand-file-name preview-name
                                          (dired-image-thumbnail--preview-dir))))
     (unless (file-exists-p preview-path)
@@ -1589,15 +1629,20 @@ For other formats, uses magick/convert with -thumbnail."
         (if (and (dired-image-thumbnail--jpeg-p file)
                  (executable-find "djpeg")
                  (executable-find "cjpeg"))
-            ;; Fast path: djpeg DCT scaling + cjpeg (skips full decode)
+            ;; Fast path: djpeg DCT scaling + cjpeg (skips full decode).
+            ;; Use an intermediate temp file instead of a shell pipeline so
+            ;; this works portably without relying on /bin/sh or cmd.exe.
             (let ((scale-str (dired-image-thumbnail--djpeg-scale
-                              (dired-image-thumbnail--quality-scale))))
-              (call-process-shell-command
-               (format "djpeg -scale %s %s | cjpeg -quality 50 > %s"
-                       scale-str
-                       (shell-quote-argument expanded)
-                       (shell-quote-argument preview-path))
-               nil nil nil))
+                              (dired-image-thumbnail--quality-scale)))
+                  (temp-file (make-temp-file "dired-image-preview-djpeg-")))
+              (unwind-protect
+                  (progn
+                    (call-process "djpeg" nil temp-file nil
+                                  "-scale" scale-str expanded)
+                    (call-process "cjpeg" nil preview-path nil
+                                  "-quality" "50" temp-file))
+                (when (file-exists-p temp-file)
+                  (delete-file temp-file))))
           ;; Fallback: magick/convert -thumbnail
           (let ((magick (or (executable-find "magick")
                             (executable-find "convert"))))
@@ -1651,13 +1696,24 @@ Emacs never decodes the full image."
                             :max-width win-width
                             :max-height win-height)))
     (with-current-buffer buf
+      ;; If this buffer was previously used by image-dired-display-image
+      ;; to visit a file, sever the file visit before modifying the
+      ;; buffer.  Without this, erase-buffer triggers Emacs's lazy
+      ;; locking (prepare_to_modify_buffer_1 in insdel.c) which creates
+      ;; a .#filename lock symlink on the previously-displayed image.
+      ;; Clearing buffer-file-name / buffer-file-truename prevents the
+      ;; lock and also avoids a modified-buffer prompt on kill.
+      (when (buffer-file-name)
+        (set-buffer-modified-p nil)
+        (set-visited-file-name nil))
       ;; Use special-mode for a clean read-only buffer with q to quit.
       ;; Do NOT use image-dired-image-mode or image-mode here — they
       ;; set up image-fit-to-window timers that expect a file-visiting
       ;; buffer and fail on our manually inserted image descriptor.
       (unless (derived-mode-p 'dired-image-thumbnail-display-mode)
         (dired-image-thumbnail-display-mode))
-      (let ((inhibit-read-only t))
+      (let ((inhibit-read-only t)
+            (create-lockfiles nil))
         (erase-buffer)
         (insert-image img)
         (goto-char (point-min)))
@@ -1858,11 +1914,10 @@ is idempotent and can be re-run to track changes to
   (advice-add 'image-dired-format-properties-string :around #'dired-image-thumbnail--format-properties-string)
   ;; Invalidate the cached marked count whenever marks change.
   (advice-add 'image-dired--thumb-update-marks :after #'dired-image-thumbnail--invalidate-marked-count)
+  ;; Suppress lock files on image files visited for display (read-only).
+  (advice-add 'image-dired-display-image :around #'dired-image-thumbnail--display-image-no-lock)
   ;; Hook to initialize our variables when entering thumbnail mode
-  (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer))
-
-;;;###autoload
-(with-eval-after-load 'image-dired
+  (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer)
   ;; Scope C-d to the image-dired display buffer only
   (when (keymapp image-dired-display-image-mode-map)
     (define-key image-dired-display-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
@@ -1877,6 +1932,8 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
                  #'dired-image-thumbnail--format-properties-string)
   (advice-remove 'image-dired--thumb-update-marks
                  #'dired-image-thumbnail--invalidate-marked-count)
+  (advice-remove 'image-dired-display-image
+                 #'dired-image-thumbnail--display-image-no-lock)
   (remove-hook 'image-dired-thumbnail-mode-hook
                #'dired-image-thumbnail--initialize-buffer)
   (remove-hook 'kill-emacs-hook #'dired-image-thumbnail-clear-preview-cache)

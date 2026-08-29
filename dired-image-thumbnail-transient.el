@@ -77,6 +77,23 @@
 (declare-function dired-image-thumbnail-help "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-mark-region "dired-image-thumbnail")
 
+;;; Predicates
+
+(defun dired-image-thumbnail--in-thumbnail-buffer-p ()
+  "Return non-nil in an image-dired thumbnail buffer with our enhancements."
+  (and (derived-mode-p 'image-dired-thumbnail-mode)
+       (boundp 'dired-image-thumbnail--all-images)))
+
+;;; Commands
+
+(defun dired-image-thumbnail-transient-toggle-auto-accept ()
+  "Toggle `dired-image-thumbnail-auto-accept'."
+  (interactive)
+  (setq dired-image-thumbnail-auto-accept
+        (not dired-image-thumbnail-auto-accept))
+  (message "Auto-accept: %s"
+           (if dired-image-thumbnail-auto-accept "ON" "OFF")))
+
 ;;; State description function
 
 (defun dired-image-thumbnail-transient--state-description ()
@@ -178,13 +195,9 @@
     ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)]
    ["Other"
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
-    ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
-    ("A" "Auto-accept" (lambda () (interactive)
-                         (setq dired-image-thumbnail-auto-accept
-                               (not dired-image-thumbnail-auto-accept))
-                         (message "Auto-accept: %s"
-                                  (if dired-image-thumbnail-auto-accept "ON" "OFF")))
-     :transient t)
+("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
+     ("A" "Auto-accept" dired-image-thumbnail-transient-toggle-auto-accept
+      :transient t)
     ("?" "Help" dired-image-thumbnail-help :transient nil)
     ("q" "Quit menu" transient-quit-one)]])
 
@@ -194,11 +207,6 @@
   (when (and (fboundp 'dired-image-thumbnail-transient)
              (keymapp image-dired-thumbnail-mode-map))
     (define-key image-dired-thumbnail-mode-map (kbd "C-c .") #'dired-image-thumbnail-transient)))
-
-(defun dired-image-thumbnail--in-thumbnail-buffer-p ()
-  "Return non-nil in an image-dired thumbnail buffer with our enhancements."
-  (and (derived-mode-p 'image-dired-thumbnail-mode)
-       (boundp 'dired-image-thumbnail--all-images)))
 
 (provide 'dired-image-thumbnail-transient)
 ;;; dired-image-thumbnail-transient.el ends here

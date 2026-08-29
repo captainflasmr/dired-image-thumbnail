@@ -11,6 +11,33 @@ project's main git repository.
 
 * Versions
 
+** <2026-08-29 Sat> *2.2.3*
+
+Fix for Emacs lock-file residue (`.#filename.jpg' symlinks) left in
+image directories after navigating or marking/unmarking.
+
+*** Bug Fixes
+
+- *Lock-file residue on displayed images* -- Lock files (`.#filename.jpg' symlinks) were left in image directories after navigating or marking/unmarking. Root cause: the fast display path (=dired-image-thumbnail--display-image-fast=) reuses the =*image-dired-display-image*= buffer that was previously used by =image-dired-display-image= to visit a file. When the fast path calls =erase-buffer=, Emacs 30's lazy locking (=prepare_to_modify_buffer_1= in insdel.c) creates a lock on the previously-displayed image. The fast path now severs the file visit (=set-visited-file-name nil=) before modifying the buffer, and binds =create-lockfiles= to nil during the modification. Additionally, new defcustom =dired-image-thumbnail-suppress-display-lockfiles= (default =t=) provides =:around= advice on =image-dired-display-image= to suppress lock creation on the standard display path (for older Emacs versions that lock on visit).
+- *Display buffer now killed on hide* -- =dired-image-thumbnail-hide-display= now kills the display buffer instead of burying it, releasing image data from memory and cleaning up any residual lock file.
+
+** <2026-08-29 Sat> *2.2.2*
+
+Code-review fixes: stale preview cache, cross-platform preview generation,
+and buffer-initialization performance.
+
+*** Bug Fixes
+
+- *Stale preview cache for updated images* -- The preview cache key in =--make-preview= previously hashed only the file path and target width, so an image edited in place kept the same key and served an out-of-date preview indefinitely. The file's modification timestamp is now folded into the SHA1 payload, so modified images get fresh previews automatically.
+- *Cross-platform preview generation* -- The =djpeg=/=cjpeg= fast path used =call-process-shell-command= with a =|= / =>= shell pipeline, which breaks on Windows =cmd.exe= and custom shell setups. It now chains two =call-process= calls through an intermediate temp file (cleaned up in =unwind-protect=), removing the shell dependency entirely.
+
+*** Improvements
+
+- *O(runs) buffer initialization* -- =--initialize-buffer= scanned the thumbnail buffer character-by-character with =forward-char= to find =associated-dired-buffer= and =original-file-name= properties. Both loops now jump between property-change boundaries with =next-single-property-change=, matching the optimization already used in =--prop-search= and =refresh=.
+- *Consolidated =with-eval-after-load= blocks* -- The two back-to-back =with-eval-after-load 'image-dired= blocks at the end of the file (keymap setup / advice / hooks, and the =C-d= display-buffer keymap binding) are merged into a single block for clarity.
+- *Transient auto-accept extracted to a named command* -- The inline =(lambda ...)= on the transient menu's =A= key is now the named command =dired-image-thumbnail-transient-toggle-auto-accept=, keeping the =transient-define-prefix= declaration clean and reusable.
+- *Predicate ordered before first use* -- =dired-image-thumbnail--in-thumbnail-buffer-p= moved from the bottom of the transient file to a new =;;; Predicates= section above its first reference, preventing byte-compiler warnings during macro expansion.
+
 ** <2026-06-02 Tue> *2.2.1*
 
 Bug fixes and marking/header-line performance.
