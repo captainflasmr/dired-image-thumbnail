@@ -1332,7 +1332,8 @@ the system default application."
     (princ "Other:\n")
     (princ "  W            Open in external editor\n")
     (princ "  q            Quit window\n")
-    (princ "  h, ?         This help\n")))
+    (princ "  h            This help\n")
+    (princ "  ?            Transient menu\n")))
 
 ;;; Main entry point
 

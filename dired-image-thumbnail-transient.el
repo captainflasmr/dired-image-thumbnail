@@ -206,7 +206,8 @@
   "Set up keybindings for the transient menu."
   (when (and (fboundp 'dired-image-thumbnail-transient)
              (keymapp image-dired-thumbnail-mode-map))
-    (define-key image-dired-thumbnail-mode-map (kbd "C-c .") #'dired-image-thumbnail-transient)))
+    (define-key image-dired-thumbnail-mode-map (kbd "C-c .") #'dired-image-thumbnail-transient)
+    (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-transient)))
 
 (provide 'dired-image-thumbnail-transient)
 ;;; dired-image-thumbnail-transient.el ends here
