@@ -47,6 +47,7 @@
 (defvar dired-image-thumbnail-sort-by)
 (defvar dired-image-thumbnail-sort-order)
 (defvar dired-image-thumbnail-wrap-display)
+(defvar dired-image-thumbnail-square-thumbnails)
 (defvar dired-image-thumbnail-auto-accept)
 (defvar image-dired-thumbnail-mode-map)
 
@@ -76,6 +77,8 @@
 (declare-function dired-image-thumbnail-open-external "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-help "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-mark-region "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-find-file "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-toggle-square-thumbnails "dired-image-thumbnail")
 
 ;;; Predicates
 
@@ -106,6 +109,7 @@
                            dired-image-thumbnail-sort-order))
            (recursive dired-image-thumbnail--recursive)
            (wrap dired-image-thumbnail-wrap-display)
+           (square dired-image-thumbnail-square-thumbnails)
            (total (length dired-image-thumbnail--all-images))
            (filtered (length dired-image-thumbnail--current-images))
            (filters (dired-image-thumbnail--format-active-filters)))
@@ -120,9 +124,12 @@
        (format "Recursive: %s | "
                (propertize (if recursive "ON" "OFF")
                            'face (if recursive 'success 'shadow)))
-       (format "Wrap: %s"
+       (format "Wrap: %s | "
                (propertize (if wrap "ON" "OFF")
                            'face (if wrap 'success 'shadow)))
+       (format "Square: %s"
+               (propertize (if square "ON" "OFF")
+                           'face (if square 'success 'shadow)))
        (if (string-empty-p filters)
            ""
          (concat "\n" (propertize "Filters: " 'face 'transient-heading)
@@ -159,7 +166,8 @@
    ("+" "Increase size" dired-image-thumbnail-increase-size :transient t)
    ("-" "Decrease size" dired-image-thumbnail-decrease-size :transient t)]
   ["Toggle"
-   ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)]
+   ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)
+   ("#" "Square thumbnails" dired-image-thumbnail-toggle-square-thumbnails :transient nil)]
   ["Refresh"
    ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)
    ("g" "Refresh display" dired-image-thumbnail-refresh :transient nil)
@@ -188,14 +196,16 @@
      ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
      ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)
      ("B" "Block mark (region)" dired-image-thumbnail-mark-region :transient nil)]
-   ["Display"
+["Display"
     ("r" "Refresh" dired-image-thumbnail-refresh :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
-    ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)]
+    ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)
+    ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)]
    ["Other"
+    ("f" "Open image (find-file)" dired-image-thumbnail-find-file :transient nil)
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
-("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
+    ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
      ("A" "Auto-accept" dired-image-thumbnail-transient-toggle-auto-accept
       :transient t)
     ("?" "Help" dired-image-thumbnail-help :transient nil)

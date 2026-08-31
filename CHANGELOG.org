@@ -11,6 +11,49 @@ project's main git repository.
 
 * Versions
 
+** <2026-08-29 Sat> *2.2.7*
+
+Fix square thumbnails on first run with an empty cache.
+
+*** Bug Fixes
+
+- *Square cropping skipped on first run* -- image-dired generates thumbnails asynchronously (jobs are queued and run by subprocesses after the command finishes), so on a first run with an empty cache the thumbnail file did not yet exist when the square crop ran, and the crop was silently skipped, leaving non-square thumbnails until a manual refresh. =dired-image-thumbnail-refresh= now splits thumbnail preparation into phases: queue all generations, wait for the queue to drain (keeping Emacs responsive), then crop, then insert.
+
+** <2026-08-29 Sat> *2.2.6*
+
+Square thumbnails by default and layout indication.
+
+*** Changes
+
+- *Square thumbnails enabled by default* -- `dired-image-thumbnail-square-thumbnails` now defaults to =t=. Set it to =nil= or press =#= for natural aspect-ratio thumbnails.
+- *Thumbnail layout indicator* -- The header line now shows =[square]= when thumbnails are cropped to uniform squares, or =[natural]= when they keep their aspect ratio, next to the display-quality indicator. The transient state line already shows the Square state.
+
+** <2026-08-29 Sat> *2.2.5*
+
+Square thumbnail cropping for a tidier grid.
+
+*** New Features
+
+- *Square thumbnails (#)* -- Added `dired-image-thumbnail-square-thumbnails` defcustom (default =nil=) and toggle command =dired-image-thumbnail-toggle-square-thumbnails= (bound to =#=). When enabled, each thumbnail is scaled to fill and center-cropped to a uniform square of =image-dired-thumb-size= pixels so all thumbnails have the same dimensions and the grid lines up neatly. Requires ImageMagick (=mogrify= or =magick=). Existing thumbnails are cropped on the next refresh; use =G= (hard refresh) to regenerate from scratch. Also available in the transient menu's Display section, and shown in the transient state line.
+- *Progress bar during thumbnail generation* -- =dired-image-thumbnail-refresh= now shows a progress reporter in the minibuffer when thumbnails need to be created or cropped, so you can see how far along the regeneration is. The progress bar only appears when there is actual work to do (not on refreshes where all thumbnails already exist). Creation and cropping are counted as separate work items and an explicit running counter is passed to =progress-reporter-update=, which fixes a =wrong-type-argument= crash when the value overflowed =max-value= (Emacs 30 passes nil through to =progress-reporter-do-update= once the reporter's value reaches its maximum).
+
+*** Bug Fixes
+
+- *Nil image-dired geometry variables* -- =image-dired-thumb-size=, =image-dired-thumb-relief=, =image-dired-thumb-margin=, and =image-dired-thumbs-per-row= can be nil if they were bound to nil before =image-dired= loads (Emacs's defcustom does not repair a non-void nil). This signaled =Wrong type argument: number-or-marker-p, nil= when pressing =#= and on first opening after clearing the thumbnail cache, because image-dired's own line-up functions use these variables in arithmetic unguarded (e.g. =(* 2 image-dired-thumb-relief)= in =image-dired-line-up-dynamic=). =dired-image-thumbnail-refresh= now repairs all four buffer-locally (thumb-size via the =image-dired--thumb-size= function falling back to 128; relief/margin to 2; thumbs-per-row to 3) before any thumbnail work. The crop target additionally falls back through =image-dired--thumb-size=, =dired-image-thumbnail--display-size=, and 128, and the refresh-time =/= comparison guards against nil.
+- *Nil package options* -- =dired-image-thumbnail-minimum-file-size= (treated as check-disabled when nil) and =dired-image-thumbnail-window-ratio= (falls back to 0.4) are now guarded against nil values in =--image-p=, =--apply-layout=, and =--setup-display-buffer=.
+
+** <2026-08-29 Sat> *2.2.4*
+
+New features and keybinding changes.
+
+*** New Features
+
+- *Open image in its own buffer (f)* -- Added `dired-image-thumbnail-find-file` (bound to =f=), which visits the image at point with `find-file`, opening it in `image-mode` in a new window. This mirrors Dired's =f= (`dired-find-file`) and gives the full Emacs image-mode experience (zoom, save, convert), distinct from the split-screen display buffer used by navigation. Also available in the transient menu.
+
+*** Changes
+
+- *`?` now opens the transient menu* -- Previously bound to help (alongside =h=); =h= remains for help, =?= now invokes the transient menu (alongside =C-c .=).
+
 ** <2026-08-29 Sat> *2.2.3*
 
 Fix for Emacs lock-file residue (`.#filename.jpg' symlinks) left in

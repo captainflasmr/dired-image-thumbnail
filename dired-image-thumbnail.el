@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.2.3
+;; Version: 2.2.7
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -127,6 +127,18 @@
   "Whether to wrap thumbnails to fill the buffer width.
 When non-nil, thumbnails flow naturally and wrap based on window width.
 When nil, the standard `image-dired' line-up method is used."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-square-thumbnails t
+  "Whether to crop thumbnails to uniform squares for a tidier grid.
+When non-nil, each thumbnail is scaled to fill and center-cropped to
+a uniform square of `image-dired-thumb-size' pixels so that all
+thumbnails have the same dimensions and the grid lines up neatly.
+This requires ImageMagick (`mogrify' or `magick').  Existing
+thumbnails are cropped on the next refresh; use `G' (hard refresh) to
+regenerate them from scratch."
   :type 'boolean
   :safe #'booleanp
   :group 'dired-image-thumbnail)
@@ -429,7 +441,8 @@ Checks extension, minimum file size, and optionally magic bytes."
   (and (file-regular-p file)
        (member (downcase (or (file-name-extension file) ""))
                dired-image-thumbnail-image-extensions)
-       (or (zerop dired-image-thumbnail-minimum-file-size)
+       (or (null dired-image-thumbnail-minimum-file-size)
+           (zerop dired-image-thumbnail-minimum-file-size)
            (let ((attrs (file-attributes file)))
              (and attrs
                   (>= (file-attribute-size attrs)
@@ -701,7 +714,9 @@ line.  Otherwise, fall back to the original function."
              (rel-name (dired-image-thumbnail--relative-name file))
              (size (dired-image-thumbnail--format-file-size file))
              (dimensions (dired-image-thumbnail--format-image-dimensions file))
-             (quality (symbol-name dired-image-thumbnail-display-quality)))
+             (quality (symbol-name dired-image-thumbnail-display-quality))
+             (layout-info (if dired-image-thumbnail-square-thumbnails
+                              " [square]" " [natural]")))
         (concat
          "  "
          (propertize rel-name 'face 'image-dired-thumb-header-file-name)
@@ -715,6 +730,7 @@ line.  Otherwise, fall back to the original function."
          sort-info
          "  "
          (propertize (format "[%s]" quality) 'face 'shadow)
+         (propertize layout-info 'face 'shadow)
          (if (string-empty-p filter-info) "" (format "  %s" filter-info))
          marked-info))
     ;; Fall back to original function
@@ -734,6 +750,64 @@ accumulate as residue in image directories."
     (apply orig-fun args)))
 
 ;;; Display functions
+
+;; Thumbnail generation in image-dired is asynchronous: jobs are queued
+;; and run by subprocesses, so a freshly queued thumbnail file may not
+;; exist yet when we want to crop it.
+(defvar image-dired-queue)
+(defvar image-dired-queue-active-jobs)
+
+(defun dired-image-thumbnail--wait-for-thumbnails (&optional seconds)
+  "Wait for image-dired's asynchronous thumbnail queue to drain.
+image-dired generates thumbnails asynchronously (jobs are queued and
+run by subprocesses), so a freshly queued thumbnail file may not
+exist yet.  Wait, keeping Emacs responsive, until `image-dired-queue'
+is empty and `image-dired-queue-active-jobs' is zero, or until
+SECONDS (default 120) elapse.  Returns non-nil if the queue drained."
+  (let ((waited 0)
+        (limit (or seconds 120)))
+    (while (and (or image-dired-queue (> image-dired-queue-active-jobs 0))
+                (< waited limit))
+      (sit-for 0.05)
+      (setq waited (+ waited 0.05)))
+    (and (null image-dired-queue) (= image-dired-queue-active-jobs 0))))
+
+(defun dired-image-thumbnail--crop-thumb-to-square (thumb-file)
+  "Crop THUMB-FILE in place to a uniform square using ImageMagick.
+The target size is `image-dired--thumb-size' (or
+`image-dired-thumb-size', falling back to the display size or 128
+if either is nil).  Uses -thumbnail with
+the `^' flag to scale-to-fill, then center-crops to an exact square,
+so every thumbnail has the same dimensions for a tidy grid.
+If the file is already the target size, missing, or ImageMagick is
+unavailable, do nothing."
+  (when (file-exists-p thumb-file)
+    (let ((target (or (and (fboundp 'image-dired--thumb-size)
+                           (image-dired--thumb-size))
+                      (and (numberp dired-image-thumbnail--display-size)
+                           dired-image-thumbnail--display-size)
+                      (and (numberp image-dired-thumb-size)
+                           image-dired-thumb-size)
+                      128))
+          (size (ignore-errors (image-size (create-image thumb-file) t))))
+      (when (and size (> (car size) 0) (> (cdr size) 0)
+                 (not (and (= (car size) target)
+                           (= (cdr size) target))))
+        (let ((mogrify-cmd (cond
+                             ((executable-find "mogrify") "mogrify")
+                             ((executable-find "magick") "magick")
+                             (t nil))))
+          (when mogrify-cmd
+            (let* ((thumb-spec (format "%dx%d^" target target))
+                   (extent-spec (format "%dx%d" target target))
+                   (args (if (string= mogrify-cmd "magick")
+                             (list "mogrify" "-thumbnail" thumb-spec
+                                   "-gravity" "center"
+                                   "-extent" extent-spec thumb-file)
+                           (list "-thumbnail" thumb-spec
+                                 "-gravity" "center"
+                                 "-extent" extent-spec thumb-file))))
+              (apply #'call-process mogrify-cmd nil nil nil args))))))))
 
 (defun dired-image-thumbnail-refresh (&optional preferred-target)
   "Refresh the thumbnail display with current images.
@@ -770,19 +844,85 @@ after refreshing. Otherwise, try to maintain position on the current file."
       (let ((filtered (dired-image-thumbnail--filter-images all-images)))
         (setq dired-image-thumbnail--current-images
               (dired-image-thumbnail--sort-images filtered)))
+      ;; Ensure valid thumbnail geometry variables: these can be nil if
+      ;; they were bound to nil before image-dired loaded (the defcustom
+      ;; does not repair a non-void nil).  image-dired's own line-up
+      ;; functions use them in arithmetic unguarded (e.g.
+      ;; (* 2 image-dired-thumb-relief) in image-dired-line-up-dynamic),
+      ;; which signals `wrong-type-argument' -- so repair them
+      ;; buffer-locally before any thumbnail work.
+      (unless (numberp image-dired-thumb-size)
+        (setq-local image-dired-thumb-size
+                    (or (and (fboundp 'image-dired--thumb-size)
+                             (image-dired--thumb-size))
+                        128)))
+      (unless (numberp image-dired-thumb-relief)
+        (setq-local image-dired-thumb-relief 2))
+      (unless (numberp image-dired-thumb-margin)
+        (setq-local image-dired-thumb-margin 2))
+      (unless (numberp image-dired-thumbs-per-row)
+        (setq-local image-dired-thumbs-per-row 3))
       ;; Temporarily override thumb size if needed
       (let ((standard-size image-dired-thumb-size))
-        (when (and display-size (/= display-size standard-size))
+        (when (and display-size (numberp standard-size)
+                   (/= display-size standard-size))
           (setq-local image-dired-thumb-size display-size))
         ;; Insert thumbnails using image-dired's standard function
         ;; This ensures proper marking support
-        (dolist (file dired-image-thumbnail--current-images)
-          (let ((thumb-file (image-dired-thumb-name file)))
-            ;; Create thumbnail if it doesn't exist
-            (unless (file-exists-p thumb-file)
-              (image-dired-create-thumb file thumb-file))
-            ;; Insert with all three required arguments
-            (image-dired-insert-thumbnail thumb-file file dired-buf))))
+        (when dired-image-thumbnail-square-thumbnails
+          (clear-image-cache))
+        ;; Pre-count thumbnails that need work (creation and cropping
+        ;; counted as separate items so the total matches the number of
+        ;; progress updates exactly) and show a progress bar only when
+        ;; there is actual work.  An explicit running counter is passed
+        ;; to `progress-reporter-update': relying on the nil-increment
+        ;; behaviour breaks in Emacs 30 once the value reaches
+        ;; max-value (nil is then passed through to
+        ;; `progress-reporter-do-update', signalling
+        ;; wrong-type-argument).
+         (let* ((work-needed 0)
+                (work-done 0)
+                (queued 0)
+                (progress nil))
+           (dolist (file dired-image-thumbnail--current-images)
+             (let ((thumb-file (image-dired-thumb-name file)))
+               (when (not (file-exists-p thumb-file))
+                 (setq work-needed (1+ work-needed)))
+               (when dired-image-thumbnail-square-thumbnails
+                 (setq work-needed (1+ work-needed)))))
+           (when (> work-needed 0)
+             (setq progress (make-progress-reporter
+                             (format "Generating %d thumbnail%s..."
+                                     work-needed
+                                     (if (= work-needed 1) "" "s"))
+                             0 work-needed)))
+           ;; Phase 1: queue generation for missing thumbnails.
+           (dolist (file dired-image-thumbnail--current-images)
+             (let ((thumb-file (image-dired-thumb-name file)))
+               (unless (file-exists-p thumb-file)
+                 (image-dired-create-thumb file thumb-file)
+                 (setq queued (1+ queued))
+                 (setq work-done (1+ work-done))
+                 (when progress (progress-reporter-update progress work-done)))))
+           ;; Phase 2: image-dired generates thumbnails asynchronously,
+           ;; so wait for the queue to drain before cropping.  Without
+           ;; this a freshly queued thumbnail does not exist yet and the
+           ;; crop is silently skipped, leaving non-square thumbnails on
+           ;; a first run with an empty cache.
+           (when (and dired-image-thumbnail-square-thumbnails (> queued 0))
+             (dired-image-thumbnail--wait-for-thumbnails))
+           ;; Phase 3: crop to uniform squares (when enabled).
+           (when dired-image-thumbnail-square-thumbnails
+             (dolist (file dired-image-thumbnail--current-images)
+               (dired-image-thumbnail--crop-thumb-to-square
+                (image-dired-thumb-name file))
+               (setq work-done (1+ work-done))
+               (when progress (progress-reporter-update progress work-done))))
+           ;; Phase 4: insert with all three required arguments.
+           (dolist (file dired-image-thumbnail--current-images)
+             (image-dired-insert-thumbnail
+              (image-dired-thumb-name file) file dired-buf))
+           (when progress (progress-reporter-done progress))))
       ;; Line up
       (if dired-image-thumbnail-wrap-display
           (progn
@@ -1172,6 +1312,17 @@ ACTION is `mark' or `unmark'."
 
 ;;; File operations
 
+(defun dired-image-thumbnail-find-file ()
+  "Open the image at point in its own buffer, like Dired's `f'.
+Visits the file with `find-file', opening it in `image-mode' in a
+new window.  This is distinct from the split-screen display buffer
+used by navigation; it gives you the full Emacs image-mode experience
+\(zoom, save, convert, etc.)."
+  (interactive)
+  (if-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
+      (find-file file)
+    (user-error "No image at point")))
+
 (defun dired-image-thumbnail-goto-dired ()
   "Switch to the associated Dired buffer."
   (interactive)
@@ -1277,6 +1428,18 @@ the system default application."
   (dired-image-thumbnail-refresh)
   (message "Wrap display: %s" (if dired-image-thumbnail-wrap-display "ON" "OFF")))
 
+(defun dired-image-thumbnail-toggle-square-thumbnails ()
+  "Toggle square thumbnail cropping.
+When enabled, thumbnails are center-cropped to squares for a tidier grid."
+  (interactive)
+  (unless dired-image-thumbnail--all-images
+    (dired-image-thumbnail--initialize-buffer))
+  (setq dired-image-thumbnail-square-thumbnails
+        (not dired-image-thumbnail-square-thumbnails))
+  (dired-image-thumbnail-refresh)
+  (message "Square thumbnails: %s"
+           (if dired-image-thumbnail-square-thumbnails "ON" "OFF")))
+
 ;;; Other commands
 
 (defun dired-image-thumbnail-help ()
@@ -1303,6 +1466,7 @@ the system default application."
     (princ "  B            Block mark: mark all images in region\n")
     (princ "               Set region with C-SPC, move, then B\n\n")
     (princ "File Operations:\n")
+    (princ "  f            Open image in its own buffer (like Dired f)\n")
     (princ "  D            Delete image at point\n")
     (princ "  C-d          Delete image and move to next\n")
     (princ "  x            Delete marked images\n")
@@ -1311,6 +1475,7 @@ the system default application."
     (princ "  r, g         Refresh display\n")
     (princ "  G            Hard refresh (clear cache and reload)\n")
     (princ "  w            Toggle wrap mode\n")
+    (princ "  #            Toggle square thumbnails\n")
     (princ "  Q            Cycle display quality (full/high/fast/faster/draft)\n\n")
     (princ "Sorting (s prefix):\n")
     (princ "  sb           Sort by Dired buffer order\n")
@@ -1542,6 +1707,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "/") dired-image-thumbnail-filter-map)
     (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
     (define-key image-dired-thumbnail-mode-map (kbd "w") #'dired-image-thumbnail-toggle-wrap)
+    (define-key image-dired-thumbnail-mode-map (kbd "#") #'dired-image-thumbnail-toggle-square-thumbnails)
     (define-key image-dired-thumbnail-mode-map (kbd "r") #'dired-image-thumbnail-refresh)
     (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)
     (define-key image-dired-thumbnail-mode-map (kbd "G") #'dired-image-thumbnail-hard-refresh)
@@ -1552,6 +1718,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
     (define-key image-dired-thumbnail-mode-map (kbd "B") #'dired-image-thumbnail-mark-region)
     ;; File operations
+    (define-key image-dired-thumbnail-mode-map (kbd "f") #'dired-image-thumbnail-find-file)
     (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
     (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)
     (define-key image-dired-thumbnail-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-and-next)
@@ -1828,7 +1995,7 @@ from `dired-image-thumbnail' after buffers have been created."
     (delete-other-windows)
     (if (eq layout 'thumb-only)
         (switch-to-buffer thumb-buf)
-      (let* ((ratio dired-image-thumbnail-window-ratio)
+      (let* ((ratio (or dired-image-thumbnail-window-ratio 0.4))
              (horizontal (memq layout '(left-right right-left)))
              (thumb-first (memq layout '(left-right top-bottom)))
              (img-buf (get-buffer-create image-dired-display-image-buffer))
@@ -1880,7 +2047,7 @@ is idempotent and can be re-run to track changes to
     (let* ((layout dired-image-thumbnail-window-layout)
            (horizontal (memq layout '(left-right right-left)))
            (thumb-first (memq layout '(left-right top-bottom)))
-           (ratio dired-image-thumbnail-window-ratio)
+           (ratio (or dired-image-thumbnail-window-ratio 0.4))
            (thumb-dir (if thumb-first
                           (if horizontal 'left 'above)
                         (if horizontal 'right 'below)))
