@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.2.7
+;; Version: 2.2.9
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -139,6 +139,37 @@ thumbnails have the same dimensions and the grid lines up neatly.
 This requires ImageMagick (`mogrify' or `magick').  Existing
 thumbnails are cropped on the next refresh; use `G' (hard refresh) to
 regenerate them from scratch."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'dired-image-thumbnail)
+
+(defface dired-image-thumbnail-current-thumbnail
+  '((((class color) (background light)) (:box (:line-width 3 :color "dark orange")))
+    (((class color) (background dark)) (:box (:line-width 3 :color "yellow")))
+    (t (:box (:line-width 3))))
+  "Face used to highlight the currently selected thumbnail.
+The default is a thick box so the selection is clearly visible
+regardless of theme.  Customize this face to change the colour or
+width, or set `dired-image-thumbnail-highlight-current-thumbnail' to
+nil to disable the highlight entirely."
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-highlight-current-thumbnail t
+  "Whether to highlight the currently selected thumbnail.
+When non-nil, the thumbnail at point is outlined using the
+`dired-image-thumbnail-current-thumbnail' face, making the selection
+clear regardless of the current theme."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-highlight-cursor t
+  "Whether to colour the cursor in the thumbnail buffer.
+When non-nil, the cursor is recoloured to match the
+`dired-image-thumbnail-current-thumbnail' highlight, making it easier
+to spot.  The colour is derived from that face's :box attribute, so
+customising the face also changes the cursor.  Applied buffer-locally,
+so only thumbnail buffers are affected."
   :type 'boolean
   :safe #'booleanp
   :group 'dired-image-thumbnail)
@@ -628,6 +659,10 @@ initialised before refreshing."
 (defun dired-image-thumbnail--initialize-buffer ()
   "Initialize dired-image-thumbnail variables in the current thumbnail buffer.
 This is called via hook when entering `image-dired-thumbnail-mode'."
+  ;; Keep the current-thumbnail highlight in step with point movement.
+  (add-hook 'post-command-hook #'dired-image-thumbnail--update-current-highlight nil t)
+  ;; Colour the cursor to match, buffer-locally.
+  (dired-image-thumbnail--setup-cursor)
   ;; Skip if already initialized and has images
   (unless (and dired-image-thumbnail--all-images
                dired-image-thumbnail--dired-buffer)
@@ -809,6 +844,48 @@ unavailable, do nothing."
                                  "-extent" extent-spec thumb-file))))
               (apply #'call-process mogrify-cmd nil nil nil args))))))))
 
+(defvar-local dired-image-thumbnail--current-overlay nil
+  "Overlay highlighting the currently selected thumbnail.")
+
+(defun dired-image-thumbnail--update-current-highlight ()
+  "Outline the thumbnail at point with `dired-image-thumbnail-current-thumbnail'.
+The highlight is an overlay on the character carrying the image, so it
+is redrawn as point moves.  Installed on `post-command-hook' in
+thumbnail buffers and called directly after a refresh."
+  (when (derived-mode-p 'image-dired-thumbnail-mode)
+    ;; Drop the previous overlay.  This also clears a stale overlay left
+    ;; behind by `erase-buffer' during a refresh.
+    (when (overlayp dired-image-thumbnail--current-overlay)
+      (delete-overlay dired-image-thumbnail--current-overlay)
+      (setq dired-image-thumbnail--current-overlay nil))
+    (when (and dired-image-thumbnail-highlight-current-thumbnail
+               (get-text-property (point) 'original-file-name)
+               (< (point) (point-max)))
+      (let ((ov (make-overlay (point) (1+ (point)) nil t)))
+        (overlay-put ov 'face 'dired-image-thumbnail-current-thumbnail)
+        (setq dired-image-thumbnail--current-overlay ov)))))
+
+(defun dired-image-thumbnail--cursor-remap ()
+  "Return a `face-remapping-alist' entry colouring the cursor like the highlight.
+Derives the colour from the :box attribute of
+`dired-image-thumbnail-current-thumbnail', so customising that face
+also changes the cursor colour.  Returns nil if no colour is set."
+  (let* ((box (face-attribute 'dired-image-thumbnail-current-thumbnail :box))
+         (color (cond ((stringp box) box)
+                      ((consp box) (plist-get box :color))
+                      (t nil))))
+    (when (stringp color)
+      `(cursor . (:background ,color)))))
+
+(defun dired-image-thumbnail--setup-cursor ()
+  "Recolour the cursor, buffer-locally, to match the current-thumbnail highlight."
+  (let ((remap (and dired-image-thumbnail-highlight-cursor
+                    (dired-image-thumbnail--cursor-remap))))
+    (setq-local face-remapping-alist
+                (if remap
+                    (cons remap (assq-delete-all 'cursor face-remapping-alist))
+                  (assq-delete-all 'cursor face-remapping-alist)))))
+
 (defun dired-image-thumbnail-refresh (&optional preferred-target)
   "Refresh the thumbnail display with current images.
 If PREFERRED-TARGET is provided, attempt to move point to that file
@@ -944,8 +1021,11 @@ after refreshing. Otherwise, try to maintain position on the current file."
                 (setq pos (next-single-property-change
                            pos 'original-file-name nil (point-max)))))
             (goto-char (or found (point-min))))
-        (goto-char (point-min)))
-      (image-dired--update-header-line))))
+         (goto-char (point-min)))
+       (image-dired--update-header-line)
+       ;; Re-apply the current-thumbnail highlight: `erase-buffer' above
+       ;; removed the previous overlay.
+       (dired-image-thumbnail--update-current-highlight))))
 
 (defun dired-image-thumbnail-hard-refresh ()
   "Refresh thumbnails by clearing the cache and reloading.
@@ -2105,6 +2185,15 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
   (remove-hook 'image-dired-thumbnail-mode-hook
                #'dired-image-thumbnail--initialize-buffer)
   (remove-hook 'kill-emacs-hook #'dired-image-thumbnail-clear-preview-cache)
+  ;; Remove the current-thumbnail highlight from any thumbnail buffers.
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (derived-mode-p 'image-dired-thumbnail-mode)
+        (remove-hook 'post-command-hook
+                     #'dired-image-thumbnail--update-current-highlight t)
+        (when (overlayp dired-image-thumbnail--current-overlay)
+          (delete-overlay dired-image-thumbnail--current-overlay))
+        (kill-local-variable 'face-remapping-alist))))
   (dired-image-thumbnail-clear-preview-cache)
   ;; Drop the display-buffer rules we installed.
   (setq display-buffer-alist

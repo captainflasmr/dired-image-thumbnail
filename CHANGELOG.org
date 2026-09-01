@@ -11,6 +11,15 @@ project's main git repository.
 
 * Versions
 
+** <2026-08-29 Sat> *2.2.8*
+
+Prominent, customisable highlight for the current thumbnail.
+
+*** New Features
+
+- *Current thumbnail highlight* -- The selected thumbnail is now outlined with the new customisable face =dired-image-thumbnail-current-thumbnail=, so the selection is clearly visible regardless of theme (previous indication depended on the theme and could be a thin 1px border). Defaults to a thick box -- dark orange on light backgrounds, yellow on dark. Customise the face to change colour/width, or set =dired-image-thumbnail-highlight-current-thumbnail= to =nil= to disable. The highlight follows point via a buffer-local =post-command-hook= and is re-applied after each refresh.
+- *Matching cursor colour* -- The cursor in the thumbnail buffer is now recoloured to match the highlight, making it easier to spot. The colour is derived from the =dired-image-thumbnail-current-thumbnail= face's :box attribute (so customising the face also changes the cursor) and applied buffer-locally via =face-remapping-alist=, so only thumbnail buffers are affected. Disable with =dired-image-thumbnail-highlight-cursor= =nil=.
+
 ** <2026-08-29 Sat> *2.2.7*
 
 Fix square thumbnails on first run with an empty cache.
