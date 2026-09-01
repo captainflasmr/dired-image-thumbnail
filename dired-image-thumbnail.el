@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.5.0
+;; Version: 2.6.0
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -32,7 +32,8 @@
 ;; - Filtering: Filter by name regexp, file size range
 ;; - Subdirectory support: Works with inserted subdirectories
 ;; - Wrap display mode: Thumbnails flow naturally and wrap to window width
-;; - Enhanced header line: Shows current image info with sort/filter status
+;; - Enhanced header line: Shows current image info, directory location,
+;;   sort/filter status
 ;; - Marking: Uses built-in image-dired marking with visual border
 ;; - File operations: Delete images, navigate to dired buffer
 ;; - Window layout: Automatic split-screen layout (thumbnails left, image right)
@@ -152,6 +153,19 @@ The default is a thick box so the selection is clearly visible
 regardless of theme.  Customize this face to change the colour or
 width, or set `dired-image-thumbnail-highlight-current-thumbnail' to
 nil to disable the highlight entirely."
+  :group 'dired-image-thumbnail)
+
+(defface dired-image-thumbnail-header-info
+  '((((class color) (background light)) (:foreground "black"))
+    (((class color) (background dark)) (:foreground "white"))
+    (t nil))
+  "Face for directory, dimension, quality and status information
+in the thumbnail header line.
+Uses a maximum-contrast foreground colour -- black on light
+backgrounds, white on dark ones -- so the information stays
+clearly readable on most themes.  Unspecified attributes
+inherit from the `header-line' face.  Customize this face to
+adjust the colours."
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-highlight-current-thumbnail t
@@ -733,6 +747,17 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
 
 ;;; Header line
 
+(defun dired-image-thumbnail--format-directory (file)
+  "Return an abbreviated directory location for the header line.
+Uses the directory containing FILE when known, otherwise falls
+back to the buffer's source directory.  Returns an empty string
+when neither is available."
+  (abbreviate-file-name
+   (or (and file (not (string-empty-p file))
+            (file-name-directory (expand-file-name file)))
+       dired-image-thumbnail--source-dir
+       "")))
+
 (defun dired-image-thumbnail--format-properties-string (orig-fun buf file image-count props comment)
   "Advice around `image-dired-format-properties-string' for the header line.
 ORIG-FUN is the original function.  BUF, FILE, IMAGE-COUNT, PROPS, and
@@ -748,11 +773,13 @@ line.  Otherwise, fall back to the original function."
                                         'ascending)
                                     "<" ">")))
              (filter-info (dired-image-thumbnail--format-active-filters))
-             (marked-count (dired-image-thumbnail--count-marked))
-             (marked-info (if (> marked-count 0)
-                              (format " [%d marked]" marked-count)
-                            ""))
+              (marked-count (dired-image-thumbnail--count-marked))
+              (marked-info (if (> marked-count 0)
+                               (propertize (format " [%d marked]" marked-count)
+                                           'face 'dired-image-thumbnail-header-info)
+                             ""))
              (rel-name (dired-image-thumbnail--relative-name file))
+             (dir (dired-image-thumbnail--format-directory file))
              (size (dired-image-thumbnail--format-file-size file))
              (dimensions (dired-image-thumbnail--format-image-dimensions file))
              (quality (symbol-name dired-image-thumbnail-display-quality))
@@ -760,19 +787,24 @@ line.  Otherwise, fall back to the original function."
                               " [square]" " [natural]")))
         (concat
          "  "
+         (propertize dir 'face 'dired-image-thumbnail-header-info)
+         "  "
          (propertize rel-name 'face 'image-dired-thumb-header-file-name)
          "  "
          (propertize image-count 'face 'image-dired-thumb-header-image-count)
          "  "
          (propertize size 'face 'image-dired-thumb-header-file-size)
          "  "
-         (propertize dimensions 'face 'shadow)
+         (propertize dimensions 'face 'dired-image-thumbnail-header-info)
          "  "
-         sort-info
+         (propertize sort-info 'face 'dired-image-thumbnail-header-info)
          "  "
-         (propertize (format "[%s]" quality) 'face 'shadow)
-         (propertize layout-info 'face 'shadow)
-         (if (string-empty-p filter-info) "" (format "  %s" filter-info))
+         (propertize (format "[%s]" quality) 'face 'dired-image-thumbnail-header-info)
+         (propertize layout-info 'face 'dired-image-thumbnail-header-info)
+         (if (string-empty-p filter-info)
+             ""
+           (propertize (format "  %s" filter-info)
+                       'face 'dired-image-thumbnail-header-info))
          marked-info))
     ;; Fall back to original function
     (funcall orig-fun buf file image-count props comment)))

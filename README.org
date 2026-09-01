@@ -13,7 +13,7 @@
 - *Subdirectory support* - Works seamlessly with Dired's inserted subdirectories
 - *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
-- *Enhanced header line* - Shows current image info, dimensions, sort/filter status, and quality level
+- *Enhanced header line* - Shows current image info, directory location, dimensions, sort/filter status, and quality level
 - *Configurable window layout* - Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
 - *Display quality levels* - Five quality tiers (full/high/fast/faster/draft) for speed vs fidelity trade-off
 - *External-tool preview generation* - Uses =djpeg=/=cjpeg= or =magick= for genuinely faster image previews
@@ -226,6 +226,7 @@ The enhanced header line displays:
 
 - *Mark indicator* - A =*= if the current image is marked
 - *Filename* - Relative to source directory when subdirectories are inserted
+- *Directory* - Location of the current image, abbreviated (e.g., =~/Photos/=); falls back to the source directory
 - *Image count* - Current position / total (e.g., =23/156=)
 - *Dimensions* - Width × Height in pixels (e.g., =1920x1080=)
 - *File size* - Human-readable size (e.g., =2.4M=)

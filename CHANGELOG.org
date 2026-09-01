@@ -11,6 +11,15 @@ project's main git repository.
 
 * Versions
 
+** <2026-09-01 Tue> *2.6.0*
+
+Directory location shown in the thumbnail header line.
+
+*** New Features
+
+- *Directory in header line* -- The enhanced header line now shows the directory location of the current image before the file name, abbreviated (e.g. =~/Photos/=). It falls back to the buffer's source directory when no image is at point. With subdirectories inserted, this makes it clear which directory the image at point lives in.
+- *Readable header line on any theme* -- The directory, dimensions, sort, quality, layout, filter and marked-count segments no longer use the dim =shadow= face (or no face at all). They now share the new customisable face =dired-image-thumbnail-header-info=, which uses a maximum-contrast foreground -- black on light backgrounds, white on dark ones -- so the header line stays clearly readable on most themes. Customise the face to adjust.
+
 ** <2026-08-29 Sat> *2.5.0*
 
 Single window thumbnail layout by default.

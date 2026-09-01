@@ -90,7 +90,7 @@ subdirectory management, and flexible display options to the standard
 @item
 @strong{Wrap display mode} --- Thumbnails flow naturally and wrap to window width
 @item
-@strong{Enhanced header line} --- Shows current image info, dimensions, sort/filter status, and quality level
+@strong{Enhanced header line} --- Shows current image info, directory location, dimensions, sort/filter status, and quality level
 @item
 @strong{Configurable window layout} --- Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
 @item
@@ -445,6 +445,8 @@ The enhanced header line displays:
 @strong{Mark indicator} --- A @samp{*} if the current image is marked
 @item
 @strong{Filename} --- Relative to source directory when subdirectories are inserted
+@item
+@strong{Directory} --- Location of the current image, abbreviated (e.g., @samp{~/Photos/}); falls back to the source directory
 @item
 @strong{Image count} --- Current position / total (e.g., @samp{23/156})
 @item
