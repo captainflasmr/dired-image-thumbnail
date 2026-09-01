@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.4.0
+;; Version: 2.5.0
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -174,24 +174,24 @@ so only thumbnail buffers are affected."
   :safe #'booleanp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-window-layout 'left-right
+(defcustom dired-image-thumbnail-window-layout 'thumb-only
   "Window layout used when launching `dired-image-thumbnail'.
 
-  `left-right'  - Thumbnails on the left, image on the right (default).
+  `thumb-only'  - Only show the thumbnail buffer in a single window (default).
+  `left-right'  - Thumbnails on the left, image on the right.
   `right-left'  - Image on the left, thumbnails on the right.
   `top-bottom'  - Thumbnails on top, image on the bottom.
   `bottom-top'  - Image on top, thumbnails on the bottom.
-  `thumb-only'  - Only show the thumbnail buffer; no image window.
   nil           - Do not manage windows; use Emacs default placement
                   or your own `display-buffer-alist' rules.
 
 The thumbnail/image size ratio is controlled by
 `dired-image-thumbnail-window-ratio'."
-  :type '(choice (const :tag "Thumbnails left, image right" left-right)
+  :type '(choice (const :tag "Thumbnails only (single window)" thumb-only)
+                 (const :tag "Thumbnails left, image right" left-right)
                  (const :tag "Image left, thumbnails right" right-left)
                  (const :tag "Thumbnails top, image bottom" top-bottom)
                  (const :tag "Image top, thumbnails bottom" bottom-top)
-                 (const :tag "Thumbnails only" thumb-only)
                  (const :tag "Manual (use display-buffer-alist)" nil))
   :safe #'symbolp
   :group 'dired-image-thumbnail)
@@ -1738,8 +1738,11 @@ enhanced features like sorting and filtering."
       (with-current-buffer thumb-buf
         (dired-image-thumbnail-refresh)
         (goto-char (point-min))
-        ;; Display the first image
-        (dired-image-thumbnail--display-this)))))
+        ;; Display the first image only when auto-display is enabled and
+        ;; layout is configured to show the image window.
+        (when (and dired-image-thumbnail-auto-display-on-navigate
+                   (not (eq dired-image-thumbnail-window-layout 'thumb-only)))
+          (dired-image-thumbnail--display-this))))))
 
 ;;;###autoload
 (defun dired-image-thumbnail-insert-subdir-recursive (&optional max-depth)
@@ -2083,6 +2086,8 @@ what you want when marking a batch of files for rotation."
   (setq dired-image-thumbnail-auto-display-on-navigate
         (not dired-image-thumbnail-auto-display-on-navigate))
   (dired-image-thumbnail--sync-marking-shows-next)
+  (when dired-image-thumbnail-auto-display-on-navigate
+    (dired-image-thumbnail--display-this))
   (message "Auto-display on navigate: %s"
            (if dired-image-thumbnail-auto-display-on-navigate "ON" "OFF")))
 

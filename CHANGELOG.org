@@ -11,6 +11,15 @@ project's main git repository.
 
 * Versions
 
+** <2026-08-29 Sat> *2.5.0*
+
+Single window thumbnail layout by default.
+
+*** Changes
+
+- *Single window by default (`thumb-only`)* -- `dired-image-thumbnail-window-layout` now defaults to `thumb-only`, presenting thumbnails in a single window across the frame without automatically splitting to show the full-size image.
+- *Deferred image display* -- Launching `dired-image-thumbnail` no longer pops open an image display window unless auto-display is enabled and a split layout is configured. You can press `a` to toggle auto-display on the fly (which immediately shows the current image), press `RET` / `C-<return>` to view in the display buffer, or press `f` to open the file in `image-mode`.
+
 ** <2026-08-29 Sat> *2.4.0*
 
 Move images to another directory.
