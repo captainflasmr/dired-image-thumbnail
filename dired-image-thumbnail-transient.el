@@ -78,7 +78,9 @@
 (declare-function dired-image-thumbnail-help "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-mark-region "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-find-file "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-move "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-square-thumbnails "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-toggle-auto-display "dired-image-thumbnail")
 
 ;;; Predicates
 
@@ -167,7 +169,8 @@
    ("-" "Decrease size" dired-image-thumbnail-decrease-size :transient t)]
   ["Toggle"
    ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)
-   ("#" "Square thumbnails" dired-image-thumbnail-toggle-square-thumbnails :transient nil)]
+   ("#" "Square thumbnails" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
+   ("a" "Auto-display on navigate" dired-image-thumbnail-toggle-auto-display :transient nil)]
   ["Refresh"
    ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)
    ("g" "Refresh display" dired-image-thumbnail-refresh :transient nil)
@@ -201,11 +204,13 @@
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
     ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)
-    ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)]
-   ["Other"
-    ("f" "Open image (find-file)" dired-image-thumbnail-find-file :transient nil)
-    ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
-    ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
+     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
+     ("a" "Toggle auto-display" dired-image-thumbnail-toggle-auto-display :transient nil)]
+    ["Other"
+     ("f" "Open image (find-file)" dired-image-thumbnail-find-file :transient nil)
+     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
+     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
+     ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
      ("A" "Auto-accept" dired-image-thumbnail-transient-toggle-auto-accept
       :transient t)
     ("?" "Help" dired-image-thumbnail-help :transient nil)

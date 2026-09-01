@@ -11,6 +11,31 @@ project's main git repository.
 
 * Versions
 
+** <2026-08-29 Sat> *2.4.0*
+
+Move images to another directory.
+
+*** New Features
+
+- *Move to directory (v)* -- Added `dired-image-thumbnail-move` (bound to =v=, also in the transient menu under Other). It moves the marked images -- or, when nothing is marked, the image at point -- into a directory chosen with `read-directory-name', defaulting to the source directory. The target directory is created if needed (confirming first), existing destinations are overwritten only after confirmation (both controlled by `dired-image-thumbnail-auto-accept'), and the Dired buffer and thumbnail display are refreshed afterwards.
+
+** <2026-08-29 Sat> *2.3.1*
+
+Deletion now respects the auto-display setting.
+
+*** Bug Fixes
+
+- *Deletion forced a display* -- `C-d` (`dired-image-thumbnail-delete-and-next` and `dired-image-thumbnail-delete-image-and-next`) always displayed the next image, ignoring `dired-image-thumbnail-auto-display-on-navigate`. With auto-display off, deleting now only moves to the next thumbnail, matching the behaviour of navigation and marking.
+
+** <2026-08-29 Sat> *2.3.0*
+
+Toggle for automatic image display while navigating.
+
+*** New Features
+
+- *Auto-display toggle (a)* -- Added `dired-image-thumbnail-toggle-auto-display` (bound to =a=, also in the transient Display menu). It toggles `dired-image-thumbnail-auto-display-on-navigate`, so you can step through or mark thumbnails without paying the cost of decoding each image -- useful when marking many files for a batch operation such as rotation.
+- *Marking overhead follows the toggle* -- Turn the toggle off and image-dired's `image-dired-marking-shows-next` is set buffer-locally to nil, so marking/unmarking/flagging advances to the next thumbnail *without* displaying it. Previously that display was driven by image-dired directly and ignored this package's auto-display setting, so disabling auto-display alone did not remove the marking overhead. Set on buffer init and whenever the toggle is used.
+
 ** <2026-08-29 Sat> *2.2.8*
 
 Prominent, customisable highlight for the current thumbnail.

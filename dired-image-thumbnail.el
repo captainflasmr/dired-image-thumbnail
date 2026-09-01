@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025 James Dyer
 
 ;; Author: James Dyer
-;; Version: 2.2.9
+;; Version: 2.4.0
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
@@ -196,7 +196,7 @@ The thumbnail/image size ratio is controlled by
   :safe #'symbolp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-window-ratio 0.4
+(defcustom dired-image-thumbnail-window-ratio 0.3
   "Fraction of the frame given to the thumbnail buffer.
 The image buffer gets the remainder.  Only used when
 `dired-image-thumbnail-window-layout' is non-nil."
@@ -204,11 +204,15 @@ The image buffer gets the remainder.  Only used when
   :safe #'numberp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-auto-display-on-navigate t
+(defcustom dired-image-thumbnail-auto-display-on-navigate nil
   "Whether to automatically display full-size image when navigating thumbnails.
 When non-nil, pressing `n` or `p` in the thumbnail buffer automatically
-updates the image display buffer. When nil, you must press RET or
-C-<return> to view the full-size image."
+updates the image display buffer, and marking a file advances to the
+next thumbnail and displays it.  When nil, navigation and marking only
+move point, avoiding the cost of decoding each image -- useful when
+marking many files for a batch operation such as rotation.  Press RET
+or C-<return> to view the full-size image.
+Toggle interactively with `dired-image-thumbnail-toggle-auto-display'."
   :type 'boolean
   :safe #'booleanp
   :group 'dired-image-thumbnail)
@@ -663,6 +667,8 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
   (add-hook 'post-command-hook #'dired-image-thumbnail--update-current-highlight nil t)
   ;; Colour the cursor to match, buffer-locally.
   (dired-image-thumbnail--setup-cursor)
+  ;; Keep image-dired's mark-and-advance display in step with auto-display.
+  (dired-image-thumbnail--sync-marking-shows-next)
   ;; Skip if already initialized and has images
   (unless (and dired-image-thumbnail--all-images
                dired-image-thumbnail--dired-buffer)
@@ -1403,6 +1409,48 @@ used by navigation; it gives you the full Emacs image-mode experience
       (find-file file)
     (user-error "No image at point")))
 
+(defun dired-image-thumbnail-move (target-dir)
+  "Move the marked images, or the image at point, into TARGET-DIR.
+When images are marked in the associated Dired buffer those are moved,
+otherwise the image at point is.  TARGET-DIR is created if it does not
+exist (confirming first, see `dired-image-thumbnail-auto-accept').
+Files already present at the destination are overwritten only after
+confirmation.  The thumbnail display and the associated Dired buffer
+are refreshed afterwards."
+  (interactive
+   (list (read-directory-name "Move to directory: "
+                              (or dired-image-thumbnail--source-dir
+                                  default-directory))))
+  (let* ((files (dired-image-thumbnail-get-marked))
+         (target (file-name-as-directory (expand-file-name target-dir))))
+    (unless files
+      (user-error "No images to move"))
+    (unless (file-directory-p target)
+      (if (or dired-image-thumbnail-auto-accept
+              (yes-or-no-p (format "Create directory %s? " target)))
+          (make-directory target t)
+        (user-error "Aborted")))
+    (let ((moved 0))
+      (dolist (file files)
+        (let ((dest (expand-file-name (file-name-nondirectory file) target)))
+          (when (or (not (file-exists-p dest))
+                    dired-image-thumbnail-auto-accept
+                    (yes-or-no-p (format "%s exists; overwrite? " dest)))
+            (rename-file file dest t)
+            (setq moved (1+ moved))
+            (setq dired-image-thumbnail--current-images
+                  (remove file dired-image-thumbnail--current-images))
+            (setq dired-image-thumbnail--all-images
+                  (remove file dired-image-thumbnail--all-images)))))
+      ;; Refresh dired buffer
+      (when (and dired-image-thumbnail--dired-buffer
+                 (buffer-live-p dired-image-thumbnail--dired-buffer))
+        (with-current-buffer dired-image-thumbnail--dired-buffer
+          (revert-buffer)))
+      (dired-image-thumbnail-refresh)
+      (message "Moved %d image%s to %s"
+               moved (if (= moved 1) "" "s") target))))
+
 (defun dired-image-thumbnail-goto-dired ()
   "Switch to the associated Dired buffer."
   (interactive)
@@ -1547,8 +1595,9 @@ When enabled, thumbnails are center-cropped to squares for a tidier grid."
     (princ "               Set region with C-SPC, move, then B\n\n")
     (princ "File Operations:\n")
     (princ "  f            Open image in its own buffer (like Dired f)\n")
+    (princ "  v            Move image(s) to another directory\n")
     (princ "  D            Delete image at point\n")
-    (princ "  C-d          Delete image and move to next\n")
+    (princ "  C-d          Delete image and move to next (follows auto-display)\n")
     (princ "  x            Delete marked images\n")
     (princ "  d            Go to Dired buffer\n\n")
     (princ "Display:\n")
@@ -1556,6 +1605,7 @@ When enabled, thumbnails are center-cropped to squares for a tidier grid."
     (princ "  G            Hard refresh (clear cache and reload)\n")
     (princ "  w            Toggle wrap mode\n")
     (princ "  #            Toggle square thumbnails\n")
+    (princ "  a            Toggle auto-display on navigate\n")
     (princ "  Q            Cycle display quality (full/high/fast/faster/draft)\n\n")
     (princ "Sorting (s prefix):\n")
     (princ "  sb           Sort by Dired buffer order\n")
@@ -1799,6 +1849,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "B") #'dired-image-thumbnail-mark-region)
     ;; File operations
     (define-key image-dired-thumbnail-mode-map (kbd "f") #'dired-image-thumbnail-find-file)
+    (define-key image-dired-thumbnail-mode-map (kbd "v") #'dired-image-thumbnail-move)
     (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
     (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)
     (define-key image-dired-thumbnail-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-and-next)
@@ -1806,6 +1857,8 @@ keybindings will not be installed.  This can happen when `image-dired'\
     ;; Enhanced navigation (auto-display checked at runtime)
     (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
     (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
+    ;; Auto-display toggle (a)
+    (define-key image-dired-thumbnail-mode-map (kbd "a") #'dired-image-thumbnail-toggle-auto-display)
     ;; Display quality
     (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-cycle-display-quality)
     ;; External
@@ -2003,6 +2056,36 @@ Order: fast -> faster -> draft -> high -> full -> fast ..."
   (image-dired--update-header-line)
   (dired-image-thumbnail--display-this))
 
+(defun dired-image-thumbnail--sync-marking-shows-next ()
+  "Keep `image-dired-marking-shows-next' in step with auto-display.
+image-dired displays the next thumbnail after each mark/unmark/flag
+when that option is non-nil.  Mirror our own auto-display setting onto
+it, buffer-locally, so turning auto-display off also removes the
+display cost of marking a batch of files."
+  (when (boundp 'image-dired-marking-shows-next)
+    (setq-local image-dired-marking-shows-next
+                dired-image-thumbnail-auto-display-on-navigate)))
+
+(defun dired-image-thumbnail-toggle-auto-display ()
+  "Toggle automatic display of the full-size image while navigating.
+When enabled, moving to the next/previous thumbnail updates the image
+display buffer automatically.  When disabled, navigation, marking and
+deletion only move point, so you can step through, mark or delete many
+thumbnails without paying the cost of decoding each image.
+
+This also keeps image-dired's own mark-and-advance behaviour in step
+\(see `image-dired-marking-shows-next'): with auto-display off, marking
+a file advances to the next thumbnail without displaying it, which is
+what you want when marking a batch of files for rotation."
+  (interactive)
+  (unless dired-image-thumbnail--all-images
+    (dired-image-thumbnail--initialize-buffer))
+  (setq dired-image-thumbnail-auto-display-on-navigate
+        (not dired-image-thumbnail-auto-display-on-navigate))
+  (dired-image-thumbnail--sync-marking-shows-next)
+  (message "Auto-display on navigate: %s"
+           (if dired-image-thumbnail-auto-display-on-navigate "ON" "OFF")))
+
 (defun dired-image-thumbnail-next-image ()
   "Move to next thumbnail and optionally display full-size image.
 When `dired-image-thumbnail-auto-display-on-navigate' is non-nil,
@@ -2035,7 +2118,10 @@ This permanently deletes the file from disk and removes its thumbnail."
       (setq dired-image-thumbnail--all-images
             (remove file-name dired-image-thumbnail--all-images))
       (image-dired-delete-char)
-      (when (not (eobp))
+      ;; Respect the auto-display setting: when off, just move to the
+      ;; next thumbnail without decoding and displaying it.
+      (when (and (not (eobp))
+                 dired-image-thumbnail-auto-display-on-navigate)
         (dired-image-thumbnail--display-this))
       (message "Deleted %s" file-name))))
 
@@ -2060,7 +2146,9 @@ since the display buffer is not a file-visiting buffer."
           (setq dired-image-thumbnail--all-images
                 (remove current-file dired-image-thumbnail--all-images))
           (image-dired-forward-image)
-          (dired-image-thumbnail--display-this)))
+          ;; Respect the auto-display setting.
+          (when dired-image-thumbnail-auto-display-on-navigate
+            (dired-image-thumbnail--display-this))))
       (delete-file current-file t)
       (message "Deleted %s" current-file))))
 
