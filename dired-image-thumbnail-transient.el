@@ -70,7 +70,6 @@
 (declare-function dired-image-thumbnail-goto-dired "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-increase-size "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-decrease-size "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-toggle-wrap "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-refresh "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete-marked "dired-image-thumbnail")
@@ -142,10 +141,10 @@
 (transient-define-prefix dired-image-thumbnail-transient-sort ()
   "Sorting commands for image thumbnails."
   ["Sort By"
-    ("b" "Dired buffer order" dired-image-thumbnail-sort-by-dired :transient nil)
-    ("n" "Name" dired-image-thumbnail-sort-by-name :transient nil)
-    ("d" "Date modified" dired-image-thumbnail-sort-by-date :transient nil)
-    ("s" "Size" dired-image-thumbnail-sort-by-size :transient nil)]
+   ("b" "Dired buffer order" dired-image-thumbnail-sort-by-dired :transient nil)
+   ("n" "Name" dired-image-thumbnail-sort-by-name :transient nil)
+   ("d" "Date modified" dired-image-thumbnail-sort-by-date :transient nil)
+   ("s" "Size" dired-image-thumbnail-sort-by-size :transient nil)]
   ["Order"
    ("r" "Reverse order" dired-image-thumbnail-sort-reverse :transient nil)])
 
@@ -168,9 +167,8 @@
    ("+" "Increase size" dired-image-thumbnail-increase-size :transient t)
    ("-" "Decrease size" dired-image-thumbnail-decrease-size :transient t)]
   ["Toggle"
-   ("w" "Wrap mode" dired-image-thumbnail-toggle-wrap :transient nil)
    ("#" "Square thumbnails" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
-   ("a" "Auto-display on navigate" dired-image-thumbnail-toggle-auto-display :transient nil)]
+   ("F" "Follow (auto-display)" dired-image-thumbnail-toggle-auto-display :transient nil)]
   ["Refresh"
    ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)
    ("g" "Refresh display" dired-image-thumbnail-refresh :transient nil)
@@ -192,27 +190,26 @@
    ["Delete"
     ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
     ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]]
-   [["Marking"
-     ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
-     ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
-     ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
-     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
-     ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)
-     ("B" "Block mark (region)" dired-image-thumbnail-mark-region :transient nil)]
-["Display"
-    ("r" "Refresh" dired-image-thumbnail-refresh :transient nil)
+  [["Marking"
+    ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
+    ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
+    ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
+    ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
+    ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)
+    ("B" "Block mark (region)" dired-image-thumbnail-mark-region :transient nil)]
+   ["Display"
+    ("g" "Refresh" dired-image-thumbnail-refresh :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
-    ("w" "Toggle wrap" dired-image-thumbnail-toggle-wrap :transient nil)
-     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
-     ("a" "Toggle auto-display" dired-image-thumbnail-toggle-auto-display :transient nil)]
-    ["Other"
-     ("f" "Open image (find-file)" dired-image-thumbnail-find-file :transient nil)
-     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
-     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
-     ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
-     ("A" "Auto-accept" dired-image-thumbnail-transient-toggle-auto-accept
-      :transient t)
+    ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
+    ("F" "Toggle follow" dired-image-thumbnail-toggle-auto-display :transient nil)]
+   ["Other"
+    ("f" "Open image (find-file)" dired-image-thumbnail-find-file :transient nil)
+    ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
+    ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
+    ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
+    ("A" "Auto-accept" dired-image-thumbnail-transient-toggle-auto-accept
+     :transient t)
     ("?" "Help" dired-image-thumbnail-help :transient nil)
     ("q" "Quit menu" transient-quit-one)]])
 

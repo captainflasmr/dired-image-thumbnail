@@ -20,6 +20,14 @@ Directory location shown in the thumbnail header line.
 - *Directory in header line* -- The enhanced header line now shows the directory location of the current image before the file name, abbreviated (e.g. =~/Photos/=). It falls back to the buffer's source directory when no image is at point. With subdirectories inserted, this makes it clear which directory the image at point lives in.
 - *Readable header line on any theme* -- The directory, dimensions, sort, quality, layout, filter and marked-count segments no longer use the dim =shadow= face (or no face at all). They now share the new customisable face =dired-image-thumbnail-header-info=, which uses a maximum-contrast foreground -- black on light backgrounds, white on dark ones -- so the header line stays clearly readable on most themes. Customise the face to adjust.
 
+*** Changes
+
+- *=r= no longer refreshes* -- The =r= binding for =dired-image-thumbnail-refresh= has been removed; =g= remains the refresh key. =r= falls back to image-dired's own thumbnail bindings (where present, e.g. thumbnail rotation on some Emacs versions) instead of refreshing.
+- *Wrap toggle removed* -- The =w= key, the =dired-image-thumbnail-toggle-wrap= command and its transient-menu entries have been removed. Wrap display is still available by customising =dired-image-thumbnail-wrap-display=.
+- *Theme-aware highlight colour* -- The current-thumbnail outline is now drawn in the active theme's highlight colour (the background of the =highlight= face) instead of a fixed dark orange/yellow, with the outline made 2 pixels thicker (5px instead of 3px). An explicit =:color= on the face's =:box= still takes precedence, and colour-less displays fall back to orange/yellow.
+- *Fully monochrome header line* -- The file name, image count and file size segments now also use the =dired-image-thumbnail-header-info= face instead of the themed =image-dired-thumb-header-*= faces, so the entire header line is monochromatic (high-contrast black on light backgrounds, white on dark) and stays clear no matter how a theme styles the header.
+- *Follow toggle on =F=* -- The auto-display toggle has moved from =a= to =F=, acting like a follow on/off switch for showing the full-size image while navigating. The help text and transient menus were updated, and =a= is released back to image-dired.
+
 ** <2026-08-29 Sat> *2.5.0*
 
 Single window thumbnail layout by default.

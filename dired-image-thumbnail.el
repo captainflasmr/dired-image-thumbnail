@@ -60,8 +60,7 @@
 ;;   s   - Sorting prefix (s n: name, s d: date, s s: size, s r: reverse)
 ;;   S   - Interactive sort selection
 ;;   /   - Filtering prefix (/ n: name, / s: size, / c: clear)
-;;   w   - Toggle wrap display mode
-;;   r   - Refresh display
+;;   g   - Refresh display
 ;;   n/p - Next/previous image (with auto-display when enabled)
 ;;   +/- - Increase/decrease size
 ;;   m   - Mark image (uses image-dired's native marking with border)
@@ -145,25 +144,26 @@ regenerate them from scratch."
   :group 'dired-image-thumbnail)
 
 (defface dired-image-thumbnail-current-thumbnail
-  '((((class color) (background light)) (:box (:line-width 3 :color "dark orange")))
-    (((class color) (background dark)) (:box (:line-width 3 :color "yellow")))
-    (t (:box (:line-width 3))))
+  '((t (:box (:line-width 5))))
   "Face used to highlight the currently selected thumbnail.
-The default is a thick box so the selection is clearly visible
-regardless of theme.  Customize this face to change the colour or
-width, or set `dired-image-thumbnail-highlight-current-thumbnail' to
-nil to disable the highlight entirely."
+The outline is thick by default (5 pixels).  Its colour follows the
+active theme: the background colour of the `highlight' face is
+used, so the outline looks like the theme's own highlight, just
+thicker.  Customise this face to change the width, or give :box an
+explicit :color to pin a fixed colour.  Set
+`dired-image-thumbnail-highlight-current-thumbnail' to nil to
+disable the highlight entirely."
   :group 'dired-image-thumbnail)
 
 (defface dired-image-thumbnail-header-info
   '((((class color) (background light)) (:foreground "black"))
     (((class color) (background dark)) (:foreground "white"))
     (t nil))
-  "Face for directory, dimension, quality and status information
-in the thumbnail header line.
+  "Face used for the whole thumbnail header line.
 Uses a maximum-contrast foreground colour -- black on light
 backgrounds, white on dark ones -- so the information stays
-clearly readable on most themes.  Unspecified attributes
+clearly readable on most themes, independently of how the theme
+styles the image-dired header faces.  Unspecified attributes
 inherit from the `header-line' face.  Customize this face to
 adjust the colours."
   :group 'dired-image-thumbnail)
@@ -789,11 +789,11 @@ line.  Otherwise, fall back to the original function."
          "  "
          (propertize dir 'face 'dired-image-thumbnail-header-info)
          "  "
-         (propertize rel-name 'face 'image-dired-thumb-header-file-name)
+         (propertize rel-name 'face 'dired-image-thumbnail-header-info)
          "  "
-         (propertize image-count 'face 'image-dired-thumb-header-image-count)
+         (propertize image-count 'face 'dired-image-thumbnail-header-info)
          "  "
-         (propertize size 'face 'image-dired-thumb-header-file-size)
+         (propertize size 'face 'dired-image-thumbnail-header-info)
          "  "
          (propertize dimensions 'face 'dired-image-thumbnail-header-info)
          "  "
@@ -885,11 +885,40 @@ unavailable, do nothing."
 (defvar-local dired-image-thumbnail--current-overlay nil
   "Overlay highlighting the currently selected thumbnail.")
 
+(defun dired-image-thumbnail--outline-box ()
+  "Return the :box specification for the current-thumbnail outline.
+The line width comes from the :box attribute of
+`dired-image-thumbnail-current-thumbnail' (default 3), so
+customising the face adjusts the thickness.  The colour is the
+explicit :color of that :box when set, so customising the face
+still works; otherwise the background colour of the `highlight'
+face is used, so the outline matches the active theme -- the
+theme's own highlight, just thicker.  Falls back to orange on
+light backgrounds and yellow on dark ones when no usable colour
+is available."
+  (let* ((box (face-attribute 'dired-image-thumbnail-current-thumbnail :box))
+         (width (let ((w (and (consp box) (plist-get box :line-width))))
+                  (cond ((numberp w) (abs w))
+                        ((consp w) w)
+                        (t 5))))
+         (explicit (cond ((stringp box) box)
+                         ((consp box) (plist-get box :color))))
+         (color (or (and (stringp explicit) explicit)
+                    (let ((bg (ignore-errors
+                                (face-attribute 'highlight :background nil t))))
+                      (cond ((stringp bg) bg)
+                            ((eq (frame-parameter nil 'background-mode) 'dark)
+                             "yellow")
+                            (t "dark orange"))))))
+    (list :line-width width :color color)))
+
 (defun dired-image-thumbnail--update-current-highlight ()
   "Outline the thumbnail at point with `dired-image-thumbnail-current-thumbnail'.
 The highlight is an overlay on the character carrying the image, so it
-is redrawn as point moves.  Installed on `post-command-hook' in
-thumbnail buffers and called directly after a refresh."
+is redrawn as point moves.  The outline colour follows the active
+theme (see `dired-image-thumbnail--outline-box').  Installed on
+`post-command-hook' in thumbnail buffers and called directly after
+a refresh."
   (when (derived-mode-p 'image-dired-thumbnail-mode)
     ;; Drop the previous overlay.  This also clears a stale overlay left
     ;; behind by `erase-buffer' during a refresh.
@@ -900,18 +929,17 @@ thumbnail buffers and called directly after a refresh."
                (get-text-property (point) 'original-file-name)
                (< (point) (point-max)))
       (let ((ov (make-overlay (point) (1+ (point)) nil t)))
-        (overlay-put ov 'face 'dired-image-thumbnail-current-thumbnail)
+        (overlay-put ov 'face
+                     (list 'dired-image-thumbnail-current-thumbnail
+                           (list :box (dired-image-thumbnail--outline-box))))
         (setq dired-image-thumbnail--current-overlay ov)))))
 
 (defun dired-image-thumbnail--cursor-remap ()
-  "Return a `face-remapping-alist' entry colouring the cursor like the highlight.
-Derives the colour from the :box attribute of
-`dired-image-thumbnail-current-thumbnail', so customising that face
-also changes the cursor colour.  Returns nil if no colour is set."
-  (let* ((box (face-attribute 'dired-image-thumbnail-current-thumbnail :box))
-         (color (cond ((stringp box) box)
-                      ((consp box) (plist-get box :color))
-                      (t nil))))
+  "Return a `face-remapping-alist' entry colouring the cursor like the outline.
+Uses the colour resolved by `dired-image-thumbnail--outline-box',
+so the cursor always matches the current-thumbnail highlight.
+Returns nil if no colour is available."
+  (let ((color (plist-get (dired-image-thumbnail--outline-box) :color)))
     (when (stringp color)
       `(cursor . (:background ,color)))))
 
@@ -1579,15 +1607,6 @@ the system default application."
   (dotimes (_ n)
     (image-dired-forward-image)))
 
-(defun dired-image-thumbnail-toggle-wrap ()
-  "Toggle between wrap display and standard line-up."
-  (interactive)
-  (unless dired-image-thumbnail--all-images
-    (dired-image-thumbnail--initialize-buffer))
-  (setq dired-image-thumbnail-wrap-display (not dired-image-thumbnail-wrap-display))
-  (dired-image-thumbnail-refresh)
-  (message "Wrap display: %s" (if dired-image-thumbnail-wrap-display "ON" "OFF")))
-
 (defun dired-image-thumbnail-toggle-square-thumbnails ()
   "Toggle square thumbnail cropping.
 When enabled, thumbnails are center-cropped to squares for a tidier grid."
@@ -1633,11 +1652,10 @@ When enabled, thumbnails are center-cropped to squares for a tidier grid."
     (princ "  x            Delete marked images\n")
     (princ "  d            Go to Dired buffer\n\n")
     (princ "Display:\n")
-    (princ "  r, g         Refresh display\n")
+    (princ "  g            Refresh display\n")
     (princ "  G            Hard refresh (clear cache and reload)\n")
-    (princ "  w            Toggle wrap mode\n")
     (princ "  #            Toggle square thumbnails\n")
-    (princ "  a            Toggle auto-display on navigate\n")
+    (princ "  F            Toggle follow (auto-display on navigate)\n")
     (princ "  Q            Cycle display quality (full/high/fast/faster/draft)\n\n")
     (princ "Sorting (s prefix):\n")
     (princ "  sb           Sort by Dired buffer order\n")
@@ -1871,9 +1889,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "S") #'dired-image-thumbnail-sort)
     (define-key image-dired-thumbnail-mode-map (kbd "/") dired-image-thumbnail-filter-map)
     (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
-    (define-key image-dired-thumbnail-mode-map (kbd "w") #'dired-image-thumbnail-toggle-wrap)
     (define-key image-dired-thumbnail-mode-map (kbd "#") #'dired-image-thumbnail-toggle-square-thumbnails)
-    (define-key image-dired-thumbnail-mode-map (kbd "r") #'dired-image-thumbnail-refresh)
     (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)
     (define-key image-dired-thumbnail-mode-map (kbd "G") #'dired-image-thumbnail-hard-refresh)
     (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
@@ -1893,7 +1909,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
     (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
     ;; Auto-display toggle (a)
-    (define-key image-dired-thumbnail-mode-map (kbd "a") #'dired-image-thumbnail-toggle-auto-display)
+    (define-key image-dired-thumbnail-mode-map (kbd "F") #'dired-image-thumbnail-toggle-auto-display)
     ;; Display quality
     (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-cycle-display-quality)
     ;; External
@@ -2120,7 +2136,7 @@ what you want when marking a batch of files for rotation."
   (dired-image-thumbnail--sync-marking-shows-next)
   (when dired-image-thumbnail-auto-display-on-navigate
     (dired-image-thumbnail--display-this))
-  (message "Auto-display on navigate: %s"
+  (message "Follow (auto-display on navigate): %s"
            (if dired-image-thumbnail-auto-display-on-navigate "ON" "OFF")))
 
 (defun dired-image-thumbnail-next-image ()

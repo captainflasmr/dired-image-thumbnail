@@ -371,10 +371,7 @@ Interactive filter menu (transient)
 @subheading Display
 
 @table @kbd
-@item w
-Toggle wrap display mode
-@item r
-@itemx g
+@item g
 Refresh the display
 @item G
 Clear cache and refresh (hard refresh)
