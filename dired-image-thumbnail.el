@@ -361,6 +361,12 @@ you want the standard Emacs locking behaviour."
 (defvar-local dired-image-thumbnail--recursive nil
   "Non-nil if thumbnails include images from subdirectories.")
 
+(defvar-local dired-image-thumbnail--thumbs-generated-at nil
+  "Thumbnail size at which the current cached thumb files were generated.
+Cached thumb files are shown at their natural size, so when the
+display size changes the files must be regenerated at the new
+size for the resize to be visible.")
+
 (defvar-local dired-image-thumbnail--marked-count nil
   "Cached count of marked images.  Nil means it needs recomputation.")
 
@@ -700,6 +706,12 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
   (add-hook 'post-command-hook #'dired-image-thumbnail--update-current-highlight nil t)
   ;; Colour the cursor to match, buffer-locally.
   (dired-image-thumbnail--setup-cursor)
+  ;; Any pre-existing thumbnail cache was generated at image-dired's
+  ;; own thumb size, so record it as the baseline for resize
+  ;; regeneration.
+  (when (and (null dired-image-thumbnail--thumbs-generated-at)
+             (numberp image-dired-thumb-size))
+    (setq dired-image-thumbnail--thumbs-generated-at image-dired-thumb-size))
   ;; Keep image-dired's mark-and-advance display in step with auto-display.
   (dired-image-thumbnail--disable-marking-shows-next)
   ;; Skip if already initialized and has images
@@ -1032,6 +1044,24 @@ after refreshing. Otherwise, try to maintain position on the current file."
         (when (and display-size (numberp standard-size)
                    (/= display-size standard-size))
           (setq-local image-dired-thumb-size display-size))
+        ;; Cached thumb files are shown at their natural size, so when
+        ;; the display size changed since they were generated, delete
+        ;; them here: phase 1 then regenerates them at the new size,
+        ;; making +/- resizes visible without a hard refresh.  Drain
+        ;; any in-flight thumbnail jobs first: their sentinel chmods
+        ;; the thumb file after creation, which errors if we deleted
+        ;; it from under them.
+        (when (and (numberp image-dired-thumb-size)
+                   (numberp dired-image-thumbnail--thumbs-generated-at)
+                   (/= image-dired-thumb-size
+                       dired-image-thumbnail--thumbs-generated-at))
+          (dired-image-thumbnail--wait-for-thumbnails)
+          (dolist (file dired-image-thumbnail--current-images)
+            (let ((thumb-file (image-dired-thumb-name file)))
+              (when (file-exists-p thumb-file)
+                (delete-file thumb-file)))))
+        (setq dired-image-thumbnail--thumbs-generated-at
+              (and (numberp image-dired-thumb-size) image-dired-thumb-size))
         ;; Insert thumbnails using image-dired's standard function
         ;; This ensures proper marking support
         (when dired-image-thumbnail-square-thumbnails
@@ -1070,11 +1100,13 @@ after refreshing. Otherwise, try to maintain position on the current file."
                  (setq work-done (1+ work-done))
                  (when progress (progress-reporter-update progress work-done)))))
            ;; Phase 2: image-dired generates thumbnails asynchronously,
-           ;; so wait for the queue to drain before cropping.  Without
-           ;; this a freshly queued thumbnail does not exist yet and the
-           ;; crop is silently skipped, leaving non-square thumbnails on
-           ;; a first run with an empty cache.
-           (when (and dired-image-thumbnail-square-thumbnails (> queued 0))
+           ;; so wait for the queue to drain before cropping or
+           ;; inserting.  Without this a freshly queued thumbnail does
+           ;; not exist yet: the crop is silently skipped (leaving
+           ;; non-square thumbnails on a first run with an empty
+           ;; cache) and, since stale files are deleted on resize, the
+           ;; insert itself would run on missing files.
+           (when (> queued 0)
              (dired-image-thumbnail--wait-for-thumbnails))
            ;; Phase 3: crop to uniform squares (when enabled).
            (when dired-image-thumbnail-square-thumbnails
