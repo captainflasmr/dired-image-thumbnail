@@ -372,6 +372,11 @@ size for the resize to be visible.")
 (defvar-local dired-image-thumbnail--marked-count nil
   "Cached count of marked images.  Nil means it needs recomputation.")
 
+(defvar-local dired-image-thumbnail--thumb-attempts (make-hash-table :test 'equal)
+  "Hash of thumbnail-creation attempts per image, keyed by file name.
+Caps retries so a permanently failing image cannot cause an endless
+queue-and-refresh cycle.")
+
 (defvar-local dired-image-thumbnail--lineup-width nil
   "Width in columns of the thumbnail window at the last line-up.
 When showing the full-size image changes the window layout (and so
@@ -1107,41 +1112,61 @@ after refreshing. Otherwise, try to maintain position on the current file."
                                      (if (= work-needed 1) "" "s"))
                              0 work-needed)))
            ;; Phase 1: queue generation for missing natural thumbnails
-           ;; (both display modes derive from them).
+           ;; (both display modes derive from them).  Files whose
+           ;; creation failed repeatedly are skipped so a permanently
+           ;; broken image cannot cause an endless queue/refresh cycle.
            (dolist (file dired-image-thumbnail--current-images)
              (let ((thumb-file (image-dired-thumb-name file)))
                (unless (file-exists-p thumb-file)
-                 (image-dired-create-thumb file thumb-file)
-                 (setq queued (1+ queued))
-                 (setq work-done (1+ work-done))
-                 (when progress (progress-reporter-update progress work-done)))))
-           ;; Phase 2: image-dired generates thumbnails asynchronously,
-           ;; so wait for the queue to drain before cropping or
-           ;; inserting.  Without this a freshly queued thumbnail does
-           ;; not exist yet: the square derivation is silently skipped
-           ;; and the insert itself would run on missing files.
-           (when (> queued 0)
-             (dired-image-thumbnail--wait-for-thumbnails))
-           ;; Phase 3: derive square variants (when enabled).  The
-           ;; natural cached files are never modified, so toggling
-           ;; between square and natural only switches which cached
-           ;; file set is displayed -- no regeneration, no blank
-           ;; buffer.
+                 (when (< (gethash file
+                                   dired-image-thumbnail--thumb-attempts 0)
+                          3)
+                   (image-dired-create-thumb file thumb-file)
+                   (puthash file
+                            (1+ (gethash file
+                                         dired-image-thumbnail--thumb-attempts
+                                         0))
+                            dired-image-thumbnail--thumb-attempts)
+                   (setq queued (1+ queued))
+                   (setq work-done (1+ work-done))
+                   (when progress (progress-reporter-update progress work-done))))))
+           ;; Phase 2: image-dired generates thumbnails asynchronously;
+           ;; the display never blocks on it.  Every thumbnail already
+           ;; on disk is inserted immediately, and once the creation
+           ;; queue has drained a re-refresh inserts the rest (see
+           ;; `dired-image-thumbnail--arm-queue-poll').
+           ;; Phase 3: derive square variants (when enabled) for the
+           ;; thumbnails that are already on disk.  The natural cached
+           ;; files are never modified, so toggling between square and
+           ;; natural only switches which cached file set is displayed
+           ;; -- no regeneration, no blank buffer.
            (when dired-image-thumbnail-square-thumbnails
              (dolist (file dired-image-thumbnail--current-images)
-               (when (dired-image-thumbnail--square-thumb-stale-p file)
+               (when (and (file-exists-p (image-dired-thumb-name file))
+                          (dired-image-thumbnail--square-thumb-stale-p file))
                  (dired-image-thumbnail--derive-square-thumb file)
                  (setq work-done (1+ work-done))
                  (when progress (progress-reporter-update progress work-done)))))
            ;; Phase 4: insert with all three required arguments, using
-           ;; the file set for the active display mode.
+           ;; the file set for the active display mode.  Thumbnails
+           ;; that are still generating get a gray placeholder with
+           ;; the same text properties, so the grid and point stay
+           ;; valid until the poll refresh swaps in the real images.
            (dolist (file dired-image-thumbnail--current-images)
-             (image-dired-insert-thumbnail
-              (if dired-image-thumbnail-square-thumbnails
-                  (dired-image-thumbnail--square-thumb-name file)
-                (image-dired-thumb-name file))
-              file dired-buf))
-           (when progress (progress-reporter-done progress))))
+             (let ((thumb-file (if dired-image-thumbnail-square-thumbnails
+                                   (dired-image-thumbnail--square-thumb-name file)
+                                 (image-dired-thumb-name file))))
+               (image-dired-insert-thumbnail
+                (if (file-exists-p thumb-file)
+                    thumb-file
+                  (dired-image-thumbnail--placeholder-file))
+                file dired-buf)))
+           (when progress (progress-reporter-done progress))
+           ;; Phase 5: when thumbnails are still being generated, poll
+           ;; the queue and refresh once it has drained so the missing
+           ;; thumbnails appear without ever blocking.
+           (when (> queued 0)
+             (dired-image-thumbnail--arm-queue-poll))))
       ;; Line up
       (if dired-image-thumbnail-wrap-display
           (progn
@@ -2078,6 +2103,57 @@ Emacs never decodes the full image."
 (defvar dired-image-thumbnail--thumb-regen-timer nil
   "Idle timer for the deferred thumbnail-cache regeneration.")
 
+(defvar dired-image-thumbnail--thumb-queue-poll-timer nil
+  "Timer polling the thumbnail creation queue.
+When the queue has drained, the thumbnail buffer is refreshed so
+the thumbnails that finished generating appear without ever
+blocking the display.")
+
+(defun dired-image-thumbnail--arm-queue-poll ()
+  "Poll the thumbnail creation queue and refresh once it drains."
+  (when dired-image-thumbnail--thumb-queue-poll-timer
+    (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer))
+  (setq dired-image-thumbnail--thumb-queue-poll-timer
+        (run-with-timer 0.3 0.3
+                        #'dired-image-thumbnail--poll-thumb-queue)))
+
+(defun dired-image-thumbnail--poll-thumb-queue ()
+  "Refresh the thumbnail buffer when the creation queue has drained."
+  (if (or image-dired-queue (> image-dired-queue-active-jobs 0))
+      nil
+    (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer)
+    (setq dired-image-thumbnail--thumb-queue-poll-timer nil)
+    (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+      (when (and thumb-buf (buffer-live-p thumb-buf))
+        (with-current-buffer thumb-buf
+          (when (derived-mode-p 'image-dired-thumbnail-mode)
+            (dired-image-thumbnail-refresh)))))))
+
+(defun dired-image-thumbnail--placeholder-file ()
+  "Return the path of a gray placeholder thumbnail image, creating it if needed.
+The placeholder is sized to the current thumbnail size and is
+inserted for images whose thumbnails are still being generated, so
+the grid and point stay valid instead of showing a blank buffer."
+  (let* ((size (or (and (numberp image-dired-thumb-size) image-dired-thumb-size)
+                   128))
+         (file (expand-file-name (format "placeholder-%d.xpm" size)
+                                 (dired-image-thumbnail--preview-dir))))
+    (unless (file-exists-p file)
+      (with-temp-file file
+        (insert "/* XPM */\nstatic char *p[] = {\n")
+        (insert (format "\"%d %d 2 1\",\n" size size))
+        (insert "\". c #8a8a8a\",\n")
+        (insert "\"o c #5a5a5a\",\n")
+        (dotimes (y size)
+          (let ((row (cond ((or (= y 0) (= y (1- size)))
+                            (make-string size ?o))
+                           (t (concat "o" (make-string (- size 2) ?.) "o")))))
+            (insert (format "\"%s\"%s\n"
+                            row
+                            (if (= y (1- size)) "" ",")))))
+        (insert "};\n")))
+    file))
+
 (defun dired-image-thumbnail--queue-thumb-regeneration ()
   "Queue a background regeneration of thumbnails at the display size.
 The stale-sized cached thumbnails stay visible until the
@@ -2415,6 +2491,9 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
   (when dired-image-thumbnail--thumb-regen-timer
     (cancel-timer dired-image-thumbnail--thumb-regen-timer)
     (setq dired-image-thumbnail--thumb-regen-timer nil))
+  (when dired-image-thumbnail--thumb-queue-poll-timer
+    (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer)
+    (setq dired-image-thumbnail--thumb-queue-poll-timer nil))
   (advice-remove 'image-dired-format-properties-string
                  #'dired-image-thumbnail--format-properties-string)
   (advice-remove 'image-dired--thumb-update-marks
