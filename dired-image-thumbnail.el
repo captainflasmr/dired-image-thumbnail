@@ -217,7 +217,7 @@ The image buffer gets the remainder.  Only used when
   :safe #'numberp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-auto-display-on-navigate nil
+(defcustom dired-image-thumbnail-auto-display-on-navigate t
   "Whether to automatically display full-size image when navigating thumbnails.
 When non-nil, pressing `n` or `p` in the thumbnail buffer automatically
 updates the image display buffer, and marking a file advances to the
@@ -275,22 +275,30 @@ on Linux, `open' on macOS, or `start' on Windows."
   :safe (lambda (v) (or (null v) (stringp v)))
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-display-quality 'fast
+(defcustom dired-image-thumbnail-display-quality 'faster
   "Display quality when navigating thumbnails with n/p.
 Controls the trade-off between image quality and navigation speed.
 
   `full'   - Original resolution via `image-dired-display-image'.
              Slowest, but pixel-perfect.
   `high'   - Scaled to fit the display window (1:1 window pixels).
-  `fast'   - Half the window dimensions.  Good balance.
-  `faster' - Quarter the window dimensions.  Noticeably quicker.
-  `draft'  - 1/8 the window dimensions.  Very fast, visibly soft.
+  `fast'   - Half the window dimensions, JPEG quality 60.
+  `faster' - Quarter the window dimensions, JPEG quality 40.
+  `draft'  - 1/8 the window dimensions, JPEG quality 25.  Very fast,
+             visibly soft; two neighbours are pre-generated instead
+             of one.
+
+Preview files are optimally compressed per mode and the previews of
+neighbouring images are pre-generated while idle, so navigating with
+follow mode on usually shows the next image instantly.  Displayed
+previews are kept in the image cache, so revisiting an image costs
+nothing.
 
 Changing this takes effect on the next n/p keypress."
   :type '(choice (const :tag "Full resolution (slowest)" full)
                  (const :tag "High - window size" high)
-                 (const :tag "Fast - 1/2 window (default)" fast)
-                 (const :tag "Faster - 1/4 window" faster)
+                 (const :tag "Fast - 1/2 window" fast)
+                 (const :tag "Faster - 1/4 window (default)" faster)
                  (const :tag "Draft - 1/8 window (fastest)" draft))
 :safe #'symbolp
    :group 'dired-image-thumbnail)
@@ -1657,10 +1665,9 @@ enhanced features like sorting and filtering."
       (with-current-buffer thumb-buf
         (dired-image-thumbnail-refresh)
         (goto-char (point-min))
-        ;; Display the first image only when auto-display is enabled and
-        ;; layout is configured to show the image window.
-        (when (and dired-image-thumbnail-auto-display-on-navigate
-                   (not (eq dired-image-thumbnail-window-layout 'thumb-only)))
+        ;; Show an initial preview of the first image when follow
+        ;; (auto-display) is enabled, so stepping through starts at once.
+        (when dired-image-thumbnail-auto-display-on-navigate
           (dired-image-thumbnail--display-this))))))
 
 (defun dired-image-thumbnail--subdir-target-buffer ()
@@ -1844,22 +1851,39 @@ directly to the nearest djpeg fraction."
         ((<= quality-scale 0.5)   "1/2")
         (t                         "1/1")))
 
+(defun dired-image-thumbnail--preview-path (file width)
+  "Return the cache path for a preview of FILE decoded at WIDTH pixels."
+  (expand-file-name
+   (concat (sha1 (concat file
+                         (number-to-string width)
+                         (format-time-string
+                          "%s"
+                          (file-attribute-modification-time
+                           (file-attributes file)))))
+           ".jpg")
+   (dired-image-thumbnail--preview-dir)))
+
+(defun dired-image-thumbnail--preview-quality ()
+  "Return the JPEG encode quality for the current display quality.
+Lower display qualities use lower encode quality, so preview files
+are smaller and quicker to load and decode."
+  (pcase dired-image-thumbnail-display-quality
+    ('fast 60)
+    ('faster 40)
+    ('draft 25)
+    (_ 50)))
+
 (defun dired-image-thumbnail--make-preview (file width height)
   "Create a preview of FILE at WIDTH x HEIGHT pixels.
 Returns the path to the preview file.
 For JPEGs, uses djpeg/cjpeg with DCT scaling (very fast).
-For other formats, uses magick/convert with -thumbnail."
-  (let* ((preview-name (concat (sha1 (concat file
-                                              (number-to-string width)
-                                              (format-time-string
-                                               "%s"
-                                               (file-attribute-modification-time
-                                                (file-attributes file)))))
-                                ".jpg"))
-         (preview-path (expand-file-name preview-name
-                                         (dired-image-thumbnail--preview-dir))))
+For other formats, uses magick/convert with -thumbnail.
+The encode quality follows `dired-image-thumbnail-display-quality',
+so lower quality modes produce smaller, quicker-loading files."
+  (let ((preview-path (dired-image-thumbnail--preview-path file width)))
     (unless (file-exists-p preview-path)
-      (let ((expanded (expand-file-name file)))
+      (let ((expanded (expand-file-name file))
+            (quality (number-to-string (dired-image-thumbnail--preview-quality))))
         (if (and (dired-image-thumbnail--jpeg-p file)
                  (executable-find "djpeg")
                  (executable-find "cjpeg"))
@@ -1871,10 +1895,10 @@ For other formats, uses magick/convert with -thumbnail."
                   (temp-file (make-temp-file "dired-image-preview-djpeg-")))
               (unwind-protect
                   (progn
-                    (call-process "djpeg" nil temp-file nil
+                    (call-process "djpeg" nil (list :file temp-file) nil
                                   "-scale" scale-str expanded)
-                    (call-process "cjpeg" nil preview-path nil
-                                  "-quality" "50" temp-file))
+                    (call-process "cjpeg" nil (list :file preview-path) nil
+                                  "-quality" quality temp-file))
                 (when (file-exists-p temp-file)
                   (delete-file temp-file))))
           ;; Fallback: magick/convert -thumbnail
@@ -1884,7 +1908,7 @@ For other formats, uses magick/convert with -thumbnail."
               (call-process magick nil nil nil
                             expanded
                             "-thumbnail" (format "%dx%d" width height)
-                            "-quality" "50"
+                            "-quality" quality
                             preview-path))))))
     (if (file-exists-p preview-path)
         preview-path
@@ -1954,7 +1978,63 @@ Emacs never decodes the full image."
       (setq cursor-type nil))
     (when display-win
       (set-window-buffer display-win buf))
-    (select-window cur-win)))
+    (select-window cur-win)
+    (dired-image-thumbnail--queue-prefetch)))
+
+(defvar dired-image-thumbnail--prefetch-timer nil
+  "Idle timer used to pre-generate preview images around the current one.")
+
+(defun dired-image-thumbnail--decode-dimensions ()
+  "Return (WIDTH . HEIGHT) to decode previews at for the display window."
+  (let* ((scale (or (dired-image-thumbnail--quality-scale) 0.5))
+         (win (get-buffer-window image-dired-display-image-buffer t))
+         (win-width (or (and win (window-body-width win t)) 800))
+         (win-height (or (and win (window-body-height win t)) 600)))
+    (cons (max 1 (truncate (* win-width scale)))
+          (max 1 (truncate (* win-height scale))))))
+
+(defun dired-image-thumbnail--queue-prefetch ()
+  "Queue idle-time pre-generation of previews around the current image."
+  (when dired-image-thumbnail--prefetch-timer
+    (cancel-timer dired-image-thumbnail--prefetch-timer))
+  (setq dired-image-thumbnail--prefetch-timer
+        (run-with-idle-timer 0.3 nil #'dired-image-thumbnail--prefetch-neighbors)))
+
+(defun dired-image-thumbnail--prefetch-neighbors ()
+  "Pre-generate previews for the images adjacent to the current one.
+Runs on an idle timer so that navigation in follow mode usually
+lands on images whose preview already exists and can be shown
+instantly.  Generation stops early when the current image changes
+while it runs."
+  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+    (when (and thumb-buf (buffer-live-p thumb-buf))
+      (with-current-buffer thumb-buf
+        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                   (let ((scale (dired-image-thumbnail--quality-scale)))
+                     (and scale (< scale 1.0))))
+          (let* ((file (image-dired-original-file-name))
+                 (idx (and file
+                           (cl-position file dired-image-thumbnail--current-images
+                                        :test #'equal)))
+                 (offsets (if (eq dired-image-thumbnail-display-quality 'draft)
+                              '(1 -1 2 -2)
+                            '(1 -1)))
+                 (dims (dired-image-thumbnail--decode-dimensions))
+                 (width (car dims))
+                 (height (cdr dims)))
+            (when idx
+              (dolist (offset offsets)
+                (let ((nb (and (>= (+ idx offset) 0)
+                               (nth (+ idx offset)
+                                    dired-image-thumbnail--current-images))))
+                  (when (and nb (file-exists-p nb)
+                             (equal (image-dired-original-file-name) file)
+                             (not (file-exists-p
+                                   (dired-image-thumbnail--preview-path
+                                    nb width))))
+                    (ignore-errors
+                      (dired-image-thumbnail--make-preview
+                       nb width height))))))))))))
 
 (defun dired-image-thumbnail--maybe-realign ()
   "Refresh thumbnails when the thumbnail window width has changed.
@@ -1982,8 +2062,6 @@ Uses fast scaled display unless quality is `full'."
               ((not file)
                (message "No original file name found"))
               (t
-               (when (fboundp 'clear-image-cache)
-                 (clear-image-cache file))
                (dired-image-thumbnail--display-image-fast file))))
     (image-dired-display-this))
   (dired-image-thumbnail--maybe-realign))
@@ -2216,6 +2294,9 @@ is idempotent and can be re-run to track changes to
 (defun dired-image-thumbnail-unload-function ()
   "Tear down advice and hooks installed by dired-image-thumbnail.
 Called by `unload-feature'.  Returns nil so standard unloading proceeds."
+  (when dired-image-thumbnail--prefetch-timer
+    (cancel-timer dired-image-thumbnail--prefetch-timer)
+    (setq dired-image-thumbnail--prefetch-timer nil))
   (advice-remove 'image-dired-format-properties-string
                  #'dired-image-thumbnail--format-properties-string)
   (advice-remove 'image-dired--thumb-update-marks

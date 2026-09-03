@@ -517,7 +517,7 @@ Set to @code{nil} to disable automatic layout management and use your own
 Control the speed/fidelity trade-off when navigating with @kbd{n}/@kbd{p}:
 
 @lisp
-(setq dired-image-thumbnail-display-quality 'fast) ; 'full, 'high, 'fast, 'faster, or 'draft
+(setq dired-image-thumbnail-display-quality 'faster) ; 'full, 'high, 'fast, 'faster, or 'draft
 @end lisp
 
 Lower quality levels use external tools (@code{djpeg}/@code{cjpeg} for

@@ -265,7 +265,7 @@ Set to =nil= to disable automatic layout management and use your own =display-bu
 Control the speed/fidelity trade-off when navigating with =n=/=p=:
 
 #+begin_src emacs-lisp
-(setq dired-image-thumbnail-display-quality 'fast) ; 'full, 'high, 'fast, 'faster, or 'draft
+(setq dired-image-thumbnail-display-quality 'faster) ; 'full, 'high, 'fast, 'faster, or 'draft
 #+end_src
 
 Lower quality levels use external tools (=djpeg=/=cjpeg= for JPEGs, =magick= for
