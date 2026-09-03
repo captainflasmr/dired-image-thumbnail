@@ -71,6 +71,7 @@
 ;;   D   - Delete image at point
 ;;   C-d - Delete image and move to next
 ;;   x   - Delete marked images
+;;   z   - Insert subdirs (recursive) into the associated dired buffer
 ;;   ?   - Transient menu
 ;;
 
@@ -1789,6 +1790,8 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-select-display-quality)
     ;; External
     (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
+    ;; Subdirectories (insertion is normally done from dired, e.g. C-t z)
+    (define-key image-dired-thumbnail-mode-map (kbd "z") #'dired-image-thumbnail-insert-subdir-recursive)
     ;; Other
     (when (fboundp 'dired-image-thumbnail-transient)
       (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-transient))))

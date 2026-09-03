@@ -768,7 +768,9 @@ The ``smart'' insertion only processes subdirectories containing images, which i
 @item
 For very large collections, manually insert specific subdirectories with @kbd{i} as needed
 @item
-From the thumbnail buffer, the transient menu (@kbd{?}) offers @kbd{i} (insert image subdirs), @kbd{I} (recursive) and @kbd{K} (kill all), acting on the associated dired buffer
+From the thumbnail buffer, @kbd{z} (or the transient menu's Other group) inserts
+subdirectories recursively into the associated dired buffer; the @kbd{C-t s} /
+@kbd{C-t z} / @kbd{C-t k} variants remain available from dired
 @end itemize
 
 @section Thumbnail Generation

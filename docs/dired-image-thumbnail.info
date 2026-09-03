@@ -754,9 +754,10 @@ When working with large directory trees:
      images, which is much faster
    • For very large collections, manually insert specific subdirectories
      with ‘i’ as needed
-   • From the thumbnail buffer, the transient menu (‘?’) offers ‘i’
-     (insert image subdirs), ‘I’ (recursive) and ‘K’ (kill all), acting
-     on the associated dired buffer
+   • From the thumbnail buffer, ‘z’ (or the transient menu's Other
+     group) inserts subdirectories recursively into the associated dired
+     buffer; the ‘C-t s’ / ‘C-t z’ / ‘C-t k’ variants remain available
+     from dired
 
 14.2 Thumbnail Generation
 =========================
@@ -893,9 +894,9 @@ Node: Organizing by Date23858
 Node: Comparison with Standard image-dired24238
 Node: Transient Menu Support25379
 Node: Performance Notes25985
-Node: Troubleshooting27379
-Node: Related Packages29459
-Node: License30070
+Node: Troubleshooting27430
+Node: Related Packages29510
+Node: License30121
 
 End Tag Table
 

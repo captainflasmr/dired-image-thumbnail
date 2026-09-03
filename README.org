@@ -441,7 +441,7 @@ When working with large directory trees:
 - Use =dired-image-thumbnail-insert-image-subdirs= (=C-t s=) instead of =dired-image-thumbnail-insert-subdir-recursive= (=C-t z=)
 - The "smart" insertion only processes subdirectories containing images, which is much faster
 - For very large collections, manually insert specific subdirectories with =i= as needed
-- From the thumbnail buffer, the transient menu (=?=) offers =i= (insert image subdirs), =I= (recursive) and =K= (kill all), acting on the associated dired buffer
+- From the thumbnail buffer, =z= (or the transient menu's Other group) inserts subdirectories recursively into the associated dired buffer; the =i= / =I= / =K= variants remain available from dired via =C-t= bindings
 
 ** Thumbnail Generation
 
