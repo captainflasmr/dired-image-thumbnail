@@ -142,13 +142,6 @@
   "Transient menu for dired-image-thumbnail."
   [:if dired-image-thumbnail--in-thumbnail-buffer-p]
   [:description dired-image-thumbnail-transient--state-description]
-  [["Sort & Filter"
-    ("s" "Sort..." dired-image-thumbnail-sort :transient nil)
-    ("/" "Filter..." dired-image-thumbnail-filter :transient nil)]
-   ["Delete"
-    ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
-    ("C-d" "Delete, move to next" dired-image-thumbnail-delete-and-next :transient nil)
-    ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]]
   [["Marking"
     ("m" "Mark current" dired-image-thumbnail-mark :transient nil)
     ("u" "Unmark current" dired-image-thumbnail-unmark :transient nil)
@@ -163,7 +156,13 @@
     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
     ("F" "Toggle follow" dired-image-thumbnail-toggle-auto-display :transient nil)
     ("Q" "Select quality" dired-image-thumbnail-select-display-quality :transient nil)]
+   ["Delete"
+    ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
+    ("C-d" "Delete, move to next" dired-image-thumbnail-delete-and-next :transient nil)
+    ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]
    ["Other"
+    ("s" "Sort..." dired-image-thumbnail-sort :transient nil)
+    ("/" "Filter..." dired-image-thumbnail-filter :transient nil)
     ("z" "Insert subdirs (recursive)" dired-image-thumbnail-insert-subdir-recursive :transient nil)
     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
