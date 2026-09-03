@@ -372,9 +372,10 @@ Marking
 -------
 
 ‘m’
-     Mark image (uses image-dired's native marking with border)
+     Mark image and, with follow on, advance to the next image through
+     the fast preview pipeline
 ‘u’
-     Unmark image
+     Unmark image (same follow behaviour)
 ‘M’
      Mark all images
 ‘U’
@@ -871,32 +872,32 @@ Node: Quick Deletion Workflow9670
 Node: Keybindings10218
 Node: Dired Buffer Keys10551
 Node: Thumbnail Buffer Keys11204
-Node: Image Display Buffer Keys13008
-Node: Header Line13359
-Node: Customization14316
-Node: Default Sort Settings15143
-Node: Display Options15492
-Node: Window Layout15750
-Node: Display Quality16314
-Node: Image Validation16903
-Node: External Editor17580
-Node: Navigation Behavior18040
-Node: Auto-Accepting Actions18610
-Node: Image Extensions19075
-Node: Example Configuration19422
-Node: Workflow Examples20407
-Node: Reviewing a Photo Collection20948
-Node: Finding Large Images21591
-Node: Quick Culling Workflow22285
-Node: Finding High-Resolution Images22777
-Node: Working with Subdirectories Example23241
-Node: Organizing by Date23858
-Node: Comparison with Standard image-dired24238
-Node: Transient Menu Support25379
-Node: Performance Notes25985
-Node: Troubleshooting27430
-Node: Related Packages29510
-Node: License30121
+Node: Image Display Buffer Keys13070
+Node: Header Line13421
+Node: Customization14378
+Node: Default Sort Settings15205
+Node: Display Options15554
+Node: Window Layout15812
+Node: Display Quality16376
+Node: Image Validation16965
+Node: External Editor17642
+Node: Navigation Behavior18102
+Node: Auto-Accepting Actions18672
+Node: Image Extensions19137
+Node: Example Configuration19484
+Node: Workflow Examples20469
+Node: Reviewing a Photo Collection21010
+Node: Finding Large Images21653
+Node: Quick Culling Workflow22347
+Node: Finding High-Resolution Images22839
+Node: Working with Subdirectories Example23303
+Node: Organizing by Date23920
+Node: Comparison with Standard image-dired24300
+Node: Transient Menu Support25441
+Node: Performance Notes26047
+Node: Troubleshooting27492
+Node: Related Packages29572
+Node: License30183
 
 End Tag Table
 

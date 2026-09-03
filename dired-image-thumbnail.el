@@ -187,7 +187,7 @@ so only thumbnail buffers are affected."
   :safe #'booleanp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-window-layout 'thumb-only
+(defcustom dired-image-thumbnail-window-layout 'left-right
   "Window layout used when launching `dired-image-thumbnail'.
 
   `thumb-only'  - Only show the thumbnail buffer in a single window (default).
@@ -209,7 +209,7 @@ The thumbnail/image size ratio is controlled by
   :safe #'symbolp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-window-ratio 0.3
+(defcustom dired-image-thumbnail-window-ratio 0.7
   "Fraction of the frame given to the thumbnail buffer.
 The image buffer gets the remainder.  Only used when
 `dired-image-thumbnail-window-layout' is non-nil."
@@ -310,8 +310,7 @@ effect on the next n/p keypress."
   "Whether to suppress Emacs lock files when displaying full-size images.
 When non-nil, no `.#filename' lock files are created on image files
 visited via `image-dired-display-image' (the standard `image-dired'
-display path used at `full' quality, and when
-`image-dired-marking-shows-next' advances after a mark/unmark).
+display path used at `full' quality).
 This prevents stale lock-file residue from accumulating in image
 directories, especially after abnormal Emacs exit.  Set to nil if
 you want the standard Emacs locking behaviour."
@@ -698,7 +697,7 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
   ;; Colour the cursor to match, buffer-locally.
   (dired-image-thumbnail--setup-cursor)
   ;; Keep image-dired's mark-and-advance display in step with auto-display.
-  (dired-image-thumbnail--sync-marking-shows-next)
+  (dired-image-thumbnail--disable-marking-shows-next)
   ;; Skip if already initialized and has images
   (unless (and dired-image-thumbnail--all-images
                dired-image-thumbnail--dired-buffer)
@@ -1362,6 +1361,33 @@ the original files for crisp display (slower but higher quality)."
       (puthash (expand-file-name file) t set))
     set))
 
+(defun dired-image-thumbnail-mark ()
+  "Mark the current thumbnail and, with follow on, show the next one.
+The follow display goes through the fast preview pipeline.  Vanilla
+`image-dired-marking-shows-next' is disabled because its own
+advance display decodes the full original image, which made
+marking feel slow."
+  (interactive)
+  (image-dired-mark-thumb-original-file)
+  (dired-image-thumbnail--mark-follow))
+
+(defun dired-image-thumbnail-unmark ()
+  "Unmark the current thumbnail and, with follow on, show the next one.
+See `dired-image-thumbnail-mark'."
+  (interactive)
+  (image-dired-unmark-thumb-original-file)
+  (dired-image-thumbnail--mark-follow))
+
+(defun dired-image-thumbnail--mark-follow ()
+  "Repaint the mark immediately, then follow.
+Vanilla marking always advances to the next image; when
+`dired-image-thumbnail-auto-display-on-navigate' is non-nil the
+newly-current image is displayed through the fast preview
+pipeline."
+  (sit-for 0)
+  (when dired-image-thumbnail-auto-display-on-navigate
+    (dired-image-thumbnail--display-this)))
+
 (defun dired-image-thumbnail-mark-all ()
   "Mark all visible images in the thumbnail buffer."
   (interactive)
@@ -1770,6 +1796,8 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
     (define-key image-dired-thumbnail-mode-map (kbd "-") #'dired-image-thumbnail-decrease-size)
     ;; Marking
+    (define-key image-dired-thumbnail-mode-map (kbd "m") #'dired-image-thumbnail-mark)
+    (define-key image-dired-thumbnail-mode-map (kbd "u") #'dired-image-thumbnail-unmark)
     (define-key image-dired-thumbnail-mode-map (kbd "M") #'dired-image-thumbnail-mark-all)
     (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
     ;; File operations
@@ -2071,33 +2099,28 @@ choice takes effect immediately and refreshes the displayed image."
   (image-dired--update-header-line)
   (dired-image-thumbnail--display-this))
 
-(defun dired-image-thumbnail--sync-marking-shows-next ()
-  "Keep `image-dired-marking-shows-next' in step with auto-display.
-image-dired displays the next thumbnail after each mark/unmark/flag
-when that option is non-nil.  Mirror our own auto-display setting onto
-it, buffer-locally, so turning auto-display off also removes the
-display cost of marking a batch of files."
+(defun dired-image-thumbnail--disable-marking-shows-next ()
+  "Disable vanilla `image-dired-marking-shows-next' buffer-locally.
+Vanilla marking always advances to the next image, and with this
+variable non-nil it also displays it through the full-image
+display path, bypassing the fast preview pipeline, which made
+marking take seconds.  The package's mark and unmark commands
+handle the follow display instead."
   (when (boundp 'image-dired-marking-shows-next)
-    (setq-local image-dired-marking-shows-next
-                dired-image-thumbnail-auto-display-on-navigate)))
+    (setq-local image-dired-marking-shows-next nil)))
 
 (defun dired-image-thumbnail-toggle-auto-display ()
   "Toggle automatic display of the full-size image while navigating.
 When enabled, moving to the next/previous thumbnail updates the image
-display buffer automatically.  When disabled, navigation, marking and
-deletion only move point, so you can step through, mark or delete many
-thumbnails without paying the cost of decoding each image.
-
-This also keeps image-dired's own mark-and-advance behaviour in step
-\(see `image-dired-marking-shows-next'): with auto-display off, marking
-a file advances to the next thumbnail without displaying it, which is
-what you want when marking a batch of files for rotation."
+display buffer automatically.  When disabled, navigation and marking
+only move point, so you can step through, mark or delete many
+thumbnails without paying the cost of decoding each image."
   (interactive)
   (unless dired-image-thumbnail--all-images
     (dired-image-thumbnail--initialize-buffer))
   (setq dired-image-thumbnail-auto-display-on-navigate
         (not dired-image-thumbnail-auto-display-on-navigate))
-  (dired-image-thumbnail--sync-marking-shows-next)
+  (dired-image-thumbnail--disable-marking-shows-next)
   (when dired-image-thumbnail-auto-display-on-navigate
     (dired-image-thumbnail--display-this))
   (message "Follow (auto-display on navigate): %s"

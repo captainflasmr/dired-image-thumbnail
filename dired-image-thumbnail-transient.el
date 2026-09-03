@@ -57,6 +57,8 @@
 (declare-function dired-image-thumbnail-sort "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-filter "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-mark-all "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-mark "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-unmark "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-all-marks "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-goto-dired "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-increase-size "dired-image-thumbnail")
@@ -148,8 +150,8 @@
     ("C-d" "Delete, move to next" dired-image-thumbnail-delete-and-next :transient nil)
     ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]]
   [["Marking"
-    ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
-    ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
+    ("m" "Mark current" dired-image-thumbnail-mark :transient nil)
+    ("u" "Unmark current" dired-image-thumbnail-unmark :transient nil)
     ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
     ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]

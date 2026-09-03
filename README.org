@@ -179,6 +179,8 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 | Key | Command                                 | Description                                |
 |-----+-----------------------------------------+--------------------------------------------|
+| =m= | ~dired-image-thumbnail-mark~              | Mark image and follow to the next          |
+| =u= | ~dired-image-thumbnail-unmark~            | Unmark image and follow to the next        |
 | =M= | ~dired-image-thumbnail-mark-all~          | Mark all images                            |
 | =t= | ~dired-image-thumbnail-toggle-all-marks~  | Toggle all marks                           |
 

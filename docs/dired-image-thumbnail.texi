@@ -375,9 +375,9 @@ Select display quality with @code{completing-read} (full, high, fast, faster, dr
 
 @table @kbd
 @item m
-Mark image (uses image-dired's native marking with border)
+Mark image and, with follow on, advance to the next image through the fast preview pipeline
 @item u
-Unmark image
+Unmark image (same follow behaviour)
 @item M
 Mark all images
 @item U
