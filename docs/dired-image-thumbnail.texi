@@ -422,8 +422,7 @@ Jump to file in Dired
 @item W
 Open in external editor
 @item ?
-@itemx h
-Show help
+Open the transient menu (all commands)
 @end table
 
 @node Image Display Buffer Keys
@@ -785,6 +784,8 @@ Use @code{dired-image-thumbnail-insert-image-subdirs} (@kbd{C-t s}) instead of @
 The ``smart'' insertion only processes subdirectories containing images, which is much faster
 @item
 For very large collections, manually insert specific subdirectories with @kbd{i} as needed
+@item
+From the thumbnail buffer, the transient menu (@kbd{?}) offers @kbd{i} (insert image subdirs), @kbd{I} (recursive) and @kbd{K} (kill all), acting on the associated dired buffer
 @end itemize
 
 @section Thumbnail Generation

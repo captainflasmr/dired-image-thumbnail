@@ -73,8 +73,15 @@
 (declare-function dired-image-thumbnail-refresh "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete-marked "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-delete-and-next "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-next-image "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-previous-image "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-hard-refresh "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-cycle-display-quality "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-insert-subdir-recursive "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-insert-image-subdirs "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-kill-all-subdirs "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-open-external "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-help "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-move "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-square-thumbnails "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-auto-display "dired-image-thumbnail")
@@ -179,7 +186,10 @@
   "Transient menu for dired-image-thumbnail."
   [:if dired-image-thumbnail--in-thumbnail-buffer-p]
   [:description dired-image-thumbnail-transient--state-description]
-  [["Sorting"
+  [["Navigate"
+    ("n" "Next thumbnail" dired-image-thumbnail-next-image :transient t)
+    ("p" "Previous thumbnail" dired-image-thumbnail-previous-image :transient t)]
+   ["Sorting"
     ("s" "Sort menu..." dired-image-thumbnail-transient-sort :transient nil)
     ("S" "Interactive sort" dired-image-thumbnail-sort :transient nil)]
    ["Filtering"
@@ -187,6 +197,7 @@
     ("\\" "Interactive filter" dired-image-thumbnail-filter :transient nil)]
    ["Delete"
     ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
+    ("C-d" "Delete, move to next" dired-image-thumbnail-delete-and-next :transient nil)
     ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]]
   [["Marking"
     ("m" "Mark current" image-dired-mark-thumb-original-file :transient nil)
@@ -196,17 +207,22 @@
     ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]
    ["Display"
     ("g" "Refresh" dired-image-thumbnail-refresh :transient nil)
+    ("G" "Hard refresh (clear cache)" dired-image-thumbnail-hard-refresh :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
-    ("F" "Toggle follow" dired-image-thumbnail-toggle-auto-display :transient nil)]
+    ("F" "Toggle follow" dired-image-thumbnail-toggle-auto-display :transient nil)
+    ("Q" "Cycle quality" dired-image-thumbnail-cycle-display-quality :transient nil)]
+   ["Subdirs"
+    ("i" "Insert image subdirs" dired-image-thumbnail-insert-image-subdirs :transient nil)
+    ("I" "Insert subdirs (recursive)" dired-image-thumbnail-insert-subdir-recursive :transient nil)
+    ("K" "Kill all subdirs" dired-image-thumbnail-kill-all-subdirs :transient nil)]
    ["Other"
     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
     ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
     ("A" "Auto-accept" dired-image-thumbnail-transient-toggle-auto-accept
      :transient t)
-    ("?" "Help" dired-image-thumbnail-help :transient nil)
     ("q" "Quit menu" transient-quit-one)]])
 
 ;;;###autoload

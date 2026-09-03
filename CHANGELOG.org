@@ -31,6 +31,7 @@ Directory location shown in the thumbnail header line.
 - *Open-image command removed* -- The =f= key, =dired-image-thumbnail-find-file= and its transient-menu entry have been removed. Use =RET= (display buffer) or =W= (external editor) instead; =f= falls back to image-dired's own binding.
 - *vi-style navigation on =f=/=b=* -- =f= and =b= now act like =n= and =p=, moving to the next/previous thumbnail (including auto-display when =dired-image-thumbnail-auto-display-on-navigate= is enabled), following the forward/backward convention of pagers such as =less=.
 - *Auto re-align on follow* -- Activating follow (=F=) shows the full-size image, which can open or narrow the thumbnail window. Whenever that changes the thumbnail window's width, the thumbnail display is refreshed automatically so the thumbnails re-align and the columns fit the new window width. Wrap display re-wraps on its own and skips the refresh.
+- *Help popup removed; transient is the reference* -- The =?= / =h= help popup (=dired-image-thumbnail-help=) has been removed; =?= now opens the transient menu. Everything the help documented that the menu lacked has been incorporated: a Navigate group (=n=/=p=, staying open for repeated presses), =C-d= (delete and move to next) in Delete, =G= (hard refresh) and =Q= (cycle quality) in Display, and a new Subdirs group (=i= insert image subdirs, =I= recursive insert, =K= kill all). The subdirectory commands now also work from the thumbnail buffer, acting on the associated dired buffer.
 
 ** <2026-08-29 Sat> *2.5.0*
 

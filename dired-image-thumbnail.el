@@ -72,7 +72,7 @@
 ;;   D   - Delete image at point
 ;;   C-d - Delete image and move to next
 ;;   x   - Delete marked images
-;;   ?/h - Help
+;;   ?   - Transient menu
 ;;
 
 ;;; Code:
@@ -1547,65 +1547,7 @@ When enabled, thumbnails are center-cropped to squares for a tidier grid."
         (not dired-image-thumbnail-square-thumbnails))
   (dired-image-thumbnail-refresh)
   (message "Square thumbnails: %s"
-           (if dired-image-thumbnail-square-thumbnails "ON" "OFF")))
-
-;;; Other commands
-
-(defun dired-image-thumbnail-help ()
-  "Show help for image thumbnail commands."
-  (interactive)
-  (with-help-window "*Image Thumbnail Help*"
-    (princ "Image Thumbnail Mode Commands:\n\n")
-    (princ "Navigation:\n")
-    (princ "  n, f, →      Next image")
-    (when dired-image-thumbnail-auto-display-on-navigate
-      (princ " (auto-display)"))
-    (princ "\n")
-    (princ "  p, b, ←      Previous image")
-    (when dired-image-thumbnail-auto-display-on-navigate
-      (princ " (auto-display)"))
-    (princ "\n")
-    (princ "  +/-          Increase/decrease size\n\n")
-    (princ "Marking:\n")
-    (princ "  m            Mark image (visual border)\n")
-    (princ "  u            Unmark image\n")
-    (princ "  U            Unmark all\n")
-    (princ "  M            Mark all\n")
-    (princ "  t            Toggle all marks\n\n")
-    (princ "File Operations:\n")
-    (princ "  v            Move image(s) to another directory\n")
-    (princ "  D            Delete image at point\n")
-    (princ "  C-d          Delete image and move to next (follows auto-display)\n")
-    (princ "  x            Delete marked images\n")
-    (princ "  d            Go to Dired buffer\n\n")
-    (princ "Display:\n")
-    (princ "  g            Refresh display\n")
-    (princ "  G            Hard refresh (clear cache and reload)\n")
-    (princ "  #            Toggle square thumbnails\n")
-    (princ "  F            Toggle follow (auto-display on navigate)\n")
-    (princ "  Q            Cycle display quality (full/high/fast/faster/draft)\n\n")
-    (princ "Sorting (s prefix):\n")
-    (princ "  sb           Sort by Dired buffer order\n")
-    (princ "  sn           Sort by name\n")
-    (princ "  sd           Sort by date\n")
-    (princ "  ss           Sort by size\n")
-    (princ "  sr           Reverse sort order\n\n")
-    (princ "Filtering (/ prefix):\n")
-    (princ "  /n           Filter by name\n")
-    (princ "  /s           Filter by size\n")
-    (princ "  /c           Clear filters\n\n")
-    (princ "Subdirectories:\n")
-    (princ "  Use 'i' in dired to insert subdirectories, or:\n")
-    (princ "  M-x dired-image-thumbnail-insert-subdir-recursive\n")
-    (princ "  M-x dired-image-thumbnail-insert-image-subdirs\n")
-    (princ "  M-x dired-image-thumbnail-kill-all-subdirs\n\n")
-    (princ "In Image Display Buffer:\n")
-    (princ "  C-d          Delete image and move to next\n\n")
-    (princ "Other:\n")
-    (princ "  W            Open in external editor\n")
-    (princ "  q            Quit window\n")
-    (princ "  h            This help\n")
-    (princ "  ?            Transient menu\n")))
+            (if dired-image-thumbnail-square-thumbnails "ON" "OFF")))
 
 ;;; Main entry point
 
@@ -1721,62 +1663,74 @@ enhanced features like sorting and filtering."
                    (not (eq dired-image-thumbnail-window-layout 'thumb-only)))
           (dired-image-thumbnail--display-this))))))
 
+(defun dired-image-thumbnail--subdir-target-buffer ()
+  "Return the dired buffer that subdirectory commands should act on.
+That is the current buffer when in `dired-mode', otherwise the
+associated dired buffer of the current thumbnail buffer.  Signals a
+user-error when neither is available."
+  (cond ((derived-mode-p 'dired-mode)
+         (current-buffer))
+        ((and (derived-mode-p 'image-dired-thumbnail-mode)
+              (buffer-live-p dired-image-thumbnail--dired-buffer))
+         dired-image-thumbnail--dired-buffer)
+        (t (user-error "Not in a dired buffer"))))
+
 ;;;###autoload
 (defun dired-image-thumbnail-insert-subdir-recursive (&optional max-depth)
   "Insert all subdirectories recursively into the current dired buffer.
 Optional MAX-DEPTH limits recursion depth (nil means unlimited).
 This makes images in subdirectories visible to `dired-image-thumbnail'.
+When run from a thumbnail buffer, the associated dired buffer is used.
 
 Note: This can be slow for directories with many subdirectories.
 Consider using `dired-image-thumbnail-insert-image-subdirs' instead,
 which only inserts subdirectories that contain images."
   (interactive "P")
-  (unless (derived-mode-p 'dired-mode)
-    (user-error "Not in a dired buffer"))
-  (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
-         (subdirs (dired-image-thumbnail--find-subdirs default-directory depth)))
-    (if subdirs
-        (progn
-          (message "Inserting %d subdirectories..." (length subdirs))
-          (dired-image-thumbnail--insert-subdirs subdirs)
-          (message "Inserted %d subdirectories" (length subdirs)))
-      (message "No subdirectories found"))))
+  (with-current-buffer (dired-image-thumbnail--subdir-target-buffer)
+    (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
+           (subdirs (dired-image-thumbnail--find-subdirs default-directory depth)))
+      (if subdirs
+          (progn
+            (message "Inserting %d subdirectories..." (length subdirs))
+            (dired-image-thumbnail--insert-subdirs subdirs)
+            (message "Inserted %d subdirectories" (length subdirs)))
+        (message "No subdirectories found")))))
 
 ;;;###autoload
 (defun dired-image-thumbnail-insert-image-subdirs (&optional max-depth)
   "Insert only subdirectories that contain image files.
 Optional MAX-DEPTH limits recursion depth (nil means unlimited).
 This is more efficient than `dired-image-thumbnail-insert-subdir-recursive'
-for directories with many non-image subdirectories."
+for directories with many non-image subdirectories.
+When run from a thumbnail buffer, the associated dired buffer is used."
   (interactive "P")
-  (unless (derived-mode-p 'dired-mode)
-    (user-error "Not in a dired buffer"))
-  (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
-         (subdirs (dired-image-thumbnail--find-image-subdirs default-directory depth)))
-    (if subdirs
-        (progn
-          (message "Inserting %d subdirectories with images..." (length subdirs))
-          (dired-image-thumbnail--insert-subdirs subdirs)
-          (message "Inserted %d subdirectories" (length subdirs)))
-      (message "No subdirectories with images found"))))
+  (with-current-buffer (dired-image-thumbnail--subdir-target-buffer)
+    (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
+           (subdirs (dired-image-thumbnail--find-image-subdirs default-directory depth)))
+      (if subdirs
+          (progn
+            (message "Inserting %d subdirectories with images..." (length subdirs))
+            (dired-image-thumbnail--insert-subdirs subdirs)
+            (message "Inserted %d subdirectories" (length subdirs)))
+        (message "No subdirectories with images found")))))
 
 ;;;###autoload
 (defun dired-image-thumbnail-kill-all-subdirs ()
   "Remove all inserted subdirectories from the current dired buffer.
-This returns the view to just the top-level directory."
+This returns the view to just the top-level directory.
+When run from a thumbnail buffer, the associated dired buffer is used."
   (interactive)
-  (unless (derived-mode-p 'dired-mode)
-    (user-error "Not in a dired buffer"))
-  (let ((count 0))
-    (save-excursion
-      (goto-char (point-max))
-      ;; Work backwards to avoid position issues
-      (while (dired-get-subdir)
-        (dired-kill-subdir)
-        (setq count (1+ count))))
-    (if (> count 0)
-        (message "Removed %d subdirectories" count)
-      (message "No subdirectories to remove"))))
+  (with-current-buffer (dired-image-thumbnail--subdir-target-buffer)
+    (let ((count 0))
+      (save-excursion
+        (goto-char (point-max))
+        ;; Work backwards to avoid position issues
+        (while (dired-get-subdir)
+          (dired-kill-subdir)
+          (setq count (1+ count))))
+      (if (> count 0)
+          (message "Removed %d subdirectories" count)
+        (message "No subdirectories to remove")))))
 
 ;;; Keymaps
 
@@ -1843,8 +1797,8 @@ keybindings will not be installed.  This can happen when `image-dired'\
     ;; External
     (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
     ;; Other
-    (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-help)
-    (define-key image-dired-thumbnail-mode-map (kbd "h") #'dired-image-thumbnail-help)))
+    (when (fboundp 'dired-image-thumbnail-transient)
+      (define-key image-dired-thumbnail-mode-map (kbd "?") #'dired-image-thumbnail-transient))))
 
 ;;; Fast image display
 
