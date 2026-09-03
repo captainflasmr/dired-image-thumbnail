@@ -428,6 +428,8 @@ The enhanced header line displays:
 @item
 @strong{Mark indicator} --- A @samp{*} if the current image is marked
 @item
+@strong{Marked count} --- Number of marked images, shown at the start when one or more are marked (e.g., @samp{[3 marked]})
+@item
 @strong{Filename} --- Relative to source directory when subdirectories are inserted
 @item
 @strong{Directory} --- Location of the current image, abbreviated (e.g., @samp{~/Photos/}); falls back to the source directory
@@ -441,8 +443,6 @@ The enhanced header line displays:
 @strong{Sort indicator} --- Current sort field and direction (e.g., @samp{[name <]})
 @item
 @strong{Active filters} --- Description of any active filters
-@item
-@strong{Marked count} --- Number of marked images, shown when one or more are marked (e.g., @samp{[3 marked]})
 @end itemize
 
 @node Customization

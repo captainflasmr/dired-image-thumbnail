@@ -424,6 +424,8 @@ File: dired-image-thumbnail.info,  Node: Header Line,  Next: Customization,  Pre
 The enhanced header line displays:
 
    • *Mark indicator* -- A ‘*’ if the current image is marked
+   • *Marked count* -- Number of marked images, shown at the start when
+     one or more are marked (e.g., ‘[3 marked]’)
    • *Filename* -- Relative to source directory when subdirectories are
      inserted
    • *Directory* -- Location of the current image, abbreviated (e.g.,
@@ -435,8 +437,6 @@ The enhanced header line displays:
    • *Sort indicator* -- Current sort field and direction (e.g., ‘[name
      <]’)
    • *Active filters* -- Description of any active filters
-   • *Marked count* -- Number of marked images, shown when one or more
-     are marked (e.g., ‘[3 marked]’)
 
 
 File: dired-image-thumbnail.info,  Node: Customization,  Next: Example Configuration,  Prev: Header Line,  Up: Top
@@ -875,30 +875,30 @@ Node: Dired Buffer Keys10532
 Node: Thumbnail Buffer Keys11185
 Node: Image Display Buffer Keys13051
 Node: Header Line13402
-Node: Customization14409
-Node: Default Sort Settings15236
-Node: Display Options15585
-Node: Window Layout15843
-Node: Display Quality16407
-Node: Image Validation16996
-Node: External Editor17673
-Node: Navigation Behavior18133
-Node: Auto-Accepting Actions18703
-Node: Image Extensions19168
-Node: Example Configuration19515
-Node: Workflow Examples20500
-Node: Reviewing a Photo Collection21041
-Node: Finding Large Images21684
-Node: Quick Culling Workflow22378
-Node: Finding High-Resolution Images22870
-Node: Working with Subdirectories Example23334
-Node: Organizing by Date23951
-Node: Comparison with Standard image-dired24331
-Node: Transient Menu Support25472
-Node: Performance Notes26078
-Node: Troubleshooting27523
-Node: Related Packages29603
-Node: License30214
+Node: Customization14422
+Node: Default Sort Settings15249
+Node: Display Options15598
+Node: Window Layout15856
+Node: Display Quality16420
+Node: Image Validation17009
+Node: External Editor17686
+Node: Navigation Behavior18146
+Node: Auto-Accepting Actions18716
+Node: Image Extensions19181
+Node: Example Configuration19528
+Node: Workflow Examples20513
+Node: Reviewing a Photo Collection21054
+Node: Finding Large Images21697
+Node: Quick Culling Workflow22391
+Node: Finding High-Resolution Images22883
+Node: Working with Subdirectories Example23347
+Node: Organizing by Date23964
+Node: Comparison with Standard image-dired24344
+Node: Transient Menu Support25485
+Node: Performance Notes26091
+Node: Troubleshooting27536
+Node: Related Packages29616
+Node: License30227
 
 End Tag Table
 

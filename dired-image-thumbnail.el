@@ -143,13 +143,15 @@ regenerate them from scratch."
   :group 'dired-image-thumbnail)
 
 (defface dired-image-thumbnail-current-thumbnail
-  '((t (:box (:line-width 5))))
+  '((t (:box (:line-width -5))))
   "Face used to highlight the currently selected thumbnail.
-The outline is thick by default (5 pixels).  Its colour follows the
-active theme: the background colour of the `highlight' face is
-used, so the outline looks like the theme's own highlight, just
-thicker.  Customise this face to change the width, or give :box an
-explicit :color to pin a fixed colour.  Set
+The outline is thick by default (5 pixels) and is drawn inside the
+thumbnail, so highlighting a different thumbnail while navigating
+never changes the thumbnail sizes or re-flows the grid.  Its colour
+follows the active theme: the background colour of the `highlight'
+face is used, so the outline looks like the theme's own highlight,
+just thicker.  Customise this face to change the width, or give
+:box an explicit :color to pin a fixed colour.  Set
 `dired-image-thumbnail-highlight-current-thumbnail' to nil to
 disable the highlight entirely."
   :group 'dired-image-thumbnail)
@@ -791,10 +793,6 @@ line.  Otherwise, fall back to the original function."
                                     "<" ">")))
              (filter-info (dired-image-thumbnail--format-active-filters))
               (marked-count (dired-image-thumbnail--count-marked))
-              (marked-info (if (> marked-count 0)
-                               (propertize (format " [%d marked]" marked-count)
-                                           'face 'dired-image-thumbnail-header-info)
-                             ""))
               (count-info (let ((pos (and file
                                           (cl-position
                                            file dired-image-thumbnail--current-images
@@ -810,6 +808,10 @@ line.  Otherwise, fall back to the original function."
              (dimensions (dired-image-thumbnail--format-image-dimensions file)))
         (concat
          " "
+         (if (> marked-count 0)
+             (propertize (format "[%d marked] " marked-count)
+                         'face 'dired-image-thumbnail-header-info)
+           "")
          (propertize dir 'face 'dired-image-thumbnail-header-info)
          " "
          (propertize rel-name 'face 'dired-image-thumbnail-header-info)
@@ -824,8 +826,7 @@ line.  Otherwise, fall back to the original function."
          (if (string-empty-p filter-info)
              ""
            (propertize (format " %s" filter-info)
-                       'face 'dired-image-thumbnail-header-info))
-         marked-info))
+                       'face 'dired-image-thumbnail-header-info))))
     ;; Fall back to original function
     (funcall orig-fun buf file image-count props comment)))
 
@@ -908,7 +909,8 @@ unavailable, do nothing."
 (defun dired-image-thumbnail--outline-box ()
   "Return the :box specification for the current-thumbnail outline.
 The line width comes from the :box attribute of
-`dired-image-thumbnail-current-thumbnail' (default 3), so
+`dired-image-thumbnail-current-thumbnail' (default -5, i.e. five
+pixels drawn inside the thumbnail so the grid never re-flows), so
 customising the face adjusts the thickness.  The colour is the
 explicit :color of that :box when set, so customising the face
 still works; otherwise the background colour of the `highlight'
@@ -918,9 +920,9 @@ light backgrounds and yellow on dark ones when no usable colour
 is available."
   (let* ((box (face-attribute 'dired-image-thumbnail-current-thumbnail :box))
          (width (let ((w (and (consp box) (plist-get box :line-width))))
-                  (cond ((numberp w) (abs w))
+                  (cond ((numberp w) w)
                         ((consp w) w)
-                        (t 5))))
+                        (t -5))))
          (explicit (cond ((stringp box) box)
                          ((consp box) (plist-get box :color))))
          (color (or (and (stringp explicit) explicit)
