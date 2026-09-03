@@ -90,7 +90,7 @@ subdirectory management, and flexible display options to the standard
 @item
 @strong{Wrap display mode} --- Thumbnails flow naturally and wrap to window width
 @item
-@strong{Enhanced header line} --- Shows current image info, directory location, dimensions, sort/filter status, and quality level
+@strong{Enhanced header line} --- Shows current image info, directory location, dimensions, sort/filter status
 @item
 @strong{Configurable window layout} --- Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
 @item
@@ -432,7 +432,7 @@ The enhanced header line displays:
 @item
 @strong{Directory} --- Location of the current image, abbreviated (e.g., @samp{~/Photos/}); falls back to the source directory
 @item
-@strong{Image count} --- Current position / total (e.g., @samp{23/156})
+@strong{Image count} --- Current position / number of displayed images (e.g., @samp{23/156}); with a filter on, the filtered set (e.g., @samp{3/12})
 @item
 @strong{Dimensions} --- Width x Height in pixels (e.g., @samp{1920x1080})
 @item
@@ -440,13 +440,9 @@ The enhanced header line displays:
 @item
 @strong{Sort indicator} --- Current sort field and direction (e.g., @samp{[name <]})
 @item
-@strong{Display quality} --- Current quality level (e.g., @samp{[fast]})
-@item
 @strong{Active filters} --- Description of any active filters
 @item
-@strong{Marked count} --- Number of marked images, always shown (e.g., @samp{[3 marked]})
-@item
-@strong{Filter count} --- When a filter is active, the number of matching images over the total (e.g., @samp{[12/156]})
+@strong{Marked count} --- Number of marked images, shown when one or more are marked (e.g., @samp{[3 marked]})
 @end itemize
 
 @node Customization

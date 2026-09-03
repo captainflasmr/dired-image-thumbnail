@@ -120,7 +120,7 @@ Next: [[#Requirements][Requirements]], Previous:
 - *Wrap display mode* --- Thumbnails flow naturally and wrap to window
   width
 - *Enhanced header line* --- Shows current image info, dimensions,
-  sort/filter status, and quality level
+  sort/filter status
 - *Configurable window layout* --- Six layout presets (left-right,
   right-left, top-bottom, bottom-top, thumb-only, manual)
 - *Display quality levels* --- Five quality tiers

@@ -155,7 +155,7 @@ subdirectory management, and flexible display options to the standard
 </li><li><strong class="strong">Subdirectory support</strong> &mdash; Works seamlessly with Dired&rsquo;s inserted subdirectories
 </li><li><strong class="strong">Subdirectory helpers</strong> &mdash; Commands to quickly insert/remove subdirectories
 </li><li><strong class="strong">Wrap display mode</strong> &mdash; Thumbnails flow naturally and wrap to window width
-</li><li><strong class="strong">Enhanced header line</strong> &mdash; Shows current image info, directory location, dimensions, sort/filter status, and quality level
+</li><li><strong class="strong">Enhanced header line</strong> &mdash; Shows current image info, directory location, dimensions, sort/filter status
 </li><li><strong class="strong">Configurable window layout</strong> &mdash; Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
 </li><li><strong class="strong">Display quality levels</strong> &mdash; Five quality tiers (full/high/fast/faster/draft) for speed vs fidelity trade-off
 </li><li><strong class="strong">External-tool preview generation</strong> &mdash; Uses <code class="code">djpeg</code>/<code class="code">cjpeg</code> or <code class="code">magick</code> for genuinely faster image previews
@@ -565,14 +565,12 @@ fit the new thumbnail window width.
 <li><strong class="strong">Mark indicator</strong> &mdash; A &lsquo;<samp class="samp">*</samp>&rsquo; if the current image is marked
 </li><li><strong class="strong">Filename</strong> &mdash; Relative to source directory when subdirectories are inserted
 </li><li><strong class="strong">Directory</strong> &mdash; Location of the current image, abbreviated (e.g., &lsquo;<samp class="samp">~/Photos/</samp>&rsquo;); falls back to the source directory
-</li><li><strong class="strong">Image count</strong> &mdash; Current position / total (e.g., &lsquo;<samp class="samp">23/156</samp>&rsquo;)
+</li><li><strong class="strong">Image count</strong> &mdash; Current position / number of displayed images (e.g., &lsquo;<samp class="samp">23/156</samp>&rsquo;); with a filter on, the filtered set (e.g., &lsquo;<samp class="samp">3/12</samp>&rsquo;)
 </li><li><strong class="strong">Dimensions</strong> &mdash; Width x Height in pixels (e.g., &lsquo;<samp class="samp">1920x1080</samp>&rsquo;)
 </li><li><strong class="strong">File size</strong> &mdash; Human-readable size (e.g., &lsquo;<samp class="samp">2.4M</samp>&rsquo;)
 </li><li><strong class="strong">Sort indicator</strong> &mdash; Current sort field and direction (e.g., &lsquo;<samp class="samp">[name &lt;]</samp>&rsquo;)
-</li><li><strong class="strong">Display quality</strong> &mdash; Current quality level (e.g., &lsquo;<samp class="samp">[fast]</samp>&rsquo;)
 </li><li><strong class="strong">Active filters</strong> &mdash; Description of any active filters
-</li><li><strong class="strong">Marked count</strong> &mdash; Number of marked images, always shown (e.g., &lsquo;<samp class="samp">[3 marked]</samp>&rsquo;)
-</li><li><strong class="strong">Filter count</strong> &mdash; When a filter is active, the number of matching images over the total (e.g., &lsquo;<samp class="samp">[12/156]</samp>&rsquo;)
+</li><li><strong class="strong">Marked count</strong> &mdash; Number of marked images, shown when one or more are marked (e.g., &lsquo;<samp class="samp">[3 marked]</samp>&rsquo;)
 </li></ul>
 
 <hr>

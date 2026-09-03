@@ -13,7 +13,7 @@
 - *Subdirectory support* - Works seamlessly with Dired's inserted subdirectories
 - *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
-- *Enhanced header line* - Shows current image info, directory location, dimensions, sort/filter status, and quality level
+- *Enhanced header line* - Shows current image info, directory location, dimensions, sort/filter status
 - *Configurable window layout* - Six layout presets (left-right, right-left, top-bottom, bottom-top, thumb-only, manual)
 - *Display quality levels* - Five quality tiers (full/high/fast/faster/draft) for speed vs fidelity trade-off
 - *External-tool preview generation* - Uses =djpeg=/=cjpeg= or =magick= for genuinely faster image previews
@@ -215,14 +215,12 @@ The enhanced header line displays:
 - *Mark indicator* - A =*= if the current image is marked
 - *Filename* - Relative to source directory when subdirectories are inserted
 - *Directory* - Location of the current image, abbreviated (e.g., =~/Photos/=); falls back to the source directory
-- *Image count* - Current position / total (e.g., =23/156=)
+- *Image count* - Current position / number of displayed images (e.g., =23/156=); with a filter on, the filtered set (e.g., =3/12=)
 - *Dimensions* - Width × Height in pixels (e.g., =1920x1080=)
 - *File size* - Human-readable size (e.g., =2.4M=)
 - *Sort indicator* - Current sort field and direction (e.g., =[name ↑]=)
-- *Display quality* - Current quality level (e.g., =[fast]=)
 - *Active filters* - Description of any active filters
-- *Marked count* - Number of marked images, always shown (e.g., =[3 marked]=)
-- *Filter count* - When a filter is active, the number of matching images over the total (e.g., =[12/156]=)
+- *Marked count* - Number of marked images, shown when one or more are marked (e.g., =[3 marked]=)
 
 * Customization
 
@@ -417,7 +415,7 @@ Add or modify recognized image file extensions:
 | Subdirectory support   | ✗           | ✓ (via insertion)     |
 | Helper commands        | ✗           | ✓                     |
 | Wrap display           | ✗           | ✓                     |
-| Enhanced header line   | Basic       | Enhanced + quality    |
+| Enhanced header line   | Basic       | Enhanced              |
 | Auto-display on n/p    | ✗           | ✓                     |
 | Configurable layout    | ✗           | ✓ (6 presets)         |
 | Display quality levels | ✗           | ✓ (5 levels)          |

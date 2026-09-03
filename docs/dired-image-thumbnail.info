@@ -72,7 +72,7 @@ File: dired-image-thumbnail.info,  Node: Features,  Next: Requirements,  Prev: I
    • *Wrap display mode* -- Thumbnails flow naturally and wrap to window
      width
    • *Enhanced header line* -- Shows current image info, directory
-     location, dimensions, sort/filter status, and quality level
+     location, dimensions, sort/filter status
    • *Configurable window layout* -- Six layout presets (left-right,
      right-left, top-bottom, bottom-top, thumb-only, manual)
    • *Display quality levels* -- Five quality tiers
@@ -428,17 +428,15 @@ The enhanced header line displays:
      inserted
    • *Directory* -- Location of the current image, abbreviated (e.g.,
      ‘~/Photos/’); falls back to the source directory
-   • *Image count* -- Current position / total (e.g., ‘23/156’)
+   • *Image count* -- Current position / number of displayed images
+     (e.g., ‘23/156’); with a filter on, the filtered set (e.g., ‘3/12’)
    • *Dimensions* -- Width x Height in pixels (e.g., ‘1920x1080’)
    • *File size* -- Human-readable size (e.g., ‘2.4M’)
    • *Sort indicator* -- Current sort field and direction (e.g., ‘[name
      <]’)
-   • *Display quality* -- Current quality level (e.g., ‘[fast]’)
    • *Active filters* -- Description of any active filters
-   • *Marked count* -- Number of marked images, always shown (e.g., ‘[3
-     marked]’)
-   • *Filter count* -- When a filter is active, the number of matching
-     images over the total (e.g., ‘[12/156]’)
+   • *Marked count* -- Number of marked images, shown when one or more
+     are marked (e.g., ‘[3 marked]’)
 
 
 File: dired-image-thumbnail.info,  Node: Customization,  Next: Example Configuration,  Prev: Header Line,  Up: Top
@@ -859,48 +857,48 @@ Tag Table:
 Node: Top584
 Node: Introduction2015
 Node: Features2433
-Node: Requirements4140
-Node: Installation4402
-Node: Manual Installation4719
-Node: use-package5021
-Node: straight.el5288
-Node: Usage5573
-Node: Quick Start5895
-Node: Working with Subdirectories6412
-Node: From Standard image-dired7296
-Node: Enhanced Workflow7664
-Node: Automatic Split-Screen Layout8117
-Node: Auto-Display Navigation9152
-Node: Quick Deletion Workflow9670
-Node: Keybindings10218
-Node: Dired Buffer Keys10551
-Node: Thumbnail Buffer Keys11204
-Node: Image Display Buffer Keys13070
-Node: Header Line13421
-Node: Customization14520
-Node: Default Sort Settings15347
-Node: Display Options15696
-Node: Window Layout15954
-Node: Display Quality16518
-Node: Image Validation17107
-Node: External Editor17784
-Node: Navigation Behavior18244
-Node: Auto-Accepting Actions18814
-Node: Image Extensions19279
-Node: Example Configuration19626
-Node: Workflow Examples20611
-Node: Reviewing a Photo Collection21152
-Node: Finding Large Images21795
-Node: Quick Culling Workflow22489
-Node: Finding High-Resolution Images22981
-Node: Working with Subdirectories Example23445
-Node: Organizing by Date24062
-Node: Comparison with Standard image-dired24442
-Node: Transient Menu Support25583
-Node: Performance Notes26189
-Node: Troubleshooting27634
-Node: Related Packages29714
-Node: License30325
+Node: Requirements4121
+Node: Installation4383
+Node: Manual Installation4700
+Node: use-package5002
+Node: straight.el5269
+Node: Usage5554
+Node: Quick Start5876
+Node: Working with Subdirectories6393
+Node: From Standard image-dired7277
+Node: Enhanced Workflow7645
+Node: Automatic Split-Screen Layout8098
+Node: Auto-Display Navigation9133
+Node: Quick Deletion Workflow9651
+Node: Keybindings10199
+Node: Dired Buffer Keys10532
+Node: Thumbnail Buffer Keys11185
+Node: Image Display Buffer Keys13051
+Node: Header Line13402
+Node: Customization14409
+Node: Default Sort Settings15236
+Node: Display Options15585
+Node: Window Layout15843
+Node: Display Quality16407
+Node: Image Validation16996
+Node: External Editor17673
+Node: Navigation Behavior18133
+Node: Auto-Accepting Actions18703
+Node: Image Extensions19168
+Node: Example Configuration19515
+Node: Workflow Examples20500
+Node: Reviewing a Photo Collection21041
+Node: Finding Large Images21684
+Node: Quick Culling Workflow22378
+Node: Finding High-Resolution Images22870
+Node: Working with Subdirectories Example23334
+Node: Organizing by Date23951
+Node: Comparison with Standard image-dired24331
+Node: Transient Menu Support25472
+Node: Performance Notes26078
+Node: Troubleshooting27523
+Node: Related Packages29603
+Node: License30214
 
 End Tag Table
 

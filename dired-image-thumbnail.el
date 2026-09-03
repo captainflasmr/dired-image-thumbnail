@@ -209,7 +209,7 @@ The thumbnail/image size ratio is controlled by
   :safe #'symbolp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-window-ratio 0.7
+(defcustom dired-image-thumbnail-window-ratio 0.6
   "Fraction of the frame given to the thumbnail buffer.
 The image buffer gets the remainder.  Only used when
 `dired-image-thumbnail-window-layout' is non-nil."
@@ -595,11 +595,13 @@ can be updated on every navigation without re-scanning the dired buffer."
 
 (defun dired-image-thumbnail--invalidate-marked-count (&rest _)
   "Invalidate the cached marked count in the current thumbnail buffer.
-Installed as `:after' advice on `image-dired--thumb-update-marks', which
-is the common choke point for all mark changes (both ours and native
-image-dired commands)."
+Installed as `:after' advice on `image-dired--thumb-update-marks', the
+common choke point for bulk mark changes (both ours and native
+image-dired commands).  The header line is refreshed right away so
+the `[N marked]' segment reflects the change immediately."
   (when (derived-mode-p 'image-dired-thumbnail-mode)
-    (setq dired-image-thumbnail--marked-count nil)))
+    (setq dired-image-thumbnail--marked-count nil)
+    (image-dired--update-header-line)))
 
 ;;; Sorting functions
 
@@ -789,37 +791,39 @@ line.  Otherwise, fall back to the original function."
                                     "<" ">")))
              (filter-info (dired-image-thumbnail--format-active-filters))
               (marked-count (dired-image-thumbnail--count-marked))
-              (marked-info (propertize (format " [%d marked]" marked-count)
-                                       'face 'dired-image-thumbnail-header-info))
+              (marked-info (if (> marked-count 0)
+                               (propertize (format " [%d marked]" marked-count)
+                                           'face 'dired-image-thumbnail-header-info)
+                             ""))
+              (count-info (let ((pos (and file
+                                          (cl-position
+                                           file dired-image-thumbnail--current-images
+                                           :test #'equal))))
+                            (if pos
+                                (format "%d/%d"
+                                        (1+ pos)
+                                        (length dired-image-thumbnail--current-images))
+                              image-count)))
              (rel-name (dired-image-thumbnail--relative-name file))
              (dir (dired-image-thumbnail--format-directory file))
              (size (dired-image-thumbnail--format-file-size file))
-             (dimensions (dired-image-thumbnail--format-image-dimensions file))
-             (quality (symbol-name dired-image-thumbnail-display-quality))
-             (layout-info (if dired-image-thumbnail-square-thumbnails
-                              " [square]" " [natural]")))
+             (dimensions (dired-image-thumbnail--format-image-dimensions file)))
         (concat
-         "  "
+         " "
          (propertize dir 'face 'dired-image-thumbnail-header-info)
-         "  "
+         " "
          (propertize rel-name 'face 'dired-image-thumbnail-header-info)
-         "  "
-         (propertize image-count 'face 'dired-image-thumbnail-header-info)
-         "  "
+         " "
+         (propertize count-info 'face 'dired-image-thumbnail-header-info)
+         " "
          (propertize size 'face 'dired-image-thumbnail-header-info)
-         "  "
+         " "
          (propertize dimensions 'face 'dired-image-thumbnail-header-info)
-         "  "
+         " "
          (propertize sort-info 'face 'dired-image-thumbnail-header-info)
-         "  "
-         (propertize (format "[%s]" quality) 'face 'dired-image-thumbnail-header-info)
-         (propertize layout-info 'face 'dired-image-thumbnail-header-info)
          (if (string-empty-p filter-info)
              ""
-           (propertize (format "  %s [%d/%d]"
-                               filter-info
-                               (length dired-image-thumbnail--current-images)
-                               (length dired-image-thumbnail--all-images))
+           (propertize (format " %s" filter-info)
                        'face 'dired-image-thumbnail-header-info))
          marked-info))
     ;; Fall back to original function
@@ -1384,10 +1388,14 @@ See `dired-image-thumbnail-mark'."
 Vanilla marking always advances to the next image; when
 `dired-image-thumbnail-auto-display-on-navigate' is non-nil the
 newly-current image is displayed through the fast preview
-pipeline."
+pipeline.  The cached marked count is invalidated and the header
+line refreshed, since vanilla marking updates marks at point
+without running the bulk update the count cache relies on."
+  (setq dired-image-thumbnail--marked-count nil)
   (sit-for 0)
   (when dired-image-thumbnail-auto-display-on-navigate
-    (dired-image-thumbnail--display-this)))
+    (dired-image-thumbnail--display-this))
+  (image-dired--update-header-line))
 
 (defun dired-image-thumbnail-mark-all ()
   "Mark all visible images in the thumbnail buffer."
