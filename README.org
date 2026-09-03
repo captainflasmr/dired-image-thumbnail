@@ -184,7 +184,7 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 | =G=       | ~dired-image-thumbnail-hard-refresh~           | Clear cache and refresh        |
 | =+=       | ~dired-image-thumbnail-increase-size~          | Increase thumbnail size        |
 | =-=       | ~dired-image-thumbnail-decrease-size~          | Decrease thumbnail size        |
-| =Q=       | ~dired-image-thumbnail-cycle-display-quality~  | Cycle quality (full→draft)     |
+| =Q=       | ~dired-image-thumbnail-select-display-quality~  | Select quality via completing-read |
 
 *** Marking
 

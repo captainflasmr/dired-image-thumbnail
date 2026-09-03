@@ -1,4 +1,4 @@
-This is dired-image-thumbnail.info, produced by makeinfo version 7.2
+This is dired-image-thumbnail.info, produced by makeinfo version 7.3
 from dired-image-thumbnail.texi.
 
 Copyright © 2025-2026 James Dyer
@@ -71,8 +71,8 @@ File: dired-image-thumbnail.info,  Node: Features,  Next: Requirements,  Prev: I
      subdirectories
    • *Wrap display mode* -- Thumbnails flow naturally and wrap to window
      width
-   • *Enhanced header line* -- Shows current image info, dimensions,
-     sort/filter status, and quality level
+   • *Enhanced header line* -- Shows current image info, directory
+     location, dimensions, sort/filter status, and quality level
    • *Configurable window layout* -- Six layout presets (left-right,
      right-left, top-bottom, bottom-top, thumb-only, manual)
    • *Display quality levels* -- Five quality tiers
@@ -320,9 +320,11 @@ Navigation
 ----------
 
 ‘n’
+‘f’
 ‘<RIGHT>’
      Next image (auto-display when enabled)
 ‘p’
+‘b’
 ‘<LEFT>’
      Previous image (auto-display when enabled)
 ‘+’
@@ -331,8 +333,10 @@ Navigation
      Decrease thumbnail size
 
    When ‘dired-image-thumbnail-auto-display-on-navigate’ is enabled
-(default), pressing ‘n’ or ‘p’ automatically displays the full-size
-image.
+(default), pressing ‘n’ or ‘p’ (also ‘f’ or ‘b’) automatically displays
+the full-size image.  When follow is activated and the image window
+opens, the thumbnails are automatically refreshed so they re-align and
+the columns fit the new thumbnail window width.
 
 Sorting
 -------
@@ -370,9 +374,6 @@ Filtering
 Display
 -------
 
-‘w’
-     Toggle wrap display mode
-‘r’
 ‘g’
      Refresh the display
 ‘G’
@@ -382,7 +383,8 @@ Display
 ‘-’
      Decrease thumbnail size
 ‘Q’
-     Cycle display quality (full, high, fast, faster, draft)
+     Select display quality with ‘completing-read’ (full, high, fast,
+     faster, draft)
 
 Marking
 -------
@@ -416,8 +418,7 @@ Other
 ‘W’
      Open in external editor
 ‘?’
-‘h’
-     Show help
+     Open the transient menu (all commands)
 
 
 File: dired-image-thumbnail.info,  Node: Image Display Buffer Keys,  Prev: Thumbnail Buffer Keys,  Up: Keybindings
@@ -442,6 +443,8 @@ The enhanced header line displays:
    • *Mark indicator* -- A ‘*’ if the current image is marked
    • *Filename* -- Relative to source directory when subdirectories are
      inserted
+   • *Directory* -- Location of the current image, abbreviated (e.g.,
+     ‘~/Photos/’); falls back to the source directory
    • *Image count* -- Current position / total (e.g., ‘23/156’)
    • *Dimensions* -- Width x Height in pixels (e.g., ‘1920x1080’)
    • *File size* -- Human-readable size (e.g., ‘2.4M’)
@@ -512,7 +515,7 @@ File: dired-image-thumbnail.info,  Node: Display Quality,  Next: Image Validatio
 
 Control the speed/fidelity trade-off when navigating with ‘n’/‘p’:
 
-     (setq dired-image-thumbnail-display-quality 'fast) ; 'full, 'high, 'fast, 'faster, or 'draft
+     (setq dired-image-thumbnail-display-quality 'faster) ; 'full, 'high, 'fast, 'faster, or 'draft
 
    Lower quality levels use external tools (‘djpeg’/‘cjpeg’ for JPEGs,
 ‘magick’ for others) to generate small preview files, so Emacs decodes
@@ -767,6 +770,9 @@ When working with large directory trees:
      images, which is much faster
    • For very large collections, manually insert specific subdirectories
      with ‘i’ as needed
+   • From the thumbnail buffer, the transient menu (‘?’) offers ‘i’
+     (insert image subdirs), ‘I’ (recursive) and ‘K’ (kill all), acting
+     on the associated dired buffer
 
 14.2 Thumbnail Generation
 =========================
@@ -864,48 +870,48 @@ Tag Table:
 Node: Top584
 Node: Introduction2015
 Node: Features2433
-Node: Requirements4120
-Node: Installation4382
-Node: Manual Installation4699
-Node: use-package5001
-Node: straight.el5268
-Node: Usage5553
-Node: Quick Start5875
-Node: Working with Subdirectories6392
-Node: From Standard image-dired7276
-Node: Enhanced Workflow7644
-Node: Automatic Split-Screen Layout8097
-Node: Auto-Display Navigation9132
-Node: Quick Deletion Workflow9650
-Node: Keybindings10198
-Node: Dired Buffer Keys10531
-Node: Thumbnail Buffer Keys11184
-Node: Image Display Buffer Keys13058
-Node: Header Line13409
-Node: Customization14236
-Node: Default Sort Settings15063
-Node: Display Options15412
-Node: Window Layout15670
-Node: Display Quality16234
-Node: Image Validation16821
-Node: External Editor17498
-Node: Navigation Behavior17958
-Node: Auto-Accepting Actions18528
-Node: Image Extensions18993
-Node: Example Configuration19340
-Node: Workflow Examples20325
-Node: Reviewing a Photo Collection20866
-Node: Finding Large Images21466
-Node: Quick Culling Workflow22095
-Node: Finding High-Resolution Images22587
-Node: Working with Subdirectories Example23050
-Node: Organizing by Date23667
-Node: Comparison with Standard image-dired24047
-Node: Transient Menu Support25188
-Node: Performance Notes25801
-Node: Troubleshooting27001
-Node: Related Packages29081
-Node: License29692
+Node: Requirements4140
+Node: Installation4402
+Node: Manual Installation4719
+Node: use-package5021
+Node: straight.el5288
+Node: Usage5573
+Node: Quick Start5895
+Node: Working with Subdirectories6412
+Node: From Standard image-dired7296
+Node: Enhanced Workflow7664
+Node: Automatic Split-Screen Layout8117
+Node: Auto-Display Navigation9152
+Node: Quick Deletion Workflow9670
+Node: Keybindings10218
+Node: Dired Buffer Keys10551
+Node: Thumbnail Buffer Keys11204
+Node: Image Display Buffer Keys13294
+Node: Header Line13645
+Node: Customization14602
+Node: Default Sort Settings15429
+Node: Display Options15778
+Node: Window Layout16036
+Node: Display Quality16600
+Node: Image Validation17189
+Node: External Editor17866
+Node: Navigation Behavior18326
+Node: Auto-Accepting Actions18896
+Node: Image Extensions19361
+Node: Example Configuration19708
+Node: Workflow Examples20693
+Node: Reviewing a Photo Collection21234
+Node: Finding Large Images21834
+Node: Quick Culling Workflow22463
+Node: Finding High-Resolution Images22955
+Node: Working with Subdirectories Example23418
+Node: Organizing by Date24035
+Node: Comparison with Standard image-dired24415
+Node: Transient Menu Support25556
+Node: Performance Notes26169
+Node: Troubleshooting27563
+Node: Related Packages29643
+Node: License30254
 
 End Tag Table
 

@@ -543,7 +543,7 @@ When =dired-image-thumbnail-auto-display-on-navigate= is enabled
 
 - - :: Decrease thumbnail size
 
-- Q :: Cycle display quality (full, high, fast, faster, draft)
+- Q :: Select display quality with completing-read (full, high, fast, faster, draft)
 
 **** Marking [[#Marking][¶]]
 :PROPERTIES:

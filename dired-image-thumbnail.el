@@ -294,7 +294,10 @@ follow mode on usually shows the next image instantly.  Displayed
 previews are kept in the image cache, so revisiting an image costs
 nothing.
 
-Changing this takes effect on the next n/p keypress."
+Interactively select the quality with
+`dired-image-thumbnail-select-display-quality' (bound to `Q`),
+which takes effect immediately.  Customising this variable takes
+effect on the next n/p keypress."
   :type '(choice (const :tag "Full resolution (slowest)" full)
                  (const :tag "High - window size" high)
                  (const :tag "Fast - 1/2 window" fast)
@@ -1800,7 +1803,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     ;; Auto-display toggle (a)
     (define-key image-dired-thumbnail-mode-map (kbd "F") #'dired-image-thumbnail-toggle-auto-display)
     ;; Display quality
-    (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-cycle-display-quality)
+    (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-select-display-quality)
     ;; External
     (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
     ;; Other
@@ -2068,18 +2071,16 @@ Uses fast scaled display unless quality is `full'."
 
 ;;; Enhanced navigation and deletion
 
-(defun dired-image-thumbnail-cycle-display-quality ()
-  "Cycle through display quality levels.
-Order: fast -> faster -> draft -> high -> full -> fast ..."
+(defun dired-image-thumbnail-select-display-quality ()
+  "Select the display quality with `completing-read'.
+Choose among `full', `high', `fast', `faster' and `draft'; the
+choice takes effect immediately and refreshes the displayed image."
   (interactive)
   (setq dired-image-thumbnail-display-quality
-        (pcase dired-image-thumbnail-display-quality
-          ('full   'high)
-          ('high   'fast)
-          ('fast   'faster)
-          ('faster 'draft)
-          ('draft  'full)
-          (_       'fast)))
+        (intern (completing-read
+                 "Display quality: "
+                 '("full" "high" "fast" "faster" "draft")
+                 nil t)))
   (message "Display quality: %s" dired-image-thumbnail-display-quality)
   (image-dired--update-header-line)
   (dired-image-thumbnail--display-this))

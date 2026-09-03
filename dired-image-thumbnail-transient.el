@@ -77,7 +77,7 @@
 (declare-function dired-image-thumbnail-next-image "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-previous-image "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-hard-refresh "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-cycle-display-quality "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-select-display-quality "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-insert-subdir-recursive "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-insert-image-subdirs "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-kill-all-subdirs "dired-image-thumbnail")
@@ -212,7 +212,7 @@
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
     ("F" "Toggle follow" dired-image-thumbnail-toggle-auto-display :transient nil)
-    ("Q" "Cycle quality" dired-image-thumbnail-cycle-display-quality :transient nil)]
+    ("Q" "Select quality" dired-image-thumbnail-select-display-quality :transient nil)]
    ["Subdirs"
     ("i" "Insert image subdirs" dired-image-thumbnail-insert-image-subdirs :transient nil)
     ("I" "Insert subdirs (recursive)" dired-image-thumbnail-insert-subdir-recursive :transient nil)

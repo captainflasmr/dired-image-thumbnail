@@ -385,7 +385,7 @@ Increase thumbnail size
 @item -
 Decrease thumbnail size
 @item Q
-Cycle display quality (full, high, fast, faster, draft)
+Select display quality with @code{completing-read} (full, high, fast, faster, draft)
 @end table
 
 @subheading Marking
