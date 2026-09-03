@@ -349,8 +349,10 @@ you want the standard Emacs locking behaviour."
 (defvar-local dired-image-thumbnail--filter-size-max nil
   "Maximum size filter in bytes.")
 
-(defvar-local dired-image-thumbnail--display-size 150
-  "Current display size for thumbnails (for zoom).")
+(defvar-local dired-image-thumbnail--display-size 128
+  "Current display size for thumbnails (for zoom).
+Defaults to image-dired's own thumbnail size, so the existing
+thumbnail cache can be displayed without regeneration.")
 
 (defvar-local dired-image-thumbnail--dimension-cache (make-hash-table :test 'equal)
   "Cache for image dimensions keyed by file name.")
@@ -1045,23 +1047,16 @@ after refreshing. Otherwise, try to maintain position on the current file."
                    (/= display-size standard-size))
           (setq-local image-dired-thumb-size display-size))
         ;; Cached thumb files are shown at their natural size, so when
-        ;; the display size changed since they were generated, delete
-        ;; them here: phase 1 then regenerates them at the new size,
-        ;; making +/- resizes visible without a hard refresh.  Drain
-        ;; any in-flight thumbnail jobs first: their sentinel chmods
-        ;; the thumb file after creation, which errors if we deleted
-        ;; it from under them.
+        ;; the display size changed since they were generated, the
+        ;; stale-sized files are regenerated in the background (see
+        ;; `dired-image-thumbnail--regenerate-thumbs').  The cached
+        ;; thumbnails currently on disk are displayed right away, so
+        ;; the buffer is never blank while the new sizes are made.
         (when (and (numberp image-dired-thumb-size)
                    (numberp dired-image-thumbnail--thumbs-generated-at)
                    (/= image-dired-thumb-size
                        dired-image-thumbnail--thumbs-generated-at))
-          (dired-image-thumbnail--wait-for-thumbnails)
-          (dolist (file dired-image-thumbnail--current-images)
-            (let ((thumb-file (image-dired-thumb-name file)))
-              (when (file-exists-p thumb-file)
-                (delete-file thumb-file)))))
-        (setq dired-image-thumbnail--thumbs-generated-at
-              (and (numberp image-dired-thumb-size) image-dired-thumb-size))
+          (dired-image-thumbnail--queue-thumb-regeneration))
         ;; Insert thumbnails using image-dired's standard function
         ;; This ensures proper marking support
         (when dired-image-thumbnail-square-thumbnails
@@ -2053,6 +2048,43 @@ Emacs never decodes the full image."
     (cons (max 1 (truncate (* win-width scale)))
           (max 1 (truncate (* win-height scale))))))
 
+(defvar dired-image-thumbnail--thumb-regen-timer nil
+  "Idle timer for the deferred thumbnail-cache regeneration.")
+
+(defun dired-image-thumbnail--queue-thumb-regeneration ()
+  "Queue a background regeneration of thumbnails at the display size.
+The stale-sized cached thumbnails stay visible until the
+regeneration replaces them, so the thumbnail buffer is never blank
+while the new sizes are generated."
+  (when dired-image-thumbnail--thumb-regen-timer
+    (cancel-timer dired-image-thumbnail--thumb-regen-timer))
+  (setq dired-image-thumbnail--thumb-regen-timer
+        (run-with-idle-timer 1.0 nil
+                             #'dired-image-thumbnail--regenerate-thumbs)))
+
+(defun dired-image-thumbnail--regenerate-thumbs ()
+  "Regenerate cached thumbnails at the current display size.
+Drains any in-flight thumbnail jobs, deletes the stale-sized
+cached files and refreshes, so the thumbnails are regenerated and
+re-displayed at the size set by the +/- commands."
+  (setq dired-image-thumbnail--thumb-regen-timer nil)
+  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+    (when (and thumb-buf (buffer-live-p thumb-buf))
+      (with-current-buffer thumb-buf
+        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                   (numberp image-dired-thumb-size)
+                   (numberp dired-image-thumbnail--thumbs-generated-at)
+                   (/= image-dired-thumb-size
+                       dired-image-thumbnail--thumbs-generated-at))
+          (dired-image-thumbnail--wait-for-thumbnails)
+          (dolist (file dired-image-thumbnail--current-images)
+            (let ((thumb-file (image-dired-thumb-name file)))
+              (when (file-exists-p thumb-file)
+                (delete-file thumb-file))))
+          (setq dired-image-thumbnail--thumbs-generated-at
+                image-dired-thumb-size)
+          (dired-image-thumbnail-refresh))))))
+
 (defun dired-image-thumbnail--queue-prefetch ()
   "Queue idle-time pre-generation of previews around the current image."
   (when dired-image-thumbnail--prefetch-timer
@@ -2350,6 +2382,9 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
   (when dired-image-thumbnail--prefetch-timer
     (cancel-timer dired-image-thumbnail--prefetch-timer)
     (setq dired-image-thumbnail--prefetch-timer nil))
+  (when dired-image-thumbnail--thumb-regen-timer
+    (cancel-timer dired-image-thumbnail--thumb-regen-timer)
+    (setq dired-image-thumbnail--thumb-regen-timer nil))
   (advice-remove 'image-dired-format-properties-string
                  #'dired-image-thumbnail--format-properties-string)
   (advice-remove 'image-dired--thumb-update-marks
