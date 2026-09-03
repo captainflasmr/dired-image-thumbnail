@@ -129,7 +129,7 @@ When nil, the standard `image-dired' line-up method is used."
   :safe #'booleanp
   :group 'dired-image-thumbnail)
 
-(defcustom dired-image-thumbnail-square-thumbnails t
+(defcustom dired-image-thumbnail-square-thumbnails nil
   "Whether to crop thumbnails to uniform squares for a tidier grid.
 When non-nil, each thumbnail is scaled to fill and center-cropped to
 a uniform square of `image-dired-thumb-size' pixels so that all
