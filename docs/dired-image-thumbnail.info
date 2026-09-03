@@ -341,35 +341,17 @@ the columns fit the new thumbnail window width.
 Sorting
 -------
 
-‘s b’
-     Sort by Dired buffer order
-‘s n’
-     Sort by filename
-‘s d’
-     Sort by modification date
-‘s s’
-     Sort by file size
-‘s D’
-     Sort by image dimensions (area)
-‘s r’
-     Reverse sort order
+‘s’
 ‘S’
-     Interactive sort selection (transient)
+     Select sort criteria with ‘completing-read’ (dired order, name,
+     date, size, reverse)
 
 Filtering
 ---------
 
-‘/ n’
-     Filter by name regexp
-‘/ s’
-     Filter by file size range
-‘/ d’
-     Filter by dimension range
-‘/ /’
-‘/ c’
-     Clear all filters
+‘/’
 ‘\’
-     Interactive filter menu (transient)
+     Select filter criteria with ‘completing-read’ (name, size, clear)
 
 Display
 -------
@@ -641,7 +623,8 @@ File: dired-image-thumbnail.info,  Node: Reviewing a Photo Collection,  Next: Fi
   2. Insert subdirectories with images: ‘C-t s’
   3. View thumbnails: ‘C-t m’
   4. Thumbnails appear on the left, full-size view on the right
-  5. Sort by date (newest first): ‘s d’ then ‘s r’
+  5. Sort by date (newest first): ‘s’, choose ‘date’, then ‘s’, choose
+     ‘reverse’
   6. Browse with ‘n’ / ‘p’ -- images automatically update on the right
   7. Mark keepers with ‘m’, jump to Dired with ‘d’
 
@@ -653,9 +636,10 @@ File: dired-image-thumbnail.info,  Node: Finding Large Images,  Next: Quick Cull
 
   1. View thumbnails: ‘C-t m’
   2. Grid appears on left, image display on right
-  3. Filter by size: ‘/ s’ and enter ‘1M’ for minimum, leave maximum
-     empty
-  4. Sort by size (largest first): ‘s s’ then ‘s r’
+  3. Filter by size: ‘/’ and choose ‘size’, then enter ‘1M’ for minimum,
+     leave maximum empty
+  4. Sort by size (largest first): ‘s’, choose ‘size’, then ‘s’, choose
+     ‘reverse’
   5. Navigate with ‘n’/‘p’ to review each image
   6. Mark images for deletion with ‘m’, delete with ‘x’
   7. Or use ‘C-d’ to delete current image and advance to next
@@ -683,7 +667,7 @@ File: dired-image-thumbnail.info,  Node: Finding High-Resolution Images,  Next: 
   2. Filter by dimensions: ‘/ d’ and enter minimum width ‘1920’, minimum
      height ‘1080’
   3. Browse only HD+ images
-  4. Use ‘/ c’ to clear the filter when done
+  4. Use ‘/’ and choose ‘clear’ when done
 
 
 File: dired-image-thumbnail.info,  Node: Working with Subdirectories Example,  Next: Organizing by Date,  Prev: Finding High-Resolution Images,  Up: Workflow Examples
@@ -747,8 +731,8 @@ If ‘transient’ is available, ‘dired-image-thumbnail’ provides
 interactive menus for sorting and filtering.  These can be accessed
 with:
 
-   • ‘S’ -- Sort menu (shows all sort options and current state)
-   • ‘\’ -- Filter menu (shows all filter options and current filters)
+   • ‘s’ / ‘S’ -- Sort (completing-read: dired/name/date/size/reverse)
+   • ‘/’ -- Filter (completing-read: name/size/clear)
 
    To disable transient menus even when transient is installed, don't
 load ‘dired-image-thumbnail-transient.el’.
@@ -886,32 +870,32 @@ Node: Quick Deletion Workflow9670
 Node: Keybindings10218
 Node: Dired Buffer Keys10551
 Node: Thumbnail Buffer Keys11204
-Node: Image Display Buffer Keys13294
-Node: Header Line13645
-Node: Customization14602
-Node: Default Sort Settings15429
-Node: Display Options15778
-Node: Window Layout16036
-Node: Display Quality16600
-Node: Image Validation17189
-Node: External Editor17866
-Node: Navigation Behavior18326
-Node: Auto-Accepting Actions18896
-Node: Image Extensions19361
-Node: Example Configuration19708
-Node: Workflow Examples20693
-Node: Reviewing a Photo Collection21234
-Node: Finding Large Images21834
-Node: Quick Culling Workflow22463
-Node: Finding High-Resolution Images22955
-Node: Working with Subdirectories Example23418
-Node: Organizing by Date24035
-Node: Comparison with Standard image-dired24415
-Node: Transient Menu Support25556
-Node: Performance Notes26169
-Node: Troubleshooting27563
-Node: Related Packages29643
-Node: License30254
+Node: Image Display Buffer Keys13008
+Node: Header Line13359
+Node: Customization14316
+Node: Default Sort Settings15143
+Node: Display Options15492
+Node: Window Layout15750
+Node: Display Quality16314
+Node: Image Validation16903
+Node: External Editor17580
+Node: Navigation Behavior18040
+Node: Auto-Accepting Actions18610
+Node: Image Extensions19075
+Node: Example Configuration19422
+Node: Workflow Examples20407
+Node: Reviewing a Photo Collection20948
+Node: Finding Large Images21591
+Node: Quick Culling Workflow22285
+Node: Finding High-Resolution Images22777
+Node: Working with Subdirectories Example23241
+Node: Organizing by Date23858
+Node: Comparison with Standard image-dired24238
+Node: Transient Menu Support25379
+Node: Performance Notes25985
+Node: Troubleshooting27379
+Node: Related Packages29459
+Node: License30070
 
 End Tag Table
 

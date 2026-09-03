@@ -48,23 +48,14 @@
 (defvar dired-image-thumbnail-sort-order)
 (defvar dired-image-thumbnail-wrap-display)
 (defvar dired-image-thumbnail-square-thumbnails)
-(defvar dired-image-thumbnail-auto-accept)
 (defvar image-dired-thumbnail-mode-map)
 
 ;; Declare functions from dired-image-thumbnail
 (declare-function image-dired-display-image "image-dired")
 (declare-function dired-image-thumbnail--format-active-filters "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-hard-refresh "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-sort-by-dired "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-sort-by-name "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-sort-by-date "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-sort-by-size "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-sort-reverse "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-sort "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-filter "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-filter-by-name "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-filter-by-size "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-filter-clear "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-mark-all "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-all-marks "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-goto-dired "dired-image-thumbnail")
@@ -92,16 +83,6 @@
   "Return non-nil in an image-dired thumbnail buffer with our enhancements."
   (and (derived-mode-p 'image-dired-thumbnail-mode)
        (boundp 'dired-image-thumbnail--all-images)))
-
-;;; Commands
-
-(defun dired-image-thumbnail-transient-toggle-auto-accept ()
-  "Toggle `dired-image-thumbnail-auto-accept'."
-  (interactive)
-  (setq dired-image-thumbnail-auto-accept
-        (not dired-image-thumbnail-auto-accept))
-  (message "Auto-accept: %s"
-           (if dired-image-thumbnail-auto-accept "ON" "OFF")))
 
 ;;; State description function
 
@@ -141,29 +122,6 @@
          (concat "\n" (propertize "Filters: " 'face 'transient-heading)
                  (propertize filters 'face 'transient-value)))))))
 
-;;; Sort submenu
-
-(transient-define-prefix dired-image-thumbnail-transient-sort ()
-  "Sorting commands for image thumbnails."
-  ["Sort By"
-   ("b" "Dired buffer order" dired-image-thumbnail-sort-by-dired :transient nil)
-   ("n" "Name" dired-image-thumbnail-sort-by-name :transient nil)
-   ("d" "Date modified" dired-image-thumbnail-sort-by-date :transient nil)
-   ("s" "Size" dired-image-thumbnail-sort-by-size :transient nil)]
-  ["Order"
-   ("r" "Reverse order" dired-image-thumbnail-sort-reverse :transient nil)])
-
-;;; Filter submenu
-
-(transient-define-prefix dired-image-thumbnail-transient-filter ()
-  "Filtering commands for image thumbnails."
-  ["Filter By"
-   ("n" "Name (regexp)" dired-image-thumbnail-filter-by-name :transient nil)
-   ("s" "Size range" dired-image-thumbnail-filter-by-size :transient nil)]
-  ["Actions"
-   ("c" "Clear all filters" dired-image-thumbnail-filter-clear :transient nil)
-   ("/" "Clear all filters" dired-image-thumbnail-filter-clear :transient nil)])
-
 ;;; Display submenu
 
 (transient-define-prefix dired-image-thumbnail-transient-display ()
@@ -189,12 +147,9 @@
   [["Navigate"
     ("n" "Next thumbnail" dired-image-thumbnail-next-image :transient t)
     ("p" "Previous thumbnail" dired-image-thumbnail-previous-image :transient t)]
-   ["Sorting"
-    ("s" "Sort menu..." dired-image-thumbnail-transient-sort :transient nil)
-    ("S" "Interactive sort" dired-image-thumbnail-sort :transient nil)]
-   ["Filtering"
-    ("/" "Filter menu..." dired-image-thumbnail-transient-filter :transient nil)
-    ("\\" "Interactive filter" dired-image-thumbnail-filter :transient nil)]
+   ["Sort & Filter"
+    ("s" "Sort..." dired-image-thumbnail-sort :transient nil)
+    ("/" "Filter..." dired-image-thumbnail-filter :transient nil)]
    ["Delete"
     ("D" "Delete current" dired-image-thumbnail-delete :transient nil)
     ("C-d" "Delete, move to next" dired-image-thumbnail-delete-and-next :transient nil)
@@ -221,8 +176,6 @@
     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
     ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
-    ("A" "Auto-accept" dired-image-thumbnail-transient-toggle-auto-accept
-     :transient t)
     ("q" "Quit menu" transient-quit-one)]])
 
 ;;;###autoload

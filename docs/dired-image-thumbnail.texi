@@ -341,36 +341,19 @@ fit the new thumbnail window width.
 @subheading Sorting
 
 @table @kbd
-@item s b
-Sort by Dired buffer order
-@item s n
-Sort by filename
-@item s d
-Sort by modification date
-@item s s
-Sort by file size
-@item s D
-Sort by image dimensions (area)
-@item s r
-Reverse sort order
-@item S
-Interactive sort selection (transient)
+@item s
+@itemx S
+Select sort criteria with @code{completing-read}
+(dired order, name, date, size, reverse)
 @end table
 
 @subheading Filtering
 
 @table @kbd
-@item / n
-Filter by name regexp
-@item / s
-Filter by file size range
-@item / d
-Filter by dimension range
-@item / /
-@itemx / c
-Clear all filters
-@item \
-Interactive filter menu (transient)
+@item /
+@itemx \
+Select filter criteria with @code{completing-read}
+(name, size, clear)
 @end table
 
 @subheading Display
@@ -639,7 +622,7 @@ View thumbnails: @kbd{C-t m}
 @item
 Thumbnails appear on the left, full-size view on the right
 @item
-Sort by date (newest first): @kbd{s d} then @kbd{s r}
+Sort by date (newest first): @kbd{s}, choose @samp{date}, then @kbd{s}, choose @samp{reverse}
 @item
 Browse with @kbd{n} / @kbd{p} --- images automatically update on the right
 @item
@@ -655,9 +638,9 @@ View thumbnails: @kbd{C-t m}
 @item
 Grid appears on left, image display on right
 @item
-Filter by size: @kbd{/ s} and enter @samp{1M} for minimum, leave maximum empty
+Filter by size: @kbd{/} and choose @samp{size}, then enter @samp{1M} for minimum, leave maximum empty
 @item
-Sort by size (largest first): @kbd{s s} then @kbd{s r}
+Sort by size (largest first): @kbd{s}, choose @samp{size}, then @kbd{s}, choose @samp{reverse}
 @item
 Navigate with @kbd{n}/@kbd{p} to review each image
 @item
@@ -695,7 +678,7 @@ Filter by dimensions: @kbd{/ d} and enter minimum width @samp{1920}, minimum hei
 @item
 Browse only HD+ images
 @item
-Use @kbd{/ c} to clear the filter when done
+Use @kbd{/} and choose @samp{clear} when done
 @end enumerate
 
 @node Working with Subdirectories Example
@@ -762,9 +745,9 @@ interactive menus for sorting and filtering.  These can be accessed with:
 
 @itemize @bullet
 @item
-@kbd{S} --- Sort menu (shows all sort options and current state)
+@kbd{s} / @kbd{S} --- Sort (completing-read: dired/name/date/size/reverse)
 @item
-@kbd{\} --- Filter menu (shows all filter options and current filters)
+@kbd{/} --- Filter (completing-read: name/size/clear)
 @end itemize
 
 To disable transient menus even when transient is installed, don't load

@@ -497,35 +497,18 @@ When =dired-image-thumbnail-auto-display-on-navigate= is enabled
 :CUSTOM_ID: Sorting
 :CLASS: subheading
 :END:
-- s b :: Sort by Dired buffer order
+- s :: Select sort criteria with completing-read (dired order, name, date, size, reverse)
 
-- s n :: Sort by filename
-
-- s d :: Sort by modification date
-
-- s s :: Sort by file size
-
-- s D :: Sort by image dimensions (area)
-
-- s r :: Reverse sort order
-
-- S :: Interactive sort selection (transient)
+- S :: Select sort criteria with completing-read
 
 **** Filtering [[#Filtering][¶]]
 :PROPERTIES:
 :CUSTOM_ID: Filtering
 :CLASS: subheading
 :END:
-- / n :: Filter by name regexp
+- / :: Select filter criteria with completing-read (name, size, clear)
 
-- / s :: Filter by file size range
-
-- / d :: Filter by dimension range
-
-- / /\\
-  / c :: Clear all filters
-
-- \ :: Interactive filter menu (transient)
+- \ :: Select filter criteria with completing-read
 
 **** Display [[#Display][¶]]
 :PROPERTIES:
@@ -924,7 +907,7 @@ Next: [[#Finding-Large-Images][Finding Large Images]], Up:
 2. Insert subdirectories with images: C-t s
 3. View thumbnails: C-t m
 4. Thumbnails appear on the left, full-size view on the right
-5. Sort by date (newest first): s d then s r
+5. Sort by date (newest first): s, choose date, then s, choose reverse
 6. Browse with n / p --- images automatically update on the right
 7. Mark keepers with m, jump to Dired with d
 
@@ -944,8 +927,8 @@ Next: [[#Quick-Culling-Workflow][Quick Culling Workflow]], Previous:
 :END:
 1. View thumbnails: C-t m
 2. Grid appears on left, image display on right
-3. Filter by size: / s and enter ‘=1M=' for minimum, leave maximum empty
-4. Sort by size (largest first): s s then s r
+3. Filter by size: / and choose =size=, then enter =1M= for minimum, leave maximum empty
+4. Sort by size (largest first): s, choose size, then s, choose reverse
 5. Navigate with n/p to review each image
 6. Mark images for deletion with m, delete with x
 7. Or use C-d to delete current image and advance to next
@@ -989,7 +972,7 @@ Workflow]], Up: [[#Workflow-Examples][Workflow Examples]]  
 2. Filter by dimensions: / d and enter minimum width ‘=1920=', minimum
    height ‘=1080='
 3. Browse only HD+ images
-4. Use / c to clear the filter when done
+4. Use / and choose =clear= to clear the filter when done
 
 --------------
 
@@ -1080,8 +1063,8 @@ image-dired]], Up: [[#Top][dired-image-thumbnail]]  
 If =transient= is available, =dired-image-thumbnail= provides
 interactive menus for sorting and filtering. These can be accessed with:
 
-- S --- Sort menu (shows all sort options and current state)
-- \ --- Filter menu (shows all filter options and current filters)
+- s / S --- Sort (completing-read: dired/name/date/size/reverse)
+- / --- Filter (completing-read: name/size/clear)
 
 To disable transient menus even when transient is installed, don't load
 =dired-image-thumbnail-transient.el=.

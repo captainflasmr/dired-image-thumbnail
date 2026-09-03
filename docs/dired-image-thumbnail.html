@@ -450,47 +450,20 @@ fit the new thumbnail window width.
 <h4 class="subheading" id="Sorting"><span>Sorting<a class="copiable-link" href="#Sorting"> &para;</a></span></h4>
 
 <dl class="table">
-<dt><kbd class="kbd">s b</kbd></dt>
-<dd><p>Sort by Dired buffer order
-</p></dd>
-<dt><kbd class="kbd">s n</kbd></dt>
-<dd><p>Sort by filename
-</p></dd>
-<dt><kbd class="kbd">s d</kbd></dt>
-<dd><p>Sort by modification date
-</p></dd>
-<dt><kbd class="kbd">s s</kbd></dt>
-<dd><p>Sort by file size
-</p></dd>
-<dt><kbd class="kbd">s D</kbd></dt>
-<dd><p>Sort by image dimensions (area)
-</p></dd>
-<dt><kbd class="kbd">s r</kbd></dt>
-<dd><p>Reverse sort order
-</p></dd>
+<dt><kbd class="kbd">s</kbd></dt>
 <dt><kbd class="kbd">S</kbd></dt>
-<dd><p>Interactive sort selection (transient)
+<dd><p>Select sort criteria with <code class="code">completing-read</code>
+(dired order, name, date, size, reverse)
 </p></dd>
 </dl>
 
 <h4 class="subheading" id="Filtering"><span>Filtering<a class="copiable-link" href="#Filtering"> &para;</a></span></h4>
 
 <dl class="table">
-<dt><kbd class="kbd">/ n</kbd></dt>
-<dd><p>Filter by name regexp
-</p></dd>
-<dt><kbd class="kbd">/ s</kbd></dt>
-<dd><p>Filter by file size range
-</p></dd>
-<dt><kbd class="kbd">/ d</kbd></dt>
-<dd><p>Filter by dimension range
-</p></dd>
-<dt><kbd class="kbd">/ /</kbd></dt>
-<dt><kbd class="kbd">/ c</kbd></dt>
-<dd><p>Clear all filters
-</p></dd>
+<dt><kbd class="kbd">/</kbd></dt>
 <dt><kbd class="kbd">\</kbd></dt>
-<dd><p>Interactive filter menu (transient)
+<dd><p>Select filter criteria with <code class="code">completing-read</code>
+(name, size, clear)
 </p></dd>
 </dl>
 
@@ -822,7 +795,7 @@ will proceed without asking for confirmation.
 </li><li> Insert subdirectories with images: <kbd class="kbd">C-t s</kbd>
 </li><li> View thumbnails: <kbd class="kbd">C-t m</kbd>
 </li><li> Thumbnails appear on the left, full-size view on the right
-</li><li> Sort by date (newest first): <kbd class="kbd">s d</kbd> then <kbd class="kbd">s r</kbd>
+</li><li> Sort by date (newest first): <kbd class="kbd">s</kbd>, choose &lsquo;<samp class="samp">date</samp>&rsquo;, then <kbd class="kbd">s</kbd>, choose &lsquo;<samp class="samp">reverse</samp>&rsquo;
 </li><li> Browse with <kbd class="kbd">n</kbd> / <kbd class="kbd">p</kbd> &mdash; images automatically update on the right
 </li><li> Mark keepers with <kbd class="kbd">m</kbd>, jump to Dired with <kbd class="kbd">d</kbd>
 </li></ol>
@@ -837,8 +810,8 @@ will proceed without asking for confirmation.
 <ol class="enumerate">
 <li> View thumbnails: <kbd class="kbd">C-t m</kbd>
 </li><li> Grid appears on left, image display on right
-</li><li> Filter by size: <kbd class="kbd">/ s</kbd> and enter &lsquo;<samp class="samp">1M</samp>&rsquo; for minimum, leave maximum empty
-</li><li> Sort by size (largest first): <kbd class="kbd">s s</kbd> then <kbd class="kbd">s r</kbd>
+</li><li> Filter by size: <kbd class="kbd">/</kbd> and choose &lsquo;<samp class="samp">size</samp>&rsquo;, then enter &lsquo;<samp class="samp">1M</samp>&rsquo; for minimum, leave maximum empty
+</li><li> Sort by size (largest first): <kbd class="kbd">s</kbd>, choose &lsquo;<samp class="samp">size</samp>&rsquo;, then <kbd class="kbd">s</kbd>, choose &lsquo;<samp class="samp">reverse</samp>&rsquo;
 </li><li> Navigate with <kbd class="kbd">n</kbd>/<kbd class="kbd">p</kbd> to review each image
 </li><li> Mark images for deletion with <kbd class="kbd">m</kbd>, delete with <kbd class="kbd">x</kbd>
 </li><li> Or use <kbd class="kbd">C-d</kbd> to delete current image and advance to next
@@ -871,7 +844,7 @@ will proceed without asking for confirmation.
 <li> View thumbnails: <kbd class="kbd">C-t m</kbd>
 </li><li> Filter by dimensions: <kbd class="kbd">/ d</kbd> and enter minimum width &lsquo;<samp class="samp">1920</samp>&rsquo;, minimum height &lsquo;<samp class="samp">1080</samp>&rsquo;
 </li><li> Browse only HD+ images
-</li><li> Use <kbd class="kbd">/ c</kbd> to clear the filter when done
+</li><li> Use <kbd class="kbd">/</kbd> and choose &lsquo;<samp class="samp">clear</samp>&rsquo; when done
 </li></ol>
 
 <hr>
@@ -944,8 +917,8 @@ will proceed without asking for confirmation.
 interactive menus for sorting and filtering.  These can be accessed with:
 </p>
 <ul class="itemize mark-bullet">
-<li><kbd class="kbd">S</kbd> &mdash; Sort menu (shows all sort options and current state)
-</li><li><kbd class="kbd">\</kbd> &mdash; Filter menu (shows all filter options and current filters)
+<li><kbd class="kbd">s</kbd> / <kbd class="kbd">S</kbd> &mdash; Sort (completing-read: dired/name/date/size/reverse)
+</li><li><kbd class="kbd">/</kbd> &mdash; Filter (completing-read: name/size/clear)
 </li></ul>
 
 <p>To disable transient menus even when transient is installed, don&rsquo;t load

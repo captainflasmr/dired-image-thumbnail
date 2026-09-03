@@ -57,9 +57,8 @@
 ;;
 ;; Key bindings in thumbnail buffer:
 ;;
-;;   s   - Sorting prefix (s n: name, s d: date, s s: size, s r: reverse)
-;;   S   - Interactive sort selection
-;;   /   - Filtering prefix (/ n: name, / s: size, / c: clear)
+;;   s   - Sort (completing-read: dired/name/date/size/reverse)
+;;   /   - Filter (completing-read: name/size/clear)
 ;;   g   - Refresh display
 ;;   n/p, f/b - Next/previous image (with auto-display when enabled)
 ;;   +/- - Increase/decrease size
@@ -1258,7 +1257,9 @@ its point position if the file at point was renamed."
   (message "Sort order: %s" dired-image-thumbnail--sort-order))
 
 (defun dired-image-thumbnail-sort ()
-  "Interactively choose sort criteria."
+  "Select sort criteria with `completing-read'.
+Choose dired order, name, date or size, or reverse the current
+sort order."
   (interactive)
   (let ((choice (completing-read "Sort by: "
                                  '("dired" "name" "date" "size" "reverse")
@@ -1321,7 +1322,8 @@ Enter size in human-readable format (e.g., 100k, 1M)."
   (message "Filters cleared"))
 
 (defun dired-image-thumbnail-filter ()
-  "Interactively choose filter type."
+  "Select filter criteria with `completing-read'.
+Choose filtering by name or size range, or clear all filters."
   (interactive)
   (let ((choice (completing-read "Filter by: "
                                  '("name" "size" "clear")
@@ -1744,25 +1746,6 @@ When run from a thumbnail buffer, the associated dired buffer is used."
 
 ;;; Keymaps
 
-(defvar dired-image-thumbnail-sort-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "b") #'dired-image-thumbnail-sort-by-dired)
-    (define-key map (kbd "n") #'dired-image-thumbnail-sort-by-name)
-    (define-key map (kbd "d") #'dired-image-thumbnail-sort-by-date)
-    (define-key map (kbd "s") #'dired-image-thumbnail-sort-by-size)
-    (define-key map (kbd "r") #'dired-image-thumbnail-sort-reverse)
-    map)
-  "Keymap for sorting commands.")
-
-(defvar dired-image-thumbnail-filter-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "n") #'dired-image-thumbnail-filter-by-name)
-    (define-key map (kbd "s") #'dired-image-thumbnail-filter-by-size)
-    (define-key map (kbd "/") #'dired-image-thumbnail-filter-clear)
-    (define-key map (kbd "c") #'dired-image-thumbnail-filter-clear)
-    map)
-  "Keymap for filtering commands.")
-
 ;;;###autoload
 (defun dired-image-thumbnail-setup-keys ()
   "Add dired-image-thumbnail keybindings to `image-dired-thumbnail-mode-map'.
@@ -1776,9 +1759,9 @@ time), a warning is displayed and no keybindings are installed."
 keybindings will not be installed.  This can happen when `image-dired'\
  is not fully loaded.  Try (require 'image-dired) before loading\
  `dired-image-thumbnail'.")
-    (define-key image-dired-thumbnail-mode-map (kbd "s") dired-image-thumbnail-sort-map)
+    (define-key image-dired-thumbnail-mode-map (kbd "s") #'dired-image-thumbnail-sort)
     (define-key image-dired-thumbnail-mode-map (kbd "S") #'dired-image-thumbnail-sort)
-    (define-key image-dired-thumbnail-mode-map (kbd "/") dired-image-thumbnail-filter-map)
+    (define-key image-dired-thumbnail-mode-map (kbd "/") #'dired-image-thumbnail-filter)
     (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
     (define-key image-dired-thumbnail-mode-map (kbd "#") #'dired-image-thumbnail-toggle-square-thumbnails)
     (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)

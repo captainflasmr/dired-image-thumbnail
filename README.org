@@ -157,24 +157,13 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 | Key   | Command                                    | Description                     |
 |-------+--------------------------------------------+---------------------------------|
-| =s b= | ~dired-image-thumbnail-sort-by-dired~        | Sort by Dired buffer order      |
-| =s n= | ~dired-image-thumbnail-sort-by-name~         | Sort by filename                |
-| =s d= | ~dired-image-thumbnail-sort-by-date~         | Sort by modification date       |
-| =s s= | ~dired-image-thumbnail-sort-by-size~         | Sort by file size               |
-| =s D= | ~dired-image-thumbnail-sort-by-dimensions~   | Sort by image dimensions (area) |
-| =s r= | ~dired-image-thumbnail-sort-reverse~         | Reverse sort order              |
-| =S=   | ~dired-image-thumbnail-sort~ (transient)     | Interactive sort selection      |
+| =s=, =S= | ~dired-image-thumbnail-sort~                 | Sort via completing-read        |
 
 *** Filtering
 
 | Key   | Command                                    | Description                |
 |-------+--------------------------------------------+----------------------------|
-| =/ n= | ~dired-image-thumbnail-filter-by-name~       | Filter by name regexp      |
-| =/ s= | ~dired-image-thumbnail-filter-by-size~       | Filter by file size range  |
-| =/ d= | ~dired-image-thumbnail-filter-by-dimensions~ | Filter by dimension range  |
-| =/ /= | ~dired-image-thumbnail-filter-clear~         | Clear all filters          |
-| =/ c= | ~dired-image-thumbnail-filter-clear~         | Clear all filters          |
-| =\=   | ~dired-image-thumbnail-filter~ (transient)   | Interactive filter menu    |
+| =/=, =\= | ~dired-image-thumbnail-filter~               | Filter via completing-read |
 
 *** Display
 
@@ -367,7 +356,7 @@ Add or modify recognized image file extensions:
 2. Insert subdirectories with images: =C-t s=
 3. View thumbnails: =C-t m=
 4. Thumbnails appear on the left, full-size view on the right
-5. Sort by date (newest first): =s d= then =s r=
+5. Sort by date (newest first): =s=, choose =date=, then =s=, choose =reverse=
 6. Browse with =n= / =p= - images automatically update on the right
 7. Mark keepers with =m=, jump to Dired with =d=
 
@@ -375,8 +364,8 @@ Add or modify recognized image file extensions:
 
 1. View thumbnails: =C-t m=
 2. Grid appears on left, image display on right
-3. Filter by size: =/ s= and enter =1M= for minimum, leave maximum empty
-4. Sort by size (largest first): =s s= then =s r=
+3. Filter by size: =/= and choose =size=, then enter =1M= for minimum, leave maximum empty
+4. Sort by size (largest first): =s=, choose =size=, then =s=, choose =reverse=
 5. Navigate with =n=/=p= to review each image
 6. Mark images for deletion with =m=, delete with =x=
 7. Or use =C-d= to delete current image and advance to next
@@ -395,7 +384,7 @@ Add or modify recognized image file extensions:
 1. View thumbnails: =C-t m=
 2. Filter by dimensions: =/ d= and enter minimum width =1920=, minimum height =1080=
 3. Browse only HD+ images
-4. Use =/ c= to clear the filter when done
+4. Use =/= and choose =clear= when done
 
 ** Working with Subdirectories
 
@@ -438,8 +427,8 @@ Add or modify recognized image file extensions:
 
 If =transient= is available, =dired-image-thumbnail= provides interactive menus for sorting and filtering. These can be accessed with:
 
-- =S= - Sort menu (shows all sort options and current state)
-- =\= - Filter menu (shows all filter options and current filters)
+- =s= / =S= - Sort (completing-read: dired/name/date/size/reverse)
+- =/= - Filter (completing-read: name/size/clear)
 
 To disable transient menus even when transient is installed, don't load =dired-image-thumbnail-transient.el=.
 
