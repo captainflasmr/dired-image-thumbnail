@@ -75,8 +75,6 @@
 (declare-function dired-image-thumbnail-delete-marked "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-open-external "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-help "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-mark-region "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-find-file "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-move "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-square-thumbnails "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-auto-display "dired-image-thumbnail")
@@ -195,8 +193,7 @@
     ("u" "Unmark current" image-dired-unmark-thumb-original-file :transient nil)
     ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
-    ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)
-    ("B" "Block mark (region)" dired-image-thumbnail-mark-region :transient nil)]
+    ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]
    ["Display"
     ("g" "Refresh" dired-image-thumbnail-refresh :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
@@ -204,7 +201,6 @@
     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
     ("F" "Toggle follow" dired-image-thumbnail-toggle-auto-display :transient nil)]
    ["Other"
-    ("f" "Open image (find-file)" dired-image-thumbnail-find-file :transient nil)
     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
     ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)

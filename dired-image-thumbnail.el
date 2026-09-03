@@ -61,14 +61,13 @@
 ;;   S   - Interactive sort selection
 ;;   /   - Filtering prefix (/ n: name, / s: size, / c: clear)
 ;;   g   - Refresh display
-;;   n/p - Next/previous image (with auto-display when enabled)
+;;   n/p, f/b - Next/previous image (with auto-display when enabled)
 ;;   +/- - Increase/decrease size
 ;;   m   - Mark image (uses image-dired's native marking with border)
 ;;   u   - Unmark image
 ;;   M   - Mark all
 ;;   U   - Unmark all
 ;;   t   - Toggle all marks
-;;   B   - Block mark: mark all images in region (set region with C-SPC, move, then B)
 ;;   d   - Go to Dired buffer
 ;;   D   - Delete image at point
 ;;   C-d - Delete image and move to next
@@ -352,6 +351,12 @@ you want the standard Emacs locking behaviour."
 
 (defvar-local dired-image-thumbnail--marked-count nil
   "Cached count of marked images.  Nil means it needs recomputation.")
+
+(defvar-local dired-image-thumbnail--lineup-width nil
+  "Width in columns of the thumbnail window at the last line-up.
+When showing the full-size image changes the window layout (and so
+this width), the thumbnails are refreshed so they re-align and the
+columns fit the new window width.")
 
 (defun dired-image-thumbnail--get-image-dimensions (file)
   "Get dimensions of image FILE as (width . height), or (0 . 0) if unknown.
@@ -1072,6 +1077,11 @@ after refreshing. Otherwise, try to maintain position on the current file."
             (setq-local word-wrap t)
             (setq-local truncate-lines nil))
         (image-dired--line-up-with-method))
+      ;; Remember the thumbnail window width at line-up time so that a
+      ;; later display can detect a layout change and re-align.
+      (setq dired-image-thumbnail--lineup-width
+            (when-let ((win (get-buffer-window nil t)))
+              (window-body-width win)))
       ;; Restore mark display
       (image-dired--thumb-update-marks)
       ;; Restore position before updating header line, so point is on a
@@ -1387,87 +1397,7 @@ the original files for crisp display (slower but higher quality)."
   (image-dired--thumb-update-marks)
   (message "%d images now marked" (dired-image-thumbnail--count-marked)))
 
-(defun dired-image-thumbnail--images-in-region ()
-  "Return list of unique image files between point and mark in the current buffer.
-The region bounds are identified by `region-beginning' and `region-end'."
-  (let* ((start (region-beginning))
-         (end (region-end))
-         (images nil)
-         (seen (make-hash-table :test 'equal))
-         pos)
-    (save-excursion
-      (goto-char start)
-      (setq pos (if (get-text-property (point) 'original-file-name)
-                    (point)
-                  (let ((next (next-single-property-change (point) 'original-file-name nil end)))
-                    (when (and next (< next end)) next))))
-      (while (and pos (< pos end))
-        (let ((file (get-text-property pos 'original-file-name)))
-          (when (and file (not (gethash file seen)))
-            (puthash file t seen)
-            (push file images)))
-        (setq pos (next-single-property-change pos 'original-file-name nil end))))
-    (nreverse images)))
-
-(defun dired-image-thumbnail-mark-region ()
-  "Mark all images between point and mark in the associated dired buffer.
-This is useful for quickly marking a block/range of contiguous images.
-Set the mark with \\[set-mark-command] at one end of the range,
-move point to the other end, then run this command."
-  (interactive)
-  (unless (use-region-p)
-    (user-error "No region active; first set a mark with C-SPC"))
-  (dired-image-thumbnail--mark-unmark-region 'mark))
-
-(defun dired-image-thumbnail-unmark-region ()
-  "Unmark all images between point and mark in the associated dired buffer.
-Set the mark with \\[set-mark-command] at one end of the range,
-move point to the other end, then run this command."
-  (interactive)
-  (unless (use-region-p)
-    (user-error "No region active; first set a mark with C-SPC"))
-  (dired-image-thumbnail--mark-unmark-region 'unmark))
-
-(defun dired-image-thumbnail--mark-unmark-region (action)
-  "Mark or unmark all images in the current region.
-ACTION is `mark' or `unmark'."
-  (let ((images (dired-image-thumbnail--images-in-region)))
-    (if (null images)
-        (message "No images found in region")
-      (when (and dired-image-thumbnail--dired-buffer
-                 (buffer-live-p dired-image-thumbnail--dired-buffer))
-        ;; Single pass over the dired buffer (O(n) rather than O(region*n)).
-        (let ((targets (make-hash-table :test 'equal)))
-          (dolist (file images)
-            (puthash (expand-file-name file) t targets))
-          (with-current-buffer dired-image-thumbnail--dired-buffer
-            (save-excursion
-              (goto-char (point-min))
-              (while (not (eobp))
-                (let ((file (dired-get-filename nil t)))
-                  (if (and file (gethash (expand-file-name file) targets))
-                      (if (eq action 'mark)
-                          (dired-mark 1)
-                        (dired-unmark 1))
-                    (forward-line 1))))))))
-      (image-dired--thumb-update-marks)
-      (deactivate-mark)
-      (message "%s %d images in region"
-               (if (eq action 'mark) "Marked" "Unmarked")
-               (length images)))))
-
 ;;; File operations
-
-(defun dired-image-thumbnail-find-file ()
-  "Open the image at point in its own buffer, like Dired's `f'.
-Visits the file with `find-file', opening it in `image-mode' in a
-new window.  This is distinct from the split-screen display buffer
-used by navigation; it gives you the full Emacs image-mode experience
-\(zoom, save, convert, etc.)."
-  (interactive)
-  (if-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
-      (find-file file)
-    (user-error "No image at point")))
 
 (defun dired-image-thumbnail-move (target-dir)
   "Move the marked images, or the image at point, into TARGET-DIR.
@@ -1627,11 +1557,11 @@ When enabled, thumbnails are center-cropped to squares for a tidier grid."
   (with-help-window "*Image Thumbnail Help*"
     (princ "Image Thumbnail Mode Commands:\n\n")
     (princ "Navigation:\n")
-    (princ "  n, →         Next image")
+    (princ "  n, f, →      Next image")
     (when dired-image-thumbnail-auto-display-on-navigate
       (princ " (auto-display)"))
     (princ "\n")
-    (princ "  p, ←         Previous image")
+    (princ "  p, b, ←      Previous image")
     (when dired-image-thumbnail-auto-display-on-navigate
       (princ " (auto-display)"))
     (princ "\n")
@@ -1641,11 +1571,8 @@ When enabled, thumbnails are center-cropped to squares for a tidier grid."
     (princ "  u            Unmark image\n")
     (princ "  U            Unmark all\n")
     (princ "  M            Mark all\n")
-    (princ "  t            Toggle all marks\n")
-    (princ "  B            Block mark: mark all images in region\n")
-    (princ "               Set region with C-SPC, move, then B\n\n")
+    (princ "  t            Toggle all marks\n\n")
     (princ "File Operations:\n")
-    (princ "  f            Open image in its own buffer (like Dired f)\n")
     (princ "  v            Move image(s) to another directory\n")
     (princ "  D            Delete image at point\n")
     (princ "  C-d          Delete image and move to next (follows auto-display)\n")
@@ -1897,9 +1824,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     ;; Marking
     (define-key image-dired-thumbnail-mode-map (kbd "M") #'dired-image-thumbnail-mark-all)
     (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
-    (define-key image-dired-thumbnail-mode-map (kbd "B") #'dired-image-thumbnail-mark-region)
     ;; File operations
-    (define-key image-dired-thumbnail-mode-map (kbd "f") #'dired-image-thumbnail-find-file)
     (define-key image-dired-thumbnail-mode-map (kbd "v") #'dired-image-thumbnail-move)
     (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
     (define-key image-dired-thumbnail-mode-map (kbd "D") #'dired-image-thumbnail-delete)
@@ -1908,6 +1833,9 @@ keybindings will not be installed.  This can happen when `image-dired'\
     ;; Enhanced navigation (auto-display checked at runtime)
     (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
     (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
+    ;; vi-style navigation aliases
+    (define-key image-dired-thumbnail-mode-map (kbd "f") #'dired-image-thumbnail-next-image)
+    (define-key image-dired-thumbnail-mode-map (kbd "b") #'dired-image-thumbnail-previous-image)
     ;; Auto-display toggle (a)
     (define-key image-dired-thumbnail-mode-map (kbd "F") #'dired-image-thumbnail-toggle-auto-display)
     ;; Display quality
@@ -2074,6 +2002,22 @@ Emacs never decodes the full image."
       (set-window-buffer display-win buf))
     (select-window cur-win)))
 
+(defun dired-image-thumbnail--maybe-realign ()
+  "Refresh thumbnails when the thumbnail window width has changed.
+Showing the full-size image (follow mode) can open or narrow the
+thumbnail window, in which case the display is refreshed so the
+thumbnails re-align and the columns fit the new window width.
+Does nothing in wrap display mode, where thumbnails wrap to the
+window width automatically."
+  (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+             (null dired-image-thumbnail-wrap-display))
+    (let ((win (get-buffer-window nil t)))
+      (when (and win
+                 (or (null dired-image-thumbnail--lineup-width)
+                     (/= (window-body-width win)
+                         dired-image-thumbnail--lineup-width)))
+        (dired-image-thumbnail-refresh)))))
+
 (defun dired-image-thumbnail--display-this ()
   "Display the current thumbnail's image.
 Uses fast scaled display unless quality is `full'."
@@ -2087,7 +2031,8 @@ Uses fast scaled display unless quality is `full'."
                (when (fboundp 'clear-image-cache)
                  (clear-image-cache file))
                (dired-image-thumbnail--display-image-fast file))))
-    (image-dired-display-this)))
+    (image-dired-display-this))
+  (dired-image-thumbnail--maybe-realign))
 
 ;;; Enhanced navigation and deletion
 

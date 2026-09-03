@@ -319,9 +319,11 @@ Remove all inserted subdirs (@code{dired-image-thumbnail-kill-all-subdirs})
 
 @table @kbd
 @item n
+@itemx f
 @itemx @key{RIGHT}
 Next image (auto-display when enabled)
 @item p
+@itemx b
 @itemx @key{LEFT}
 Previous image (auto-display when enabled)
 @item +
@@ -331,7 +333,10 @@ Decrease thumbnail size
 @end table
 
 When @code{dired-image-thumbnail-auto-display-on-navigate} is enabled (default),
-pressing @kbd{n} or @kbd{p} automatically displays the full-size image.
+pressing @kbd{n} or @kbd{p} (also @kbd{f} or @kbd{b}) automatically displays
+the full-size image.  When follow is activated and the image window opens,
+the thumbnails are automatically refreshed so they re-align and the columns
+fit the new thumbnail window width.
 
 @subheading Sorting
 

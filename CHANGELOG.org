@@ -27,6 +27,10 @@ Directory location shown in the thumbnail header line.
 - *Theme-aware highlight colour* -- The current-thumbnail outline is now drawn in the active theme's highlight colour (the background of the =highlight= face) instead of a fixed dark orange/yellow, with the outline made 2 pixels thicker (5px instead of 3px). An explicit =:color= on the face's =:box= still takes precedence, and colour-less displays fall back to orange/yellow.
 - *Fully monochrome header line* -- The file name, image count and file size segments now also use the =dired-image-thumbnail-header-info= face instead of the themed =image-dired-thumb-header-*= faces, so the entire header line is monochromatic (high-contrast black on light backgrounds, white on dark) and stays clear no matter how a theme styles the header.
 - *Follow toggle on =F=* -- The auto-display toggle has moved from =a= to =F=, acting like a follow on/off switch for showing the full-size image while navigating. The help text and transient menus were updated, and =a= is released back to image-dired.
+- *Region block mark removed* -- The =B= key, =dired-image-thumbnail-mark-region=, =dired-image-thumbnail-unmark-region= and their helpers have been removed. Use =m= / =M= (or native dired marks) instead.
+- *Open-image command removed* -- The =f= key, =dired-image-thumbnail-find-file= and its transient-menu entry have been removed. Use =RET= (display buffer) or =W= (external editor) instead; =f= falls back to image-dired's own binding.
+- *vi-style navigation on =f=/=b=* -- =f= and =b= now act like =n= and =p=, moving to the next/previous thumbnail (including auto-display when =dired-image-thumbnail-auto-display-on-navigate= is enabled), following the forward/backward convention of pagers such as =less=.
+- *Auto re-align on follow* -- Activating follow (=F=) shows the full-size image, which can open or narrow the thumbnail window. Whenever that changes the thumbnail window's width, the thumbnail display is refreshed automatically so the thumbnails re-align and the columns fit the new window width. Wrap display re-wraps on its own and skips the refresh.
 
 ** <2026-08-29 Sat> *2.5.0*
 

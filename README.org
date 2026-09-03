@@ -146,12 +146,12 @@ This makes culling large photo collections much faster than the standard workflo
 
 | Key     | Command                                   | Description                              |
 |---------+-------------------------------------------+------------------------------------------|
-| =n=, =→= | ~dired-image-thumbnail-next-image~          | Next image (auto-display when enabled)   |
-| =p=, =←= | ~dired-image-thumbnail-previous-image~      | Previous image (auto-display when enabled) |
+| =n=, =f=, =→= | ~dired-image-thumbnail-next-image~          | Next image (auto-display when enabled)   |
+| =p=, =b=, =←= | ~dired-image-thumbnail-previous-image~      | Previous image (auto-display when enabled) |
 | =+=     | ~dired-image-thumbnail-increase-size~       | Increase thumbnail size                  |
 | =-=     | ~dired-image-thumbnail-decrease-size~       | Decrease thumbnail size                  |
 
-Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default), pressing =n= or =p= automatically displays the full-size image in the right window.
+Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default), pressing =n= or =p= (also =f= or =b=) automatically displays the full-size image in the right window. When follow is activated and the image window opens, the thumbnails are automatically refreshed so they re-align and the columns fit the new thumbnail window width.
 
 *** Marking
 
@@ -192,8 +192,6 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 |-----+-----------------------------------------+--------------------------------------------|
 | =M= | ~dired-image-thumbnail-mark-all~          | Mark all images                            |
 | =t= | ~dired-image-thumbnail-toggle-all-marks~  | Toggle all marks                           |
-| =B= | ~dired-image-thumbnail-mark-region~       | Block mark: mark all images in region      |
-|     |                                         | (set region with C-SPC, move, then press B) |
 
 *** File Operations
 
