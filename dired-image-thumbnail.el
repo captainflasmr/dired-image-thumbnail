@@ -880,6 +880,30 @@ SECONDS (default 120) elapse.  Returns non-nil if the queue drained."
       (setq waited (+ waited 0.05)))
     (and (null image-dired-queue) (= image-dired-queue-active-jobs 0))))
 
+(defun dired-image-thumbnail--square-thumb-name (file)
+  "Return the cache path of the square-cropped variant of FILE's thumbnail."
+  (concat (image-dired-thumb-name file) ".square"))
+
+(defun dired-image-thumbnail--square-thumb-stale-p (file)
+  "Return non-nil if the square variant of FILE's thumbnail is missing
+or older than the natural thumbnail it is derived from."
+  (let ((natural (image-dired-thumb-name file))
+        (square (dired-image-thumbnail--square-thumb-name file)))
+    (or (not (file-exists-p square))
+        (not (file-exists-p natural))
+        (file-newer-than-file-p natural square))))
+
+(defun dired-image-thumbnail--derive-square-thumb (file)
+  "Create the square-cropped variant of FILE's thumbnail.
+The variant is a copy of the natural cached thumbnail, center-cropped
+in place; the natural file itself is never modified, so toggling
+between square and natural thumbnails is instantaneous."
+  (let ((natural (image-dired-thumb-name file))
+        (square (dired-image-thumbnail--square-thumb-name file)))
+    (when (file-exists-p natural)
+      (copy-file natural square t)
+      (dired-image-thumbnail--crop-thumb-to-square square))))
+
 (defun dired-image-thumbnail--crop-thumb-to-square (thumb-file)
   "Crop THUMB-FILE in place to a uniform square using ImageMagick.
 The target size is `image-dired--thumb-size' (or
@@ -1057,10 +1081,6 @@ after refreshing. Otherwise, try to maintain position on the current file."
                    (/= image-dired-thumb-size
                        dired-image-thumbnail--thumbs-generated-at))
           (dired-image-thumbnail--queue-thumb-regeneration))
-        ;; Insert thumbnails using image-dired's standard function
-        ;; This ensures proper marking support
-        (when dired-image-thumbnail-square-thumbnails
-          (clear-image-cache))
         ;; Pre-count thumbnails that need work (creation and cropping
         ;; counted as separate items so the total matches the number of
         ;; progress updates exactly) and show a progress bar only when
@@ -1075,18 +1095,19 @@ after refreshing. Otherwise, try to maintain position on the current file."
                 (queued 0)
                 (progress nil))
            (dolist (file dired-image-thumbnail--current-images)
-             (let ((thumb-file (image-dired-thumb-name file)))
-               (when (not (file-exists-p thumb-file))
-                 (setq work-needed (1+ work-needed)))
-               (when dired-image-thumbnail-square-thumbnails
-                 (setq work-needed (1+ work-needed)))))
+             (when (not (file-exists-p (image-dired-thumb-name file)))
+               (setq work-needed (1+ work-needed)))
+             (when (and dired-image-thumbnail-square-thumbnails
+                        (dired-image-thumbnail--square-thumb-stale-p file))
+               (setq work-needed (1+ work-needed))))
            (when (> work-needed 0)
              (setq progress (make-progress-reporter
                              (format "Generating %d thumbnail%s..."
                                      work-needed
                                      (if (= work-needed 1) "" "s"))
                              0 work-needed)))
-           ;; Phase 1: queue generation for missing thumbnails.
+           ;; Phase 1: queue generation for missing natural thumbnails
+           ;; (both display modes derive from them).
            (dolist (file dired-image-thumbnail--current-images)
              (let ((thumb-file (image-dired-thumb-name file)))
                (unless (file-exists-p thumb-file)
@@ -1097,23 +1118,29 @@ after refreshing. Otherwise, try to maintain position on the current file."
            ;; Phase 2: image-dired generates thumbnails asynchronously,
            ;; so wait for the queue to drain before cropping or
            ;; inserting.  Without this a freshly queued thumbnail does
-           ;; not exist yet: the crop is silently skipped (leaving
-           ;; non-square thumbnails on a first run with an empty
-           ;; cache) and, since stale files are deleted on resize, the
-           ;; insert itself would run on missing files.
+           ;; not exist yet: the square derivation is silently skipped
+           ;; and the insert itself would run on missing files.
            (when (> queued 0)
              (dired-image-thumbnail--wait-for-thumbnails))
-           ;; Phase 3: crop to uniform squares (when enabled).
+           ;; Phase 3: derive square variants (when enabled).  The
+           ;; natural cached files are never modified, so toggling
+           ;; between square and natural only switches which cached
+           ;; file set is displayed -- no regeneration, no blank
+           ;; buffer.
            (when dired-image-thumbnail-square-thumbnails
              (dolist (file dired-image-thumbnail--current-images)
-               (dired-image-thumbnail--crop-thumb-to-square
-                (image-dired-thumb-name file))
-               (setq work-done (1+ work-done))
-               (when progress (progress-reporter-update progress work-done))))
-           ;; Phase 4: insert with all three required arguments.
+               (when (dired-image-thumbnail--square-thumb-stale-p file)
+                 (dired-image-thumbnail--derive-square-thumb file)
+                 (setq work-done (1+ work-done))
+                 (when progress (progress-reporter-update progress work-done)))))
+           ;; Phase 4: insert with all three required arguments, using
+           ;; the file set for the active display mode.
            (dolist (file dired-image-thumbnail--current-images)
              (image-dired-insert-thumbnail
-              (image-dired-thumb-name file) file dired-buf))
+              (if dired-image-thumbnail-square-thumbnails
+                  (dired-image-thumbnail--square-thumb-name file)
+                (image-dired-thumb-name file))
+              file dired-buf))
            (when progress (progress-reporter-done progress))))
       ;; Line up
       (if dired-image-thumbnail-wrap-display
@@ -2080,7 +2107,10 @@ re-displayed at the size set by the +/- commands."
           (dolist (file dired-image-thumbnail--current-images)
             (let ((thumb-file (image-dired-thumb-name file)))
               (when (file-exists-p thumb-file)
-                (delete-file thumb-file))))
+                (delete-file thumb-file)))
+            (let ((square-file (dired-image-thumbnail--square-thumb-name file)))
+              (when (file-exists-p square-file)
+                (delete-file square-file))))
           (setq dired-image-thumbnail--thumbs-generated-at
                 image-dired-thumb-size)
           (dired-image-thumbnail-refresh))))))
