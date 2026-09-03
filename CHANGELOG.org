@@ -41,6 +41,7 @@ Directory location shown in the thumbnail header line.
 - *Navigate group removed from the transient* -- The menu no longer duplicates the navigation keys; use =n= / =p= (or =f= / =b=) directly in the thumbnail buffer.
 - *Subdir insertion refined* -- The transient's Subdirs group is gone; a single =z= "Insert subdirs (recursive)" entry now lives in the Other group, and =z= is bound in the thumbnail buffer (=I= is left free for image transformation). Subdir insertion is normally done from dired via the =C-t= bindings, so only the recursive variant has a thumbnail-buffer keybinding/transient entry; the smart (=C-t s=) and kill (=C-t k=) variants remain available as commands from dired.
 - *Snappy marking with follow on* -- Marking (=m=) and unmarking (=u=) now use package commands that paint the mark immediately and, when follow is on, advance and show the next image through the fast preview pipeline. Previously the vanilla =image-dired-marking-shows-next= advance displayed the next image at full resolution, bypassing the preview pipeline, which took seconds per mark. Vanilla's own advance display is now disabled buffer-locally so it cannot interfere.
+- *Marked and filtered counts in the header line* -- The marked count (e.g. =[3 marked]=) is now always visible, even when nothing is marked, and when a filter is active the header shows how many images match it over the total (e.g. =[12/156]=).
 
 ** <2026-08-29 Sat> *2.5.0*
 

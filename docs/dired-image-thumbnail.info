@@ -435,7 +435,10 @@ The enhanced header line displays:
      <]’)
    • *Display quality* -- Current quality level (e.g., ‘[fast]’)
    • *Active filters* -- Description of any active filters
-   • *Marked count* -- Number of marked images (e.g., ‘[3 marked]’)
+   • *Marked count* -- Number of marked images, always shown (e.g., ‘[3
+     marked]’)
+   • *Filter count* -- When a filter is active, the number of matching
+     images over the total (e.g., ‘[12/156]’)
 
 
 File: dired-image-thumbnail.info,  Node: Customization,  Next: Example Configuration,  Prev: Header Line,  Up: Top
@@ -874,30 +877,30 @@ Node: Dired Buffer Keys10551
 Node: Thumbnail Buffer Keys11204
 Node: Image Display Buffer Keys13070
 Node: Header Line13421
-Node: Customization14378
-Node: Default Sort Settings15205
-Node: Display Options15554
-Node: Window Layout15812
-Node: Display Quality16376
-Node: Image Validation16965
-Node: External Editor17642
-Node: Navigation Behavior18102
-Node: Auto-Accepting Actions18672
-Node: Image Extensions19137
-Node: Example Configuration19484
-Node: Workflow Examples20469
-Node: Reviewing a Photo Collection21010
-Node: Finding Large Images21653
-Node: Quick Culling Workflow22347
-Node: Finding High-Resolution Images22839
-Node: Working with Subdirectories Example23303
-Node: Organizing by Date23920
-Node: Comparison with Standard image-dired24300
-Node: Transient Menu Support25441
-Node: Performance Notes26047
-Node: Troubleshooting27492
-Node: Related Packages29572
-Node: License30183
+Node: Customization14520
+Node: Default Sort Settings15347
+Node: Display Options15696
+Node: Window Layout15954
+Node: Display Quality16518
+Node: Image Validation17107
+Node: External Editor17784
+Node: Navigation Behavior18244
+Node: Auto-Accepting Actions18814
+Node: Image Extensions19279
+Node: Example Configuration19626
+Node: Workflow Examples20611
+Node: Reviewing a Photo Collection21152
+Node: Finding Large Images21795
+Node: Quick Culling Workflow22489
+Node: Finding High-Resolution Images22981
+Node: Working with Subdirectories Example23445
+Node: Organizing by Date24062
+Node: Comparison with Standard image-dired24442
+Node: Transient Menu Support25583
+Node: Performance Notes26189
+Node: Troubleshooting27634
+Node: Related Packages29714
+Node: License30325
 
 End Tag Table
 

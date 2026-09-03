@@ -444,7 +444,9 @@ The enhanced header line displays:
 @item
 @strong{Active filters} --- Description of any active filters
 @item
-@strong{Marked count} --- Number of marked images (e.g., @samp{[3 marked]})
+@strong{Marked count} --- Number of marked images, always shown (e.g., @samp{[3 marked]})
+@item
+@strong{Filter count} --- When a filter is active, the number of matching images over the total (e.g., @samp{[12/156]})
 @end itemize
 
 @node Customization

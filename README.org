@@ -221,7 +221,8 @@ The enhanced header line displays:
 - *Sort indicator* - Current sort field and direction (e.g., =[name ↑]=)
 - *Display quality* - Current quality level (e.g., =[fast]=)
 - *Active filters* - Description of any active filters
-- *Marked count* - Number of marked images (e.g., =[3 marked]=)
+- *Marked count* - Number of marked images, always shown (e.g., =[3 marked]=)
+- *Filter count* - When a filter is active, the number of matching images over the total (e.g., =[12/156]=)
 
 * Customization
 

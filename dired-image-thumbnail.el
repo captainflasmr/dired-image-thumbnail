@@ -789,10 +789,8 @@ line.  Otherwise, fall back to the original function."
                                     "<" ">")))
              (filter-info (dired-image-thumbnail--format-active-filters))
               (marked-count (dired-image-thumbnail--count-marked))
-              (marked-info (if (> marked-count 0)
-                               (propertize (format " [%d marked]" marked-count)
-                                           'face 'dired-image-thumbnail-header-info)
-                             ""))
+              (marked-info (propertize (format " [%d marked]" marked-count)
+                                       'face 'dired-image-thumbnail-header-info))
              (rel-name (dired-image-thumbnail--relative-name file))
              (dir (dired-image-thumbnail--format-directory file))
              (size (dired-image-thumbnail--format-file-size file))
@@ -818,7 +816,10 @@ line.  Otherwise, fall back to the original function."
          (propertize layout-info 'face 'dired-image-thumbnail-header-info)
          (if (string-empty-p filter-info)
              ""
-           (propertize (format "  %s" filter-info)
+           (propertize (format "  %s [%d/%d]"
+                               filter-info
+                               (length dired-image-thumbnail--current-images)
+                               (length dired-image-thumbnail--all-images))
                        'face 'dired-image-thumbnail-header-info))
          marked-info))
     ;; Fall back to original function
