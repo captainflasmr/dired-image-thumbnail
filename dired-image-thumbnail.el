@@ -1600,12 +1600,16 @@ are refreshed afterwards."
       (user-error "No images to delete"))
     (when (or dired-image-thumbnail-auto-accept
               (yes-or-no-p (format "Delete %d image(s)? " (length files))))
-      (dolist (file files)
-        (delete-file file t)
-        (setq dired-image-thumbnail--current-images
-              (remove file dired-image-thumbnail--current-images))
-        (setq dired-image-thumbnail--all-images
-              (remove file dired-image-thumbnail--all-images)))
+      ;; Force trash semantics: the TRASH argument alone only trashes
+      ;; when `delete-by-moving-to-trash' is non-nil (nil by default),
+      ;; which would permanently delete the images.
+      (let ((delete-by-moving-to-trash t))
+        (dolist (file files)
+          (delete-file file t)
+          (setq dired-image-thumbnail--current-images
+                (remove file dired-image-thumbnail--current-images))
+          (setq dired-image-thumbnail--all-images
+                (remove file dired-image-thumbnail--all-images))))
       ;; Refresh dired buffer
       (when (and dired-image-thumbnail--dired-buffer
                  (buffer-live-p dired-image-thumbnail--dired-buffer))
@@ -1643,7 +1647,8 @@ the system default application."
                 (yes-or-no-p (format "Delete %s? " (file-name-nondirectory file))))
         ;; Find the next image to move to after deletion
         (let ((index (cl-position file dired-image-thumbnail--current-images :test #'equal)))
-          (delete-file file t)
+          (let ((delete-by-moving-to-trash t))
+            (delete-file file t))
           (setq dired-image-thumbnail--current-images
                 (remove file dired-image-thumbnail--current-images))
           (setq dired-image-thumbnail--all-images
@@ -2333,7 +2338,8 @@ This permanently deletes the file from disk and removes its thumbnail."
     (when (and file-name
                (or dired-image-thumbnail-auto-accept
                    (y-or-n-p (format "Delete %s? " (file-name-nondirectory file-name)))))
-      (delete-file file-name t)
+      (let ((delete-by-moving-to-trash t))
+        (delete-file file-name t))
       (setq dired-image-thumbnail--current-images
             (remove file-name dired-image-thumbnail--current-images))
       (setq dired-image-thumbnail--all-images
@@ -2370,7 +2376,8 @@ since the display buffer is not a file-visiting buffer."
           ;; Respect the auto-display setting.
           (when dired-image-thumbnail-auto-display-on-navigate
             (dired-image-thumbnail--display-this))))
-      (delete-file current-file t)
+      (let ((delete-by-moving-to-trash t))
+        (delete-file current-file t))
       (message "Deleted %s" current-file))))
 
 ;;; Window layout management
