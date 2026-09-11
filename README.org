@@ -26,7 +26,7 @@
 
 * Requirements
 
-- Emacs 28.1 or later
+- Emacs 29.1 or later
 - =image-dired= (built-in)
 - =transient= (optional, for transient menu support)
 
@@ -255,12 +255,34 @@ Set to =nil= to disable automatic layout management and use your own =display-bu
 Control the speed/fidelity trade-off when navigating with =n=/=p=:
 
 #+begin_src emacs-lisp
-(setq dired-image-thumbnail-display-quality 'faster) ; 'full, 'high, 'fast, 'faster, or 'draft
+(setq dired-image-thumbnail-display-quality 'faster) ; 1 full, 2 high, 3 fast, 4 faster, or 5 draft
+
+The current quality is shown in the thumbnail buffer mode line right after the buffer name, e.g. =[Q4 faster]=.
 #+end_src
 
 Lower quality levels use external tools (=djpeg=/=cjpeg= for JPEGs, =magick= for
 others) to generate small preview files, so Emacs decodes less data.  Press =Q=
 in the thumbnail buffer to cycle through levels interactively.
+
+** Per-Directory Settings
+
+The display quality (=Q=), sort criteria/order (=s=) and name/size filters (=/=)
+are remembered per directory in that directory's =.dir-locals.el=.  Revisiting
+a directory restores its choices, so folders with typically small images (e.g.
+screenshots) can keep =high= quality while large photo collections use a faster
+mode:
+
+#+begin_src emacs-lisp
+;; ~/.DCIM/Screenshots/.dir-locals.el (written automatically)
+((nil . ((dired-image-thumbnail-display-quality . high))))
+#+end_src
+
+Saving is automatic and merges with any existing entries.  Use =C-u Q= for a
+session-only quality change, or disable the automatic saving entirely:
+
+#+begin_src emacs-lisp
+(setq dired-image-thumbnail-save-dir-settings nil) ; keep choices session-local
+#+end_src
 
 ** Image Validation
 

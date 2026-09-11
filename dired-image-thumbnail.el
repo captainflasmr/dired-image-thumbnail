@@ -4,7 +4,7 @@
 
 ;; Author: James Dyer
 ;; Version: 2.6.0
-;; Package-Requires: ((emacs "28.1"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: multimedia, files, dired, images
 ;; URL: https://github.com/captainflasmr/dired-image-thumbnail
 
@@ -91,8 +91,8 @@
                   "dired-image-thumbnail-transient")
 
 ;; This package builds on a number of internal (double-dash) `image-dired'
-;; functions.  They are stable across the supported Emacs versions (28.1+)
-;; but are not part of image-dired's public API, so they are declared here
+;; functions introduced with the image-dired rewrite in Emacs 29.1.  They
+;; are not part of image-dired's public API, so they are declared here
 ;; both to document the dependency and to satisfy the byte-compiler.
 (declare-function image-dired--line-up-with-method "image-dired")
 (declare-function image-dired--thumb-update-marks "image-dired")
@@ -106,7 +106,10 @@
   :prefix "dired-image-thumbnail-")
 
 (defcustom dired-image-thumbnail-sort-by 'dired
-  "Default sorting criteria for thumbnails."
+  "Default sorting criteria for thumbnails.
+The choice is remembered per directory in that directory's
+`.dir-locals.el' (see `dired-image-thumbnail-save-dir-settings'),
+so revisiting a directory restores its sort order."
   :type '(choice (const :tag "Dired Order" dired)
                  (const :tag "Name" name)
                  (const :tag "Date modified" date)
@@ -116,7 +119,10 @@
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-sort-order 'ascending
-  "Default sort order for thumbnails."
+  "Default sort order for thumbnails.
+The choice is remembered per directory in that directory's
+`.dir-locals.el' (see `dired-image-thumbnail-save-dir-settings'),
+so revisiting a directory restores its sort order."
   :type '(choice (const :tag "Ascending" ascending)
                  (const :tag "Descending" descending))
   :safe #'symbolp
@@ -274,21 +280,24 @@ When nil, the system default application is used via `xdg-open'
 on Linux, `open' on macOS, or `start' on Windows."
   :type '(choice (const :tag "System default" nil)
                  (string :tag "Program name"))
-  :safe (lambda (v) (or (null v) (stringp v)))
   :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-display-quality 'faster
   "Display quality when navigating thumbnails with n/p.
-Controls the trade-off between image quality and navigation speed.
+Controls the trade-off between image quality and navigation speed,
+from 1 (best) to 5 (fastest):
 
-  `full'   - Original resolution via `image-dired-display-image'.
-             Slowest, but pixel-perfect.
-  `high'   - Scaled to fit the display window (1:1 window pixels).
-  `fast'   - Half the window dimensions, JPEG quality 60.
-  `faster' - Quarter the window dimensions, JPEG quality 40.
-  `draft'  - 1/8 the window dimensions, JPEG quality 25.  Very fast,
-             visibly soft; two neighbours are pre-generated instead
-             of one.
+   1 `full'   - Original resolution via `image-dired-display-image'.
+                Slowest, but pixel-perfect.
+   2 `high'   - Scaled to fit the display window (1:1 window pixels).
+   3 `fast'   - Half the window dimensions, JPEG quality 60.
+   4 `faster' - Quarter the window dimensions, JPEG quality 40.
+   5 `draft'  - 1/8 the window dimensions, JPEG quality 25.  Very fast,
+                visibly soft; two neighbours are pre-generated instead
+                of one.
+
+Lower qualities decode less data but are still scaled to fit the
+display window, so they look softer rather than smaller.
 
 Preview files are optimally compressed per mode and the previews of
 neighbouring images are pre-generated while idle, so navigating with
@@ -297,16 +306,73 @@ previews are kept in the image cache, so revisiting an image costs
 nothing.
 
 Interactively select the quality with
-`dired-image-thumbnail-select-display-quality' (bound to `Q`),
+`dired-image-thumbnail-select-display-quality' (bound to `Q'),
 which takes effect immediately.  Customising this variable takes
-effect on the next n/p keypress."
-  :type '(choice (const :tag "Full resolution (slowest)" full)
-                 (const :tag "High - window size" high)
-                 (const :tag "Fast - 1/2 window" fast)
-                 (const :tag "Faster - 1/4 window (default)" faster)
-                 (const :tag "Draft - 1/8 window (fastest)" draft))
+effect on the next n/p keypress.
+
+The choice is remembered per directory in that directory's
+`.dir-locals.el' (see `dired-image-thumbnail-save-dir-settings'),
+so directories with typically small images (e.g. screenshots) can
+keep `high' while photo collections use a faster mode."
+  :type '(choice (const :tag "1 - Full resolution (slowest)" full)
+                 (const :tag "2 - High - window size" high)
+                 (const :tag "3 - Fast - 1/2 window" fast)
+                 (const :tag "4 - Faster - 1/4 window (default)" faster)
+                 (const :tag "5 - Draft - 1/8 window (fastest)" draft))
 :safe #'symbolp
    :group 'dired-image-thumbnail)
+
+(defconst dired-image-thumbnail--quality-choices
+  '((full   "1" "1 - full: original resolution (slowest, pixel-perfect)")
+    (high   "2" "2 - high: window size 1:1 (sharp fit)")
+    (fast   "3" "3 - fast: half size, JPEG 60")
+    (faster "4" "4 - faster: quarter size, JPEG 40")
+    (draft  "5" "5 - draft: eighth size, JPEG 25 (fastest)"))
+  "Numbered display-quality choices, best (1) to fastest (5).
+Each entry is (SYMBOL NUMBER DESCRIPTION).  The symbols are the
+stored values; the numbers and descriptions are presentation only,
+so existing customisations and `.dir-locals.el' entries keep
+working.  Used by `dired-image-thumbnail-select-display-quality'.")
+
+(defun dired-image-thumbnail--filter-plist-p (value)
+  "Return non-nil if VALUE is nil or a valid filter plist.
+A valid plist has the form (:name REGEXP :size-min BYTES
+:size-max BYTES), where each value may be nil."
+  (or (null value)
+      (and (listp value)
+           (zerop (mod (length value) 2))
+           (let ((name (plist-get value :name))
+                 (size-min (plist-get value :size-min))
+                 (size-max (plist-get value :size-max)))
+             (and (or (null name) (stringp name))
+                  (or (null size-min) (natnump size-min))
+                  (or (null size-max) (natnump size-max)))))))
+
+(defcustom dired-image-thumbnail-default-filter nil
+  "Default name/size filter, as a plist or nil for no filter.
+The plist has the form (:name REGEXP :size-min BYTES :size-max
+BYTES), where each value may be nil.  This is normally managed
+automatically: changing the filter in a thumbnail buffer stores
+the value in that directory's `.dir-locals.el' (see
+`dired-image-thumbnail-save-dir-settings'), and opening the
+directory restores it."
+  :type '(choice (const :tag "No filter" nil)
+                 (sexp :tag "Filter plist (:name REGEXP :size-min BYTES :size-max BYTES)"))
+  :safe #'dired-image-thumbnail--filter-plist-p
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-save-dir-settings t
+  "Whether to remember quality, sort and filter choices per directory.
+When non-nil, changing the display quality (with
+`dired-image-thumbnail-select-display-quality'), the sort order or
+the filter in a thumbnail buffer writes the choice into that
+directory's `.dir-locals.el' (under the nil class, merged with any
+existing entries), and opening the directory restores it.  Only
+the package's own variables are ever written; other entries are
+left untouched.  Set to nil to keep such choices session-local."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'dired-image-thumbnail)
 
 (defcustom dired-image-thumbnail-suppress-display-lockfiles t
   "Whether to suppress Emacs lock files when displaying full-size images.
@@ -339,6 +405,13 @@ you want the standard Emacs locking behaviour."
 
 (defvar-local dired-image-thumbnail--sort-order nil
   "Current sort order for this buffer.")
+
+(defvar-local dired-image-thumbnail--display-quality nil
+  "Display quality override for this buffer.
+Nil means follow the global `dired-image-thumbnail-display-quality'.
+Set by `dired-image-thumbnail-select-display-quality' and by the
+per-directory settings in `.dir-locals.el' (see
+`dired-image-thumbnail-save-dir-settings').")
 
 (defvar-local dired-image-thumbnail--filter-name nil
   "Current name filter regexp.")
@@ -383,12 +456,29 @@ When showing the full-size image changes the window layout (and so
 this width), the thumbnails are refreshed so they re-align and the
 columns fit the new window width.")
 
+(defvar dired-image-thumbnail--identify-cached-command 'unchecked
+  "Cached command used to query image dimensions.
+A list (PROGRAM ARGS...) or nil when no suitable ImageMagick
+command is available.  The symbol `unchecked' means the search
+has not been performed yet.")
+
+(defun dired-image-thumbnail--identify-command ()
+  "Return the command that queries image dimensions, or nil.
+Uses `identify' when available, falling back to `magick identify'."
+  (when (eq dired-image-thumbnail--identify-cached-command 'unchecked)
+    (setq dired-image-thumbnail--identify-cached-command
+          (cond ((executable-find "identify") '("identify"))
+                ((executable-find "magick") '("magick" "identify"))
+                (t nil))))
+  dired-image-thumbnail--identify-cached-command)
+
 (defun dired-image-thumbnail--get-image-dimensions (file)
   "Get dimensions of image FILE as (width . height), or (0 . 0) if unknown.
-If not cached, launch an async process (`identify`) to fill the cache."
+If not cached, launch an async process (`identify') to fill the cache."
   (or (gethash file dired-image-thumbnail--dimension-cache)
       (progn
-        (unless (gethash file dired-image-thumbnail--dimension-pending)
+        (unless (or (gethash file dired-image-thumbnail--dimension-pending)
+                    (null (dired-image-thumbnail--identify-command)))
           (puthash file t dired-image-thumbnail--dimension-pending)
           (dired-image-thumbnail--start-identify-process file))
         ;; Fallback until process finishes
@@ -424,36 +514,43 @@ property."
   (let ((proc-buf (generate-new-buffer " *dired-image-thumb-identify*"))
         (thumb-buf (current-buffer))
         (file-attr file))
-    (make-process
-     :name "dired-image-thumb-identify"
-     :buffer proc-buf
-     :command (list "identify" "-format" "%w %h" (expand-file-name file))
-     :noquery t
-     :sentinel
-     (lambda (proc _event)
-       (when (eq (process-status proc) 'exit)
-         (unwind-protect
-             (when (and (zerop (process-exit-status proc))
-                        (buffer-live-p (process-buffer proc)))
-               (with-current-buffer (process-buffer proc)
-                 (goto-char (point-min))
-                 (let* ((line (buffer-substring-no-properties (point-min) (point-max)))
-                        (nums (split-string line)))
-                   (when (and (= (length nums) 2)
-                              (string-match-p "^[0-9]+$" (car nums))
-                              (string-match-p "^[0-9]+$" (cadr nums)))
-                     (let ((w (string-to-number (car nums)))
-                           (h (string-to-number (cadr nums))))
-                       (when (buffer-live-p thumb-buf)
-                         (with-current-buffer thumb-buf
-                           (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)
-                           (remhash file-attr dired-image-thumbnail--dimension-pending)))
-                       (dolist (b (buffer-list))
-                         (with-current-buffer b
-                           (when (derived-mode-p 'image-dired-thumbnail-mode)
-                             (image-dired--update-header-line)))))))))
-           (when (buffer-live-p (process-buffer proc))
-             (kill-buffer (process-buffer proc)))))))))
+    (condition-case nil
+        (make-process
+         :name "dired-image-thumb-identify"
+         :buffer proc-buf
+         :command (append (dired-image-thumbnail--identify-command)
+                          (list "-format" "%w %h" (expand-file-name file)))
+         :noquery t
+         :sentinel
+         (lambda (proc _event)
+           (when (eq (process-status proc) 'exit)
+             (unwind-protect
+                 (when (and (zerop (process-exit-status proc))
+                            (buffer-live-p (process-buffer proc)))
+                   (with-current-buffer (process-buffer proc)
+                     (goto-char (point-min))
+                     (let* ((line (buffer-substring-no-properties (point-min) (point-max)))
+                            (nums (split-string line)))
+                       (when (and (= (length nums) 2)
+                                  (string-match-p "^[0-9]+$" (car nums))
+                                  (string-match-p "^[0-9]+$" (cadr nums)))
+                         (let ((w (string-to-number (car nums)))
+                               (h (string-to-number (cadr nums))))
+                           (when (buffer-live-p thumb-buf)
+                             (with-current-buffer thumb-buf
+                               (puthash file-attr (cons w h) dired-image-thumbnail--dimension-cache)))
+                           (dolist (b (buffer-list))
+                             (with-current-buffer b
+                               (when (derived-mode-p 'image-dired-thumbnail-mode)
+                                 (image-dired--update-header-line)))))))))
+               (when (buffer-live-p (process-buffer proc))
+                 (kill-buffer (process-buffer proc)))
+               (when (buffer-live-p thumb-buf)
+                 (with-current-buffer thumb-buf
+                   (remhash file-attr dired-image-thumbnail--dimension-pending)))))))
+      (file-error
+       (kill-buffer proc-buf)
+       (remhash file dired-image-thumbnail--dimension-pending)))))
 
 ;;; Utility functions
 
@@ -693,6 +790,166 @@ the `[N marked]' segment reflects the change immediately."
         (mapconcat #'identity (nreverse filters) " ")
       "")))
 
+;;; Per-directory settings (.dir-locals.el)
+
+(defconst dired-image-thumbnail--dir-setting-vars
+  '(dired-image-thumbnail-display-quality
+    dired-image-thumbnail-sort-by
+    dired-image-thumbnail-sort-order
+    dired-image-thumbnail-default-filter)
+  "Variables managed in a directory's `.dir-locals.el' (nil class).
+Only these variables are ever read or written there by this
+package; any other entries are left untouched.")
+
+(defun dired-image-thumbnail--valid-dir-setting-p (var value)
+  "Return non-nil if VALUE is acceptable for directory setting VAR.
+The file is read explicitly (Emacs safety checks are bypassed),
+so values are validated strictly here before being applied."
+  (pcase var
+    ('dired-image-thumbnail-display-quality
+     (memq value '(full high fast faster draft)))
+    ('dired-image-thumbnail-sort-by
+     (memq value '(dired name date size dimensions)))
+    ('dired-image-thumbnail-sort-order
+     (memq value '(ascending descending)))
+    ('dired-image-thumbnail-default-filter
+     (dired-image-thumbnail--filter-plist-p value))
+    (_ nil)))
+
+(defun dired-image-thumbnail--read-dir-settings (&optional dir)
+  "Return managed settings from DIR's `.dir-locals.el'.
+DIR defaults to `dired-image-thumbnail--source-dir'.  Only the nil
+class is consulted.  The result is an alist of (VAR . VALUE) for
+the variables in `dired-image-thumbnail--dir-setting-vars' that
+are present with valid values; invalid or absent entries are
+skipped.  Never signals an error."
+  (let ((dir (or dir dired-image-thumbnail--source-dir))
+        (result nil))
+    (when dir
+      (let ((file (expand-file-name dir-locals-file dir)))
+        (when (file-readable-p file)
+          (condition-case nil
+              (with-temp-buffer
+                (insert-file-contents file)
+                (let* ((all (read (current-buffer)))
+                       (entry (and (listp all) (assq nil all))))
+                  (dolist (var dired-image-thumbnail--dir-setting-vars)
+                    (let ((cell (assq var (cdr entry))))
+                      (when cell
+                        (when (dired-image-thumbnail--valid-dir-setting-p
+                               var (cdr cell))
+                          (push (cons var (cdr cell)) result)))))))
+            (error nil)))))
+    (nreverse result)))
+
+(defun dired-image-thumbnail--write-dir-locals (dir settings)
+  "Merge SETTINGS ((VAR . VALUE) ...) into DIR's `.dir-locals.el'.
+SETTINGS entries are stored under the nil class; every other class
+and variable is preserved, as are any leading comment lines.  A
+short header comment is added when the file is created."
+  (let* ((file (expand-file-name dir-locals-file dir))
+         (new-file (not (file-exists-p file)))
+         (prefix (if new-file
+                     ";;; Directory Local Variables\n;;; For more information see (info \"(emacs) Directory Variables\")\n\n"
+                   (condition-case nil
+                       (with-temp-buffer
+                         (insert-file-contents file)
+                         (goto-char (point-min))
+                         (while (looking-at-p "[ \t]*\\(;\\|$\\)")
+                           (forward-line 1))
+                         (let ((s (buffer-substring-no-properties (point-min) (point))))
+                           (if (string-empty-p s)
+                               ";;; Directory Local Variables\n;;; For more information see (info \"(emacs) Directory Variables\")\n\n"
+                             s)))
+                     (error ""))))
+         (all (if new-file
+                  nil
+                (condition-case nil
+                    (with-temp-buffer
+                      (insert-file-contents file)
+                      (let ((sexp (read (current-buffer))))
+                        (and (listp sexp) sexp)))
+                  (error nil))))
+         (entry (assq nil all)))
+    (unless entry
+      (setq entry (cons nil nil))
+      (push entry all))
+    (dolist (kv settings)
+      (let ((cell (assq (car kv) (cdr entry))))
+        (if cell
+            (setcdr cell (cdr kv))
+          (setcdr entry (append (cdr entry) (list (cons (car kv) (cdr kv))))))))
+    (with-temp-file file
+      (insert prefix)
+      (unless (string-suffix-p "\n" prefix)
+        (insert "\n"))
+      (pp all (current-buffer)))))
+
+(defun dired-image-thumbnail--save-dir-settings (settings)
+  "Remember SETTINGS ((VAR . VALUE) ...) in the source directory.
+The values are merged into the `.dir-locals.el' file in
+`dired-image-thumbnail--source-dir'.  Does nothing when
+`dired-image-thumbnail-save-dir-settings' is nil, when there is
+no source directory, or when the file is not writable.  Never
+signals an error; failures are reported with `message'."
+  (when (and dired-image-thumbnail-save-dir-settings
+             dired-image-thumbnail--source-dir
+             settings)
+    (let* ((dir (expand-file-name dired-image-thumbnail--source-dir))
+           (file (expand-file-name dir-locals-file dir)))
+      (if (not (file-writable-p file))
+          (message "Directory settings not saved (not writable): %s" file)
+        (condition-case err
+            (progn
+              (dired-image-thumbnail--write-dir-locals dir settings)
+              (message "Remembered %s for %s"
+                       (mapconcat (lambda (kv)
+                                    (format "%s=%s" (car kv) (cdr kv)))
+                                  settings ", ")
+                       (abbreviate-file-name dir)))
+          (error (message "Could not save directory settings: %s"
+                          (error-message-string err))))))))
+
+(defun dired-image-thumbnail--apply-dir-settings ()
+  "Apply per-directory quality, sort and filter settings.
+Reads the `.dir-locals.el' file in
+`dired-image-thumbnail--source-dir' and initialises the
+buffer-local state from it, falling back to the global defaults
+for anything not stored.  Directories with typically small images
+(e.g. screenshots) can thus keep a higher display quality while
+photo collections use a faster mode."
+  (let ((settings (dired-image-thumbnail--read-dir-settings)))
+    (setq dired-image-thumbnail--display-quality
+          (cdr (assq 'dired-image-thumbnail-display-quality settings)))
+    (setq dired-image-thumbnail--sort-by
+          (or (cdr (assq 'dired-image-thumbnail-sort-by settings))
+              dired-image-thumbnail-sort-by))
+    (setq dired-image-thumbnail--sort-order
+          (or (cdr (assq 'dired-image-thumbnail-sort-order settings))
+              dired-image-thumbnail-sort-order))
+    (let ((filter (cdr (assq 'dired-image-thumbnail-default-filter settings))))
+      (setq dired-image-thumbnail--filter-name
+            (let ((name (plist-get filter :name)))
+              (and (stringp name) (not (string-empty-p name)) name)))
+      (setq dired-image-thumbnail--filter-size-min
+            (let ((v (plist-get filter :size-min)))
+              (and (natnump v) v)))
+      (setq dired-image-thumbnail--filter-size-max
+            (let ((v (plist-get filter :size-max)))
+              (and (natnump v) v))))))
+
+(defun dired-image-thumbnail--save-current-filter ()
+  "Persist the current name/size filter to the source directory."
+  (dired-image-thumbnail--save-dir-settings
+   (list (cons 'dired-image-thumbnail-default-filter
+               (if (or dired-image-thumbnail--filter-name
+                       dired-image-thumbnail--filter-size-min
+                       dired-image-thumbnail--filter-size-max)
+                   (list :name dired-image-thumbnail--filter-name
+                         :size-min dired-image-thumbnail--filter-size-min
+                         :size-max dired-image-thumbnail--filter-size-max)
+                 nil)))))
+
 ;;; Apply sort and filter
 
 (defun dired-image-thumbnail--apply-sort-and-filter ()
@@ -708,11 +965,16 @@ initialised before refreshing."
 
 (defun dired-image-thumbnail--initialize-buffer ()
   "Initialize dired-image-thumbnail variables in the current thumbnail buffer.
-This is called via hook when entering `image-dired-thumbnail-mode'."
+This is called via hook when entering `image-dired-thumbnail-mode'
+and by `dired-image-thumbnail--display-thumbs-advice' after
+`image-dired-display-thumbs', so that starting from plain
+`image-dired' also sets up the enhanced workflow."
   ;; Keep the current-thumbnail highlight in step with point movement.
   (add-hook 'post-command-hook #'dired-image-thumbnail--update-current-highlight nil t)
   ;; Colour the cursor to match, buffer-locally.
   (dired-image-thumbnail--setup-cursor)
+  ;; Show the display quality in the mode line.
+  (dired-image-thumbnail--setup-mode-line)
   ;; Any pre-existing thumbnail cache was generated at image-dired's
   ;; own thumb size, so record it as the baseline for resize
   ;; regeneration.
@@ -721,39 +983,45 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
     (setq dired-image-thumbnail--thumbs-generated-at image-dired-thumb-size))
   ;; Keep image-dired's mark-and-advance display in step with auto-display.
   (dired-image-thumbnail--disable-marking-shows-next)
-  ;; Skip if already initialized and has images
-  (unless (and dired-image-thumbnail--all-images
-               dired-image-thumbnail--dired-buffer)
-    ;; Small delay to ensure image-dired has started inserting properties
-    ;; though we prefer finding the dired buffer through other means if possible
-    (let ((images nil)
-          (dired-buf dired-image-thumbnail--dired-buffer)
-          (source-dir dired-image-thumbnail--source-dir))
-      
-      ;; If not explicitly passed, try to find from text properties.
-      ;; Jump between property-change boundaries (O(runs)) rather than
-      ;; scanning one character at a time.
-      (unless dired-buf
-        (save-excursion
-          (goto-char (point-min))
-          (let ((pos (point-min)) found)
-            (while (and (not found) pos (< pos (point-max)))
-              (when-let ((buf (get-text-property pos 'associated-dired-buffer)))
-                (setq dired-buf buf)
-                (setq found t))
-              (setq pos (next-single-property-change
-                         pos 'associated-dired-buffer nil (point-max)))))))
+  ;; Find the Dired buffer associated with the thumbnails currently in
+  ;; the buffer (set by `image-dired-insert-thumbnail').  Jump between
+  ;; property-change boundaries (O(thumbnails)) rather than scanning one
+  ;; character at a time.
+  (let ((found-buf nil)
+        (here (expand-file-name default-directory))
+        (images nil)
+        (dired-buf dired-image-thumbnail--dired-buffer)
+        (source-dir dired-image-thumbnail--source-dir))
+    (save-excursion
+      (goto-char (point-min))
+      (let ((pos (point-min)))
+        (while (and (not found-buf) pos (< pos (point-max)))
+          (when-let ((buf (get-text-property pos 'associated-dired-buffer)))
+            (setq found-buf buf))
+          (setq pos (next-single-property-change
+                     pos 'associated-dired-buffer nil (point-max))))))
 
-      ;; If still not found, look for any live dired buffer that might be relevant
+    ;; Skip when already initialized for the Dired buffer now displayed,
+    ;; so session sort/filter choices survive repeated displays.  A
+    ;; different Dired buffer (or a fresh buffer) means the thumbnail
+    ;; buffer was re-populated, so state is rebuilt below.
+    (unless (and dired-image-thumbnail--all-images
+                 (buffer-live-p dired-image-thumbnail--dired-buffer)
+                 (or (null found-buf)
+                     (eq found-buf dired-image-thumbnail--dired-buffer)))
+      (setq dired-buf (or dired-buf found-buf))
+      ;; If the properties did not identify a Dired buffer, fall back
+      ;; to a live one visiting this thumbnail buffer's directory.
       (unless dired-buf
         (let ((buffers (buffer-list)))
           (while (and (not dired-buf) buffers)
             (let ((buf (pop buffers)))
-              (with-current-buffer buf
-                (when (and (derived-mode-p 'dired-mode)
-                           (boundp 'dired-image-thumbnail--source-dir)
-                           (equal default-directory (buffer-local-value 'default-directory (current-buffer))))
-                  (setq dired-buf buf)))))))
+              (when (and (buffer-live-p buf)
+                         (with-current-buffer buf
+                           (and (derived-mode-p 'dired-mode)
+                                (equal (expand-file-name default-directory)
+                                       here))))
+                (setq dired-buf buf))))))
 
       ;; Jump between property-change boundaries (O(thumbnails)) rather
       ;; than scanning one character at a time.
@@ -774,14 +1042,27 @@ This is called via hook when entering `image-dired-thumbnail-mode'."
         (with-current-buffer dired-buf
           (unless source-dir
             (setq source-dir dired-image-thumbnail--source-dir))))
-      
+
       (when images
         (setq dired-image-thumbnail--all-images (nreverse images))
         (setq dired-image-thumbnail--current-images dired-image-thumbnail--all-images)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
         (setq dired-image-thumbnail--source-dir (or source-dir default-directory))
         (setq dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
-        (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)))))
+        (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)
+        ;; Restore any quality, sort and filter choices remembered
+        ;; for this directory (covers plain `image-dired' entry; the
+        ;; `dired-image-thumbnail' command applies them explicitly).
+        (dired-image-thumbnail--apply-dir-settings)))))
+
+(defun dired-image-thumbnail--display-thumbs-advice (&rest _)
+  "Initialize the thumbnail buffer after `image-dired-display-thumbs'.
+`image-dired-display-thumbs' leaves the associated Dired buffer
+current, so switch to the thumbnail buffer explicitly."
+  (when-let ((buf (get-buffer image-dired-thumbnail-buffer)))
+    (with-current-buffer buf
+      (when (derived-mode-p 'image-dired-thumbnail-mode)
+        (dired-image-thumbnail--initialize-buffer)))))
 
 ;;; Header line
 
@@ -1165,9 +1446,13 @@ after refreshing. Otherwise, try to maintain position on the current file."
            ;; Phase 5: when thumbnails are still being generated, poll
            ;; the queue and refresh once it has drained so the missing
            ;; thumbnails appear without ever blocking.
-           (when (> queued 0)
-             (dired-image-thumbnail--arm-queue-poll))))
-      ;; Line up
+            (when (> queued 0)
+              (dired-image-thumbnail--arm-queue-poll))))
+       ;; Ensure the quality segment is in the mode line (also picks
+       ;; up reloaded code in a live session without recreating the
+       ;; buffer; a no-op once present).
+       (dired-image-thumbnail--setup-mode-line)
+       ;; Line up
       (if dired-image-thumbnail-wrap-display
           (progn
             (setq-local word-wrap t)
@@ -1308,6 +1593,8 @@ its point position if the file at point was renamed."
   "Sort thumbnails by Dired buffer order."
   (interactive)
   (setq dired-image-thumbnail--sort-by 'dired)
+  (dired-image-thumbnail--save-dir-settings
+   '((dired-image-thumbnail-sort-by . dired)))
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Sorted by Dired order"))
 
@@ -1315,6 +1602,8 @@ its point position if the file at point was renamed."
   "Sort thumbnails by name."
   (interactive)
   (setq dired-image-thumbnail--sort-by 'name)
+  (dired-image-thumbnail--save-dir-settings
+   '((dired-image-thumbnail-sort-by . name)))
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Sorted by name"))
 
@@ -1322,6 +1611,8 @@ its point position if the file at point was renamed."
   "Sort thumbnails by date."
   (interactive)
   (setq dired-image-thumbnail--sort-by 'date)
+  (dired-image-thumbnail--save-dir-settings
+   '((dired-image-thumbnail-sort-by . date)))
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Sorted by date"))
 
@@ -1329,6 +1620,8 @@ its point position if the file at point was renamed."
   "Sort thumbnails by size."
   (interactive)
   (setq dired-image-thumbnail--sort-by 'size)
+  (dired-image-thumbnail--save-dir-settings
+   '((dired-image-thumbnail-sort-by . size)))
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Sorted by size"))
 
@@ -1339,6 +1632,9 @@ its point position if the file at point was renamed."
         (if (eq dired-image-thumbnail--sort-order 'ascending)
             'descending
           'ascending))
+  (dired-image-thumbnail--save-dir-settings
+   (list (cons 'dired-image-thumbnail-sort-order
+               dired-image-thumbnail--sort-order)))
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Sort order: %s" dired-image-thumbnail--sort-order))
 
@@ -1364,6 +1660,7 @@ sort order."
   (interactive "sFilter by name (regexp): ")
   (setq dired-image-thumbnail--filter-name
         (if (string-empty-p regexp) nil regexp))
+  (dired-image-thumbnail--save-current-filter)
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Name filter: %s" (or dired-image-thumbnail--filter-name "none")))
 
@@ -1377,6 +1674,7 @@ Enter size in human-readable format (e.g., 100k, 1M)."
         (if (string-empty-p min) nil (dired-image-thumbnail--parse-size min)))
   (setq dired-image-thumbnail--filter-size-max
         (if (string-empty-p max) nil (dired-image-thumbnail--parse-size max)))
+  (dired-image-thumbnail--save-current-filter)
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Size filter: %s - %s"
            (if dired-image-thumbnail--filter-size-min
@@ -1404,6 +1702,7 @@ Enter size in human-readable format (e.g., 100k, 1M)."
   (setq dired-image-thumbnail--filter-name nil)
   (setq dired-image-thumbnail--filter-size-min nil)
   (setq dired-image-thumbnail--filter-size-max nil)
+  (dired-image-thumbnail--save-current-filter)
   (dired-image-thumbnail--apply-sort-and-filter)
   (message "Filters cleared"))
 
@@ -1749,6 +2048,10 @@ SUBDIRS should be a list of directory paths."
 If files are marked, show thumbnails for marked images only.
 Otherwise, show thumbnails for all images visible in the dired buffer.
 
+The display quality, sort order and filter remembered for this
+directory in its `.dir-locals.el' (see
+`dired-image-thumbnail-save-dir-settings') are restored.
+
 This works with inserted subdirectories - use \\`i' (`dired-maybe-insert-subdir')
 to insert subdirectories before calling this command to include images from
 those subdirectories. See `dired-image-thumbnail-insert-subdir-recursive'
@@ -1783,7 +2086,10 @@ enhanced features like sorting and filtering."
         (setq dired-image-thumbnail--recursive recursive)
         (setq dired-image-thumbnail--filter-name nil)
         (setq dired-image-thumbnail--filter-size-min nil)
-        (setq dired-image-thumbnail--filter-size-max nil))
+        (setq dired-image-thumbnail--filter-size-max nil)
+        ;; Restore the quality, sort and filter choices remembered
+        ;; for this directory (if any).
+        (dired-image-thumbnail--apply-dir-settings))
       ;; Refresh display-buffer rules so they track the current layout/ratio
       ;; custom values, then apply the layout BEFORE refresh so that line-up
       ;; sees the correct (narrower) window width for column calculation.
@@ -1921,9 +2227,71 @@ keybindings will not be installed.  This can happen when `image-dired'\
 
 ;;; Fast image display
 
+(defun dired-image-thumbnail--current-quality ()
+  "Return the effective display quality for the current buffer.
+This is the buffer-local `dired-image-thumbnail--display-quality'
+when set (per-directory choice from `.dir-locals.el' or the last
+`dired-image-thumbnail-select-display-quality' selection),
+otherwise the global `dired-image-thumbnail-display-quality'."
+  (or dired-image-thumbnail--display-quality
+      dired-image-thumbnail-display-quality))
+
+(defvar dired-image-thumbnail--mode-line-quality
+  '(:eval (dired-image-thumbnail--mode-line-quality-string))
+  "Mode-line construct showing the current display quality.
+Appended buffer-locally to `mode-line-format' in thumbnail buffers
+by `dired-image-thumbnail--setup-mode-line'.")
+;; Mode-line symbols only get their `:eval' forms processed when
+;; marked risky (otherwise Emacs silently ignores them, so the
+;; segment would never display).  Same as built-in
+;; `project-mode-line-format'.  The variable is internal and never
+;; set from file/dir locals, so this changes no safety behaviour.
+(put 'dired-image-thumbnail--mode-line-quality 'risky-local-variable t)
+
+(defun dired-image-thumbnail--mode-line-quality-string ()
+  "Return the mode-line quality segment, e.g. \"[Q4 faster]\".
+Reflects `dired-image-thumbnail--current-quality', so it follows
+`Q' changes and per-directory settings automatically.  Never
+signals an error, since mode-line evaluation must not fail."
+  (condition-case nil
+      (let ((quality (dired-image-thumbnail--current-quality)))
+        (propertize (format "[Q%s %s]"
+                            (or (nth 1 (assq quality
+                                             dired-image-thumbnail--quality-choices))
+                                "?")
+                            quality)
+                    'face 'mode-line-emphasis))
+    (error "")))
+
+(defun dired-image-thumbnail--setup-mode-line ()
+  "Show the display quality in the thumbnail buffer mode line.
+Inserts `dired-image-thumbnail--mode-line-quality' right after the
+buffer identification (so it stays visible instead of being cut
+off at the row end in narrow windows), or appends it when the
+format has no buffer identification.  Runs only once per buffer;
+the segment re-evaluates on every redisplay, so it stays in step
+without further updates.  Safe to call repeatedly: besides the
+mode hook it also runs on every refresh, so reloaded code takes
+effect without recreating the buffer."
+  (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+             (listp mode-line-format))
+    (unless (memq 'dired-image-thumbnail--mode-line-quality
+                  mode-line-format)
+      (setq-local mode-line-format
+                  (let ((new nil) (inserted nil))
+                    (dolist (el mode-line-format)
+                      (push el new)
+                      (when (and (not inserted)
+                                 (eq el 'mode-line-buffer-identification))
+                        (push 'dired-image-thumbnail--mode-line-quality new)
+                        (setq inserted t)))
+                    (unless inserted
+                      (push 'dired-image-thumbnail--mode-line-quality new))
+                    (nreverse new))))))
+
 (defun dired-image-thumbnail--quality-scale ()
-  "Return the scale factor for `dired-image-thumbnail-display-quality'."
-  (pcase dired-image-thumbnail-display-quality
+  "Return the scale factor for the current display quality."
+  (pcase (dired-image-thumbnail--current-quality)
     ('high  1.0)
     ('fast  0.5)
     ('faster 0.25)
@@ -1979,7 +2347,7 @@ directly to the nearest djpeg fraction."
   "Return the JPEG encode quality for the current display quality.
 Lower display qualities use lower encode quality, so preview files
 are smaller and quicker to load and decode."
-  (pcase dired-image-thumbnail-display-quality
+  (pcase (dired-image-thumbnail--current-quality)
     ('fast 60)
     ('faster 40)
     ('draft 25)
@@ -2038,11 +2406,41 @@ so lower quality modes produce smaller, quicker-loading files."
 Used by the fast scaled-display path so that bindings such as \\`C-d'
 are available even though the buffer is not file-visiting.")
 
+(defun dired-image-thumbnail--fit-image-spec (display-file win-width win-height)
+  "Create an image spec for DISPLAY-FILE scaled to fit WIN-WIDTH x WIN-HEIGHT.
+Preserves the aspect ratio, allowing both upscaling and
+downscaling, so the preview always fills the window as much as
+possible.  Falls back to `:max-width'/`:max-height' (downscale
+only) when the native size cannot be determined."
+  (let ((native (ignore-errors (image-size (create-image display-file) t))))
+    (if (and native
+             (consp native)
+             (numberp (car native)) (numberp (cdr native))
+             (> (car native) 0) (> (cdr native) 0)
+             (numberp win-width) (numberp win-height)
+             (> win-width 0) (> win-height 0))
+        (let* ((iw (float (car native)))
+               (ih (float (cdr native)))
+               (s (min (/ (float win-width) iw)
+                       (/ (float win-height) ih))))
+          (if (and (numberp s) (> s 0) (not (= s 1.0)))
+              (create-image display-file nil nil
+                            :width (max 1 (round (* iw s)))
+                            :height (max 1 (round (* ih s))))
+            (create-image display-file nil nil
+                          :max-width win-width
+                          :max-height win-height)))
+      (create-image display-file nil nil
+                    :max-width win-width
+                    :max-height win-height))))
+
 (defun dired-image-thumbnail--display-image-fast (file)
   "Display FILE scaled according to `dired-image-thumbnail-display-quality'.
 For `high' quality, loads the file directly with window-fitting constraints.
 For lower qualities, produces a small preview via an external tool so that
-Emacs never decodes the full image."
+Emacs never decodes the full image.  In both cases the displayed
+image is scaled (up or down) to fit the display window, preserving
+the aspect ratio."
   (setq file (expand-file-name file))
   (unless (file-exists-p file)
     (error "No such file: %s" file))
@@ -2057,14 +2455,15 @@ Emacs never decodes the full image."
          (win-height (or (and display-win (window-body-height display-win t)) 600))
          (decode-w (max 1 (truncate (* win-width scale))))
          (decode-h (max 1 (truncate (* win-height scale))))
-         ;; For high quality, load original; otherwise make a small preview
-         (display-file (if (>= scale 1.0)
-                           file
-                         (dired-image-thumbnail--make-preview file decode-w decode-h)))
-         ;; Load the (possibly small) file and fit to window
-         (img (create-image display-file nil nil
-                            :max-width win-width
-                            :max-height win-height)))
+          ;; For high quality, load original; otherwise make a small preview
+          (display-file (if (>= scale 1.0)
+                            file
+                          (dired-image-thumbnail--make-preview file decode-w decode-h)))
+          ;; Fit the (possibly small) preview to the window, scaling
+          ;; up as well as down so e.g. quarter-size `faster'
+          ;; previews still fill the display window.
+          (img (dired-image-thumbnail--fit-image-spec
+                display-file win-width win-height)))
     (with-current-buffer buf
       ;; If this buffer was previously used by image-dired-display-image
       ;; to visit a file, sever the file visit before modifying the
@@ -2219,9 +2618,9 @@ while it runs."
                  (idx (and file
                            (cl-position file dired-image-thumbnail--current-images
                                         :test #'equal)))
-                 (offsets (if (eq dired-image-thumbnail-display-quality 'draft)
-                              '(1 -1 2 -2)
-                            '(1 -1)))
+                  (offsets (if (eq (dired-image-thumbnail--current-quality) 'draft)
+                               '(1 -1 2 -2)
+                             '(1 -1)))
                  (dims (dired-image-thumbnail--decode-dimensions))
                  (width (car dims))
                  (height (cdr dims)))
@@ -2271,18 +2670,39 @@ Uses fast scaled display unless quality is `full'."
 
 ;;; Enhanced navigation and deletion
 
-(defun dired-image-thumbnail-select-display-quality ()
+(defun dired-image-thumbnail-select-display-quality (&optional session-only)
   "Select the display quality with `completing-read'.
-Choose among `full', `high', `fast', `faster' and `draft'; the
-choice takes effect immediately and refreshes the displayed image."
-  (interactive)
-  (setq dired-image-thumbnail-display-quality
-        (intern (completing-read
-                 "Display quality: "
-                 '("full" "high" "fast" "faster" "draft")
-                 nil t)))
-  (message "Display quality: %s" dired-image-thumbnail-display-quality)
+Qualities are numbered from 1 (best) to 5 (fastest); see
+`dired-image-thumbnail--quality-choices'.  Type a number or part
+of a description.  The choice takes effect immediately and
+refreshes the displayed image.
+The choice is remembered in the directory's `.dir-locals.el' (see
+`dired-image-thumbnail-save-dir-settings'), so revisiting the
+directory restores it.  With prefix argument SESSION-ONLY, change
+the quality for this session only without writing it to the
+directory."
+  (interactive "P")
+  (let* ((table (append (mapcar (lambda (c) (cons (nth 1 c) (car c)))
+                                dired-image-thumbnail--quality-choices)
+                        (mapcar (lambda (c) (cons (nth 2 c) (car c)))
+                                dired-image-thumbnail--quality-choices)))
+         (current (dired-image-thumbnail--current-quality))
+         (default (nth 2 (assq current dired-image-thumbnail--quality-choices)))
+         (input (completing-read
+                 (format "Display quality (current %s): " current)
+                 (mapcar #'car table)
+                 nil t nil nil default))
+         (quality (cdr (assoc input table))))
+    (unless quality
+      (user-error "Unknown display quality: %s" input))
+    (setq dired-image-thumbnail-display-quality quality)
+    (setq dired-image-thumbnail--display-quality quality)
+    (unless session-only
+      (dired-image-thumbnail--save-dir-settings
+       (list (cons 'dired-image-thumbnail-display-quality quality)))))
+  (message "Display quality: %s" (dired-image-thumbnail--current-quality))
   (image-dired--update-header-line)
+  (force-mode-line-update)
   (dired-image-thumbnail--display-this))
 
 (defun dired-image-thumbnail--disable-marking-shows-next ()
@@ -2362,22 +2782,39 @@ since the display buffer is not a file-visiting buffer."
              (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
                (with-current-buffer thumb-buf
                  (image-dired-original-file-name))))))
-    (when (and current-file
-               (or dired-image-thumbnail-auto-accept
-                   (y-or-n-p (format "Delete %s? " (file-name-nondirectory current-file)))))
-      ;; Update internal lists in the thumbnail buffer
+    (unless current-file
+      (user-error "No image at point"))
+    (when (or dired-image-thumbnail-auto-accept
+              (y-or-n-p (format "Delete %s? " (file-name-nondirectory current-file))))
+      (let ((delete-by-moving-to-trash t))
+        (delete-file current-file t))
+      ;; Update internal lists and remove the thumbnail, locating it by
+      ;; file name because point in the display buffer need not match
+      ;; point in the thumbnail buffer.
       (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
         (with-current-buffer thumb-buf
           (setq dired-image-thumbnail--current-images
                 (remove current-file dired-image-thumbnail--current-images))
           (setq dired-image-thumbnail--all-images
                 (remove current-file dired-image-thumbnail--all-images))
-          (image-dired-forward-image)
-          ;; Respect the auto-display setting.
-          (when dired-image-thumbnail-auto-display-on-navigate
-            (dired-image-thumbnail--display-this))))
-      (let ((delete-by-moving-to-trash t))
-        (delete-file current-file t))
+          (let ((origin (point)) found)
+            (save-excursion
+              (goto-char (point-min))
+              (let ((pos (point-min)))
+                (while (and (not found) pos (< pos (point-max)))
+                  (when (equal (get-text-property pos 'original-file-name)
+                               current-file)
+                    (setq found pos))
+                  (setq pos (next-single-property-change
+                             pos 'original-file-name nil (point-max))))))
+            (if found
+                (progn
+                  (goto-char found)
+                  (image-dired-delete-char)
+                  (when (and (not (eobp))
+                             dired-image-thumbnail-auto-display-on-navigate)
+                    (dired-image-thumbnail--display-this)))
+              (goto-char origin)))))
       (message "Deleted %s" current-file))))
 
 ;;; Window layout management
@@ -2422,6 +2859,11 @@ another buffer, which is ideal for the thumbnail/image split layout."
           target-win)
       (display-buffer-in-direction buffer alist))))
 
+(defvar dired-image-thumbnail--display-buffer-entries nil
+  "Entries this package installed in `display-buffer-alist'.
+Only these exact entries are removed again, so rules added by the
+user or by other packages are never touched.")
+
 (defun dired-image-thumbnail-setup-display-buffer ()
   "Configure `display-buffer-alist' rules for thumbnail and image buffers.
 Only adds rules when `dired-image-thumbnail-window-layout' is non-nil,
@@ -2431,14 +2873,14 @@ calls (e.g. when the image window is reused during navigation).
 Any rules previously installed by this function are removed first, so it
 is idempotent and can be re-run to track changes to
 `dired-image-thumbnail-window-layout' / `-window-ratio'."
-  ;; Drop any rules we installed earlier so re-running picks up current
-  ;; custom values rather than stacking stale entries.
+  ;; Drop exactly the rules we installed earlier so re-running picks up
+  ;; current custom values rather than stacking stale entries and
+  ;; without clobbering rules installed by the user or other packages.
   (setq display-buffer-alist
         (seq-remove (lambda (entry)
-                      (member (car-safe entry)
-                              '("\\*image-dired\\*"
-                                "\\*image-dired-display-image\\*")))
+                      (member entry dired-image-thumbnail--display-buffer-entries))
                     display-buffer-alist))
+  (setq dired-image-thumbnail--display-buffer-entries nil)
   (when dired-image-thumbnail-window-layout
     (let* ((layout dired-image-thumbnail-window-layout)
            (horizontal (memq layout '(left-right right-left)))
@@ -2451,25 +2893,27 @@ is idempotent and can be re-run to track changes to
                         (if horizontal 'right 'below)
                       (if horizontal 'left 'above)))
            (thumb-size (if horizontal
-                          `(window-width . ,ratio)
-                        `(window-height . ,ratio)))
+                           `(window-width . ,ratio)
+                         `(window-height . ,ratio)))
            (img-size (if horizontal
-                        `(window-width . ,(- 1.0 ratio))
-                       `(window-height . ,(- 1.0 ratio)))))
-      (add-to-list 'display-buffer-alist
-                   `("\\*image-dired\\*"
-                     display-buffer-in-direction
-                     (direction . ,thumb-dir)
-                     (window . root)
-                     ,thumb-size))
+                         `(window-width . ,(- 1.0 ratio))
+                        `(window-height . ,(- 1.0 ratio))))
+           (thumb-entry `("\\*image-dired\\*"
+                          display-buffer-in-direction
+                          (direction . ,thumb-dir)
+                          (window . root)
+                          ,thumb-size)))
+      (push thumb-entry dired-image-thumbnail--display-buffer-entries)
+      (add-to-list 'display-buffer-alist thumb-entry)
       (unless (eq layout 'thumb-only)
-        (add-to-list 'display-buffer-alist
-                     `("\\*image-dired-display-image\\*"
-                       (display-buffer-reuse-window
-                        dired-image-thumbnail-display-at-direction)
-                       (direction . ,img-dir)
-                       (window . root)
-                       ,img-size))))))
+        (let ((img-entry `("\\*image-dired-display-image\\*"
+                           (display-buffer-reuse-window
+                            dired-image-thumbnail-display-at-direction)
+                           (direction . ,img-dir)
+                           (window . root)
+                           ,img-size)))
+          (push img-entry dired-image-thumbnail--display-buffer-entries)
+          (add-to-list 'display-buffer-alist img-entry))))))
 
 ;;;###autoload
 (with-eval-after-load 'image-dired
@@ -2482,6 +2926,10 @@ is idempotent and can be re-run to track changes to
   (advice-add 'image-dired-display-image :around #'dired-image-thumbnail--display-image-no-lock)
   ;; Hook to initialize our variables when entering thumbnail mode
   (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer)
+  ;; Initialize after thumbnails are inserted, so starting from plain
+  ;; `image-dired' also picks up the enhanced state.
+  (advice-add 'image-dired-display-thumbs :after
+              #'dired-image-thumbnail--display-thumbs-advice)
   ;; Scope C-d to the image-dired display buffer only
   (when (keymapp image-dired-display-image-mode-map)
     (define-key image-dired-display-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
@@ -2509,6 +2957,8 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
                  #'dired-image-thumbnail--display-image-no-lock)
   (remove-hook 'image-dired-thumbnail-mode-hook
                #'dired-image-thumbnail--initialize-buffer)
+  (advice-remove 'image-dired-display-thumbs
+                 #'dired-image-thumbnail--display-thumbs-advice)
   (remove-hook 'kill-emacs-hook #'dired-image-thumbnail-clear-preview-cache)
   ;; Remove the current-thumbnail highlight from any thumbnail buffers.
   (dolist (buf (buffer-list))
@@ -2518,15 +2968,21 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
                      #'dired-image-thumbnail--update-current-highlight t)
         (when (overlayp dired-image-thumbnail--current-overlay)
           (delete-overlay dired-image-thumbnail--current-overlay))
-        (kill-local-variable 'face-remapping-alist))))
+        (kill-local-variable 'face-remapping-alist)
+        ;; Drop the quality segment from the mode line.
+        (when (and (local-variable-p 'mode-line-format)
+                   (memq 'dired-image-thumbnail--mode-line-quality
+                         mode-line-format))
+          (setq mode-line-format
+                (remq 'dired-image-thumbnail--mode-line-quality
+                      mode-line-format))))))
   (dired-image-thumbnail-clear-preview-cache)
-  ;; Drop the display-buffer rules we installed.
+  ;; Drop exactly the display-buffer rules we installed.
   (setq display-buffer-alist
         (seq-remove (lambda (entry)
-                      (member (car-safe entry)
-                              '("\\*image-dired\\*"
-                                "\\*image-dired-display-image\\*")))
+                      (member entry dired-image-thumbnail--display-buffer-entries))
                     display-buffer-alist))
+  (setq dired-image-thumbnail--display-buffer-entries nil)
   nil)
 
 ;; Load transient menu support if available
