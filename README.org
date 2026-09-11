@@ -8,8 +8,8 @@
 
 * Features
 
-- *Sorting* - Sort thumbnails by name, date, size, or image dimensions
-- *Filtering* - Filter by name regexp, file size range, or dimension range
+- *Sorting* - Sort thumbnails by name, date, or size
+- *Filtering* - Filter by name regexp or file size range
 - *Subdirectory support* - Works seamlessly with Dired's inserted subdirectories
 - *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
@@ -229,7 +229,7 @@ All customization options are in the =dired-image-thumbnail= group. Use =M-x cus
 ** Default Sort Settings
 
 #+begin_src emacs-lisp
-(setq dired-image-thumbnail-sort-by 'dired)      ; 'dired, 'name, 'date, 'size, or 'dimensions
+(setq dired-image-thumbnail-sort-by 'dired)      ; 'dired, 'name, 'date, or 'size
 (setq dired-image-thumbnail-sort-order 'ascending) ; 'ascending or 'descending
 #+end_src
 
@@ -402,13 +402,6 @@ Add or modify recognized image file extensions:
 5. Automatically advances to next image after deletion
 6. Continue until finished
 
-** Finding High-Resolution Images
-
-1. View thumbnails: =C-t m=
-2. Filter by dimensions: =/ d= and enter minimum width =1920=, minimum height =1080=
-3. Browse only HD+ images
-4. Use =/= and choose =clear= when done
-
 ** Working with Subdirectories
 
 1. Open parent directory in Dired
@@ -433,7 +426,7 @@ Add or modify recognized image file extensions:
 | Thumbnail display      | ✓           | ✓                     |
 | Dired integration      | ✓           | ✓                     |
 | Sorting                | ✗           | ✓ (4 criteria)        |
-| Filtering              | ✗           | ✓ (name, size, dims)  |
+| Filtering              | ✗           | ✓ (name, size)        |
 | Subdirectory support   | ✗           | ✓ (via insertion)     |
 | Helper commands        | ✗           | ✓                     |
 | Wrap display           | ✗           | ✓                     |
