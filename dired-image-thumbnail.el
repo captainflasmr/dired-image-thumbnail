@@ -446,6 +446,10 @@ size for the resize to be visible.")
 (defvar-local dired-image-thumbnail--marked-count nil
   "Cached count of marked images.  Nil means it needs recomputation.")
 
+(defvar-local dired-image-thumbnail--image-index (make-hash-table :test 'equal)
+  "Map from file name to its index in `dired-image-thumbnail--current-images'.
+Kept in sync by `dired-image-thumbnail--rebuild-image-index'.")
+
 (defvar-local dired-image-thumbnail--thumb-attempts (make-hash-table :test 'equal)
   "Hash of thumbnail-creation attempts per image, keyed by file name.
 Caps retries so a permanently failing image cannot cause an endless
@@ -539,6 +543,34 @@ property."
     (or (get-text-property pos 'original-file-name)
         (dired-image-thumbnail--prop-search pos nil)
         (dired-image-thumbnail--prop-search pos t))))
+
+(defun dired-image-thumbnail--property-positions (prop)
+  "Return buffer positions where text property PROP is set, in order.
+Jumps between property-change boundaries (O(runs)) rather than
+scanning one character at a time."
+  (let ((pos (point-min))
+        (positions nil))
+    (while (and pos (< pos (point-max)))
+      (when (get-text-property pos prop)
+        (push pos positions))
+      (setq pos (next-single-property-change pos prop nil (point-max))))
+    (nreverse positions)))
+
+(defun dired-image-thumbnail--property-values (prop)
+  "Return the values of text property PROP at each set position, in order."
+  (mapcar (lambda (pos) (get-text-property pos prop))
+          (dired-image-thumbnail--property-positions prop)))
+
+(defun dired-image-thumbnail--position-of-file (file)
+  "Return the buffer position of the thumbnail for FILE, or nil."
+  (let ((pos (point-min))
+        (found nil))
+    (while (and (not found) pos (< pos (point-max)))
+      (when (equal (get-text-property pos 'original-file-name) file)
+        (setq found pos))
+      (setq pos (next-single-property-change
+                 pos 'original-file-name nil (point-max))))
+    found))
 
 (defun dired-image-thumbnail--start-identify-process (file)
   "Start an async process to get dimensions for FILE."
@@ -696,16 +728,6 @@ This collects all marks in a single pass through the dired buffer."
             (forward-line 1)))))
     marked))
 
-(defun dired-image-thumbnail--file-marked-p (file)
-  "Return non-nil if FILE is marked in the associated dired buffer."
-  (when (and dired-image-thumbnail--dired-buffer
-             (buffer-live-p dired-image-thumbnail--dired-buffer))
-    (with-current-buffer dired-image-thumbnail--dired-buffer
-      (save-excursion
-        (goto-char (point-min))
-        (when (dired-goto-file file)
-          (image-dired-dired-file-marked-p))))))
-
 (defun dired-image-thumbnail--relative-name (file)
   "Return FILE name relative to the source directory."
   (if (and dired-image-thumbnail--source-dir
@@ -727,6 +749,14 @@ This collects all marks in a single pass through the dired buffer."
     (if (and dims (> (car dims) 0) (> (cdr dims) 0))
         (format "%dx%d" (car dims) (cdr dims))
       "?")))
+
+(defun dired-image-thumbnail--rebuild-image-index ()
+  "Rebuild the file-to-index hash from `dired-image-thumbnail--current-images'."
+  (clrhash dired-image-thumbnail--image-index)
+  (let ((index 0))
+    (dolist (file dired-image-thumbnail--current-images)
+      (puthash file index dired-image-thumbnail--image-index)
+      (setq index (1+ index)))))
 
 (defun dired-image-thumbnail--count-marked ()
   "Count the number of marked images.
@@ -763,7 +793,6 @@ the `[N marked]' segment reflects the change immediately."
          (sort-order (or dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order))
          (sorted
           (pcase sort-by
-            ('dired (copy-sequence images))
             ('name
              (sort (copy-sequence images)
                    (lambda (a b)
@@ -1034,20 +1063,12 @@ and by `dired-image-thumbnail--display-thumbs-advice' after
   ;; the buffer (set by `image-dired-insert-thumbnail').  Jump between
   ;; property-change boundaries (O(thumbnails)) rather than scanning one
   ;; character at a time.
-  (let ((found-buf nil)
+  (let ((found-buf (car (dired-image-thumbnail--property-values
+                         'associated-dired-buffer)))
         (here (expand-file-name default-directory))
         (images nil)
         (dired-buf dired-image-thumbnail--dired-buffer)
         (source-dir dired-image-thumbnail--source-dir))
-    (save-excursion
-      (goto-char (point-min))
-      (let ((pos (point-min)))
-        (while (and (not found-buf) pos (< pos (point-max)))
-          (when-let ((buf (get-text-property pos 'associated-dired-buffer)))
-            (setq found-buf buf))
-          (setq pos (next-single-property-change
-                     pos 'associated-dired-buffer nil (point-max))))))
-
     ;; Skip when already initialized for the Dired buffer now displayed,
     ;; so session sort/filter choices survive repeated displays.  A
     ;; different Dired buffer (or a fresh buffer) means the thumbnail
@@ -1070,19 +1091,13 @@ and by `dired-image-thumbnail--display-thumbs-advice' after
                                        here))))
                 (setq dired-buf buf))))))
 
-      ;; Jump between property-change boundaries (O(thumbnails)) rather
-      ;; than scanning one character at a time.
-      (save-excursion
-        (goto-char (point-min))
-        (let ((pos (point-min)))
-          (while (< pos (point-max))
-            (when-let ((file (get-text-property pos 'original-file-name)))
-              (when (dired-image-thumbnail--image-p file)
-                (push file images))
-              (unless source-dir
-                (setq source-dir (file-name-directory file))))
-            (setq pos (next-single-property-change
-                       pos 'original-file-name nil (point-max))))))
+      ;; Collect the thumbnails currently in the buffer, in order.
+      (dolist (file (dired-image-thumbnail--property-values
+                     'original-file-name))
+        (when (dired-image-thumbnail--image-p file)
+          (push file images))
+        (unless source-dir
+          (setq source-dir (file-name-directory file))))
 
       ;; Get source-dir from dired buffer if available
       (when (and dired-buf (buffer-live-p dired-buf))
@@ -1093,6 +1108,7 @@ and by `dired-image-thumbnail--display-thumbs-advice' after
       (when images
         (setq dired-image-thumbnail--all-images (nreverse images))
         (setq dired-image-thumbnail--current-images dired-image-thumbnail--all-images)
+        (dired-image-thumbnail--rebuild-image-index)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
         (setq dired-image-thumbnail--source-dir (or source-dir default-directory))
         (setq dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
@@ -1141,9 +1157,8 @@ line.  Otherwise, fall back to the original function."
              (filter-info (dired-image-thumbnail--format-active-filters))
               (marked-count (dired-image-thumbnail--count-marked))
               (count-info (let ((pos (and file
-                                          (cl-position
-                                           file dired-image-thumbnail--current-images
-                                           :test #'equal))))
+                                          (gethash file
+                                                   dired-image-thumbnail--image-index))))
                             (if pos
                                 (format "%d/%d"
                                         (1+ pos)
@@ -1328,11 +1343,134 @@ Returns nil if no colour is available."
 (defun dired-image-thumbnail--setup-cursor ()
   "Recolour the cursor, buffer-locally, to match the current-thumbnail highlight."
   (let ((remap (and dired-image-thumbnail-highlight-cursor
-                    (dired-image-thumbnail--cursor-remap))))
+                    (dired-image-thumbnail--cursor-remap)))
+        ;; Copy before deleting so the global `face-remapping-alist'
+        ;; (which may not yet have a buffer-local binding here) is never
+        ;; destructively modified by `assq-delete-all'.
+        (base (copy-sequence face-remapping-alist)))
     (setq-local face-remapping-alist
                 (if remap
-                    (cons remap (assq-delete-all 'cursor face-remapping-alist))
-                  (assq-delete-all 'cursor face-remapping-alist)))))
+                    (cons remap (assq-delete-all 'cursor base))
+                  (assq-delete-all 'cursor base)))))
+
+(defun dired-image-thumbnail--ensure-thumb-geometry ()
+  "Repair nil thumbnail geometry variables buffer-locally.
+These can be nil if they were bound to nil before image-dired
+loaded (the defcustom does not repair a non-void nil).
+image-dired's own line-up functions use them in arithmetic
+unguarded (e.g. (* 2 image-dired-thumb-relief) in
+`image-dired-line-up-dynamic'), which signals
+`wrong-type-argument' -- so repair them before any thumbnail work."
+  (unless (numberp image-dired-thumb-size)
+    (setq-local image-dired-thumb-size
+                (or (and (fboundp 'image-dired--thumb-size)
+                         (image-dired--thumb-size))
+                    128)))
+  (unless (numberp image-dired-thumb-relief)
+    (setq-local image-dired-thumb-relief 2))
+  (unless (numberp image-dired-thumb-margin)
+    (setq-local image-dired-thumb-margin 2))
+  (unless (numberp image-dired-thumbs-per-row)
+    (setq-local image-dired-thumbs-per-row 3)))
+
+(cl-defstruct (dired-image-thumbnail--work-state
+               (:constructor dired-image-thumbnail--make-work-state))
+  "Accumulator for thumbnail creation/cropping work during a refresh."
+  (needed 0)
+  (done 0)
+  (queued 0)
+  (progress nil))
+
+(defun dired-image-thumbnail--work-report (state)
+  "Record one finished unit of thumbnail work in STATE.
+An explicit running counter is passed to `progress-reporter-update':
+relying on the nil-increment behaviour breaks in Emacs 30 once the
+value reaches max-value (nil is then passed through to
+`progress-reporter-do-update', signalling `wrong-type-argument')."
+  (when (dired-image-thumbnail--work-state-progress state)
+    (progress-reporter-update
+     (dired-image-thumbnail--work-state-progress state)
+     (cl-incf (dired-image-thumbnail--work-state-done state)))))
+
+(defun dired-image-thumbnail--count-thumbnail-work (state)
+  "Count the thumbnail work needed in STATE and start a progress reporter.
+Creation and cropping are counted as separate items so the total
+matches the number of progress updates exactly.  The reporter is
+created only when there is actual work."
+  (dolist (file dired-image-thumbnail--current-images)
+    (when (not (file-exists-p (image-dired-thumb-name file)))
+      (cl-incf (dired-image-thumbnail--work-state-needed state)))
+    (when (and dired-image-thumbnail-square-thumbnails
+               (dired-image-thumbnail--square-thumb-stale-p file))
+      (cl-incf (dired-image-thumbnail--work-state-needed state))))
+  (let ((needed (dired-image-thumbnail--work-state-needed state)))
+    (when (> needed 0)
+      (setf (dired-image-thumbnail--work-state-progress state)
+            (make-progress-reporter
+             (format "Generating %d thumbnail%s..." needed
+                     (if (= needed 1) "" "s"))
+             0 needed)))))
+
+(defun dired-image-thumbnail--queue-missing-thumbnails (state)
+  "Queue generation of missing natural thumbnails, reporting work in STATE.
+Files whose creation failed repeatedly are skipped so a permanently
+broken image cannot cause an endless queue/refresh cycle."
+  (dolist (file dired-image-thumbnail--current-images)
+    (let ((thumb-file (image-dired-thumb-name file)))
+      (unless (file-exists-p thumb-file)
+        (when (< (gethash file dired-image-thumbnail--thumb-attempts 0) 3)
+          (image-dired-create-thumb file thumb-file)
+          (puthash file
+                   (1+ (gethash file dired-image-thumbnail--thumb-attempts 0))
+                   dired-image-thumbnail--thumb-attempts)
+          (cl-incf (dired-image-thumbnail--work-state-queued state))
+          (dired-image-thumbnail--work-report state))))))
+
+(defun dired-image-thumbnail--derive-square-thumbnails (state)
+  "Derive square variants for thumbnails already on disk, reporting STATE.
+The natural cached files are never modified, so toggling between
+square and natural only switches which cached file set is displayed
+-- no regeneration, no blank buffer."
+  (when dired-image-thumbnail-square-thumbnails
+    (dolist (file dired-image-thumbnail--current-images)
+      (when (and (file-exists-p (image-dired-thumb-name file))
+                 (dired-image-thumbnail--square-thumb-stale-p file))
+        (dired-image-thumbnail--derive-square-thumb file)
+        (dired-image-thumbnail--work-report state)))))
+
+(defun dired-image-thumbnail--insert-thumbnails ()
+  "Insert the thumbnails for the active display mode.
+Thumbnails that are still generating get a gray placeholder with
+the same text properties, so the grid and point stay valid until
+the poll refresh swaps in the real images."
+  (dolist (file dired-image-thumbnail--current-images)
+    (let ((thumb-file (if dired-image-thumbnail-square-thumbnails
+                          (dired-image-thumbnail--square-thumb-name file)
+                        (image-dired-thumb-name file))))
+      (image-dired-insert-thumbnail
+       (if (file-exists-p thumb-file)
+           thumb-file
+         (dired-image-thumbnail--placeholder-file))
+       file dired-image-thumbnail--dired-buffer))))
+
+(defun dired-image-thumbnail--apply-display-size ()
+  "Apply `dired-image-thumbnail--display-size' and queue cache regeneration.
+Cached thumb files are shown at their natural size, so when the
+display size changed since they were generated, the stale-sized
+files are regenerated in the background (see
+`dired-image-thumbnail--regenerate-thumbs').  The cached thumbnails
+currently on disk are displayed right away, so the buffer is never
+blank while the new sizes are made."
+  (let ((standard-size image-dired-thumb-size))
+    (when (and dired-image-thumbnail--display-size
+               (numberp standard-size)
+               (/= dired-image-thumbnail--display-size standard-size))
+      (setq-local image-dired-thumb-size dired-image-thumbnail--display-size))
+    (when (and (numberp image-dired-thumb-size)
+               (numberp dired-image-thumbnail--thumbs-generated-at)
+               (/= image-dired-thumb-size
+                   dired-image-thumbnail--thumbs-generated-at))
+      (dired-image-thumbnail--queue-thumb-regeneration))))
 
 (defun dired-image-thumbnail-refresh (&optional preferred-target)
   "Refresh the thumbnail display with current images.
@@ -1369,126 +1507,30 @@ after refreshing. Otherwise, try to maintain position on the current file."
       (let ((filtered (dired-image-thumbnail--filter-images all-images)))
         (setq dired-image-thumbnail--current-images
               (dired-image-thumbnail--sort-images filtered)))
-      ;; Ensure valid thumbnail geometry variables: these can be nil if
-      ;; they were bound to nil before image-dired loaded (the defcustom
-      ;; does not repair a non-void nil).  image-dired's own line-up
-      ;; functions use them in arithmetic unguarded (e.g.
-      ;; (* 2 image-dired-thumb-relief) in image-dired-line-up-dynamic),
-      ;; which signals `wrong-type-argument' -- so repair them
-      ;; buffer-locally before any thumbnail work.
-      (unless (numberp image-dired-thumb-size)
-        (setq-local image-dired-thumb-size
-                    (or (and (fboundp 'image-dired--thumb-size)
-                             (image-dired--thumb-size))
-                        128)))
-      (unless (numberp image-dired-thumb-relief)
-        (setq-local image-dired-thumb-relief 2))
-      (unless (numberp image-dired-thumb-margin)
-        (setq-local image-dired-thumb-margin 2))
-      (unless (numberp image-dired-thumbs-per-row)
-        (setq-local image-dired-thumbs-per-row 3))
-      ;; Temporarily override thumb size if needed
-      (let ((standard-size image-dired-thumb-size))
-        (when (and display-size (numberp standard-size)
-                   (/= display-size standard-size))
-          (setq-local image-dired-thumb-size display-size))
-        ;; Cached thumb files are shown at their natural size, so when
-        ;; the display size changed since they were generated, the
-        ;; stale-sized files are regenerated in the background (see
-        ;; `dired-image-thumbnail--regenerate-thumbs').  The cached
-        ;; thumbnails currently on disk are displayed right away, so
-        ;; the buffer is never blank while the new sizes are made.
-        (when (and (numberp image-dired-thumb-size)
-                   (numberp dired-image-thumbnail--thumbs-generated-at)
-                   (/= image-dired-thumb-size
-                       dired-image-thumbnail--thumbs-generated-at))
-          (dired-image-thumbnail--queue-thumb-regeneration))
-        ;; Pre-count thumbnails that need work (creation and cropping
-        ;; counted as separate items so the total matches the number of
-        ;; progress updates exactly) and show a progress bar only when
-        ;; there is actual work.  An explicit running counter is passed
-        ;; to `progress-reporter-update': relying on the nil-increment
-        ;; behaviour breaks in Emacs 30 once the value reaches
-        ;; max-value (nil is then passed through to
-        ;; `progress-reporter-do-update', signalling
-        ;; wrong-type-argument).
-         (let* ((work-needed 0)
-                (work-done 0)
-                (queued 0)
-                (progress nil))
-           (dolist (file dired-image-thumbnail--current-images)
-             (when (not (file-exists-p (image-dired-thumb-name file)))
-               (setq work-needed (1+ work-needed)))
-             (when (and dired-image-thumbnail-square-thumbnails
-                        (dired-image-thumbnail--square-thumb-stale-p file))
-               (setq work-needed (1+ work-needed))))
-           (when (> work-needed 0)
-             (setq progress (make-progress-reporter
-                             (format "Generating %d thumbnail%s..."
-                                     work-needed
-                                     (if (= work-needed 1) "" "s"))
-                             0 work-needed)))
-           ;; Phase 1: queue generation for missing natural thumbnails
-           ;; (both display modes derive from them).  Files whose
-           ;; creation failed repeatedly are skipped so a permanently
-           ;; broken image cannot cause an endless queue/refresh cycle.
-           (dolist (file dired-image-thumbnail--current-images)
-             (let ((thumb-file (image-dired-thumb-name file)))
-               (unless (file-exists-p thumb-file)
-                 (when (< (gethash file
-                                   dired-image-thumbnail--thumb-attempts 0)
-                          3)
-                   (image-dired-create-thumb file thumb-file)
-                   (puthash file
-                            (1+ (gethash file
-                                         dired-image-thumbnail--thumb-attempts
-                                         0))
-                            dired-image-thumbnail--thumb-attempts)
-                   (setq queued (1+ queued))
-                   (setq work-done (1+ work-done))
-                   (when progress (progress-reporter-update progress work-done))))))
-           ;; Phase 2: image-dired generates thumbnails asynchronously;
-           ;; the display never blocks on it.  Every thumbnail already
-           ;; on disk is inserted immediately, and once the creation
-           ;; queue has drained a re-refresh inserts the rest (see
-           ;; `dired-image-thumbnail--arm-queue-poll').
-           ;; Phase 3: derive square variants (when enabled) for the
-           ;; thumbnails that are already on disk.  The natural cached
-           ;; files are never modified, so toggling between square and
-           ;; natural only switches which cached file set is displayed
-           ;; -- no regeneration, no blank buffer.
-           (when dired-image-thumbnail-square-thumbnails
-             (dolist (file dired-image-thumbnail--current-images)
-               (when (and (file-exists-p (image-dired-thumb-name file))
-                          (dired-image-thumbnail--square-thumb-stale-p file))
-                 (dired-image-thumbnail--derive-square-thumb file)
-                 (setq work-done (1+ work-done))
-                 (when progress (progress-reporter-update progress work-done)))))
-           ;; Phase 4: insert with all three required arguments, using
-           ;; the file set for the active display mode.  Thumbnails
-           ;; that are still generating get a gray placeholder with
-           ;; the same text properties, so the grid and point stay
-           ;; valid until the poll refresh swaps in the real images.
-           (dolist (file dired-image-thumbnail--current-images)
-             (let ((thumb-file (if dired-image-thumbnail-square-thumbnails
-                                   (dired-image-thumbnail--square-thumb-name file)
-                                 (image-dired-thumb-name file))))
-               (image-dired-insert-thumbnail
-                (if (file-exists-p thumb-file)
-                    thumb-file
-                  (dired-image-thumbnail--placeholder-file))
-                file dired-buf)))
-           (when progress (progress-reporter-done progress))
-           ;; Phase 5: when thumbnails are still being generated, poll
-           ;; the queue and refresh once it has drained so the missing
-           ;; thumbnails appear without ever blocking.
-            (when (> queued 0)
-              (dired-image-thumbnail--arm-queue-poll))))
-       ;; Ensure the quality segment is in the mode line (also picks
-       ;; up reloaded code in a live session without recreating the
-       ;; buffer; a no-op once present).
-       (dired-image-thumbnail--setup-mode-line)
-       ;; Line up
+      (dired-image-thumbnail--rebuild-image-index)
+      (dired-image-thumbnail--ensure-thumb-geometry)
+      (dired-image-thumbnail--apply-display-size)
+      ;; Populate the buffer: queue missing thumbnails (generated
+      ;; asynchronously, so the display never blocks on them), derive
+      ;; square variants for those already on disk, and insert everything
+      ;; with placeholders for the ones still generating.
+      (let ((work (dired-image-thumbnail--make-work-state)))
+        (dired-image-thumbnail--count-thumbnail-work work)
+        (dired-image-thumbnail--queue-missing-thumbnails work)
+        (dired-image-thumbnail--derive-square-thumbnails work)
+        (dired-image-thumbnail--insert-thumbnails)
+        (when (dired-image-thumbnail--work-state-progress work)
+          (progress-reporter-done
+           (dired-image-thumbnail--work-state-progress work)))
+        ;; Once the creation queue has drained a re-refresh inserts the
+        ;; thumbnails that finished generating.
+        (when (> (dired-image-thumbnail--work-state-queued work) 0)
+          (dired-image-thumbnail--arm-queue-poll)))
+      ;; Ensure the quality segment is in the mode line (also picks up
+      ;; reloaded code in a live session without recreating the buffer;
+      ;; a no-op once present).
+      (dired-image-thumbnail--setup-mode-line)
+      ;; Line up
       (if dired-image-thumbnail-wrap-display
           (progn
             (setq-local word-wrap t)
@@ -1504,21 +1546,13 @@ after refreshing. Otherwise, try to maintain position on the current file."
       ;; Restore position before updating header line, so point is on a
       ;; valid thumbnail when the header line reads the file at point.
       (if current-file
-          ;; Jump between property-change boundaries (O(thumbnails)) rather
-          ;; than scanning one character at a time.
-          (let ((pos (point-min))
-                (found nil))
-            (while (and (not found) pos (< pos (point-max)))
-              (if (equal (get-text-property pos 'original-file-name) current-file)
-                  (setq found pos)
-                (setq pos (next-single-property-change
-                           pos 'original-file-name nil (point-max)))))
-            (goto-char (or found (point-min))))
-         (goto-char (point-min)))
-       (image-dired--update-header-line)
-       ;; Re-apply the current-thumbnail highlight: `erase-buffer' above
-       ;; removed the previous overlay.
-       (dired-image-thumbnail--update-current-highlight))))
+          (goto-char (or (dired-image-thumbnail--position-of-file current-file)
+                         (point-min)))
+        (goto-char (point-min)))
+      (image-dired--update-header-line)
+      ;; Re-apply the current-thumbnail highlight: `erase-buffer' above
+      ;; removed the previous overlay.
+      (dired-image-thumbnail--update-current-highlight))))
 
 (defun dired-image-thumbnail-hard-refresh ()
   "Refresh thumbnails by clearing the cache and reloading.
@@ -1625,54 +1659,58 @@ its point position if the file at point was renamed."
                (new-file (and old-file (cdr (assoc old-file rename-alist)))))
           (dired-image-thumbnail-re-scan new-file))))))
 
+(defconst dired-image-thumbnail--sort-labels
+  '((dired . "Dired order")
+    (name . "name")
+    (date . "date")
+    (size . "size"))
+  "Display labels for the sort criteria.")
+
+(defun dired-image-thumbnail--set-sort-by (criteria)
+  "Sort thumbnails by CRITERIA, persist and refresh."
+  (setq dired-image-thumbnail--sort-by criteria)
+  (dired-image-thumbnail--save-dir-settings
+   (list (cons 'dired-image-thumbnail-sort-by criteria)))
+  (dired-image-thumbnail--apply-sort-and-filter)
+  (message "Sorted by %s"
+           (or (cdr (assq criteria dired-image-thumbnail--sort-labels))
+               (symbol-name criteria))))
+
 (defun dired-image-thumbnail-sort-by-dired ()
   "Sort thumbnails by Dired buffer order."
   (interactive)
-  (setq dired-image-thumbnail--sort-by 'dired)
-  (dired-image-thumbnail--save-dir-settings
-   '((dired-image-thumbnail-sort-by . dired)))
-  (dired-image-thumbnail--apply-sort-and-filter)
-  (message "Sorted by Dired order"))
+  (dired-image-thumbnail--set-sort-by 'dired))
 
 (defun dired-image-thumbnail-sort-by-name ()
   "Sort thumbnails by name."
   (interactive)
-  (setq dired-image-thumbnail--sort-by 'name)
-  (dired-image-thumbnail--save-dir-settings
-   '((dired-image-thumbnail-sort-by . name)))
-  (dired-image-thumbnail--apply-sort-and-filter)
-  (message "Sorted by name"))
+  (dired-image-thumbnail--set-sort-by 'name))
 
 (defun dired-image-thumbnail-sort-by-date ()
   "Sort thumbnails by date."
   (interactive)
-  (setq dired-image-thumbnail--sort-by 'date)
-  (dired-image-thumbnail--save-dir-settings
-   '((dired-image-thumbnail-sort-by . date)))
-  (dired-image-thumbnail--apply-sort-and-filter)
-  (message "Sorted by date"))
+  (dired-image-thumbnail--set-sort-by 'date))
 
 (defun dired-image-thumbnail-sort-by-size ()
   "Sort thumbnails by size."
   (interactive)
-  (setq dired-image-thumbnail--sort-by 'size)
+  (dired-image-thumbnail--set-sort-by 'size))
+
+(defun dired-image-thumbnail--set-sort-order (order)
+  "Set the sort order to ORDER, persist and refresh."
+  (setq dired-image-thumbnail--sort-order order)
   (dired-image-thumbnail--save-dir-settings
-   '((dired-image-thumbnail-sort-by . size)))
+   (list (cons 'dired-image-thumbnail-sort-order order)))
   (dired-image-thumbnail--apply-sort-and-filter)
-  (message "Sorted by size"))
+  (message "Sort order: %s" order))
 
 (defun dired-image-thumbnail-sort-reverse ()
   "Reverse current sort order."
   (interactive)
-  (setq dired-image-thumbnail--sort-order
-        (if (eq dired-image-thumbnail--sort-order 'ascending)
-            'descending
-          'ascending))
-  (dired-image-thumbnail--save-dir-settings
-   (list (cons 'dired-image-thumbnail-sort-order
-               dired-image-thumbnail--sort-order)))
-  (dired-image-thumbnail--apply-sort-and-filter)
-  (message "Sort order: %s" dired-image-thumbnail--sort-order))
+  (dired-image-thumbnail--set-sort-order
+   (if (eq dired-image-thumbnail--sort-order 'ascending)
+       'descending
+     'ascending)))
 
 (defun dired-image-thumbnail-sort ()
   "Select sort criteria with `completing-read'.
@@ -1691,13 +1729,17 @@ sort order."
 
 ;;; Filtering commands
 
+(defun dired-image-thumbnail--apply-filter ()
+  "Persist and apply the current filter settings."
+  (dired-image-thumbnail--save-current-filter)
+  (dired-image-thumbnail--apply-sort-and-filter))
+
 (defun dired-image-thumbnail-filter-by-name (regexp)
   "Filter thumbnails by name matching REGEXP."
   (interactive "sFilter by name (regexp): ")
   (setq dired-image-thumbnail--filter-name
         (if (string-empty-p regexp) nil regexp))
-  (dired-image-thumbnail--save-current-filter)
-  (dired-image-thumbnail--apply-sort-and-filter)
+  (dired-image-thumbnail--apply-filter)
   (message "Name filter: %s" (or dired-image-thumbnail--filter-name "none")))
 
 (defun dired-image-thumbnail-filter-by-size (min max)
@@ -1710,8 +1752,7 @@ Enter size in human-readable format (e.g., 100k, 1M)."
         (if (string-empty-p min) nil (dired-image-thumbnail--parse-size min)))
   (setq dired-image-thumbnail--filter-size-max
         (if (string-empty-p max) nil (dired-image-thumbnail--parse-size max)))
-  (dired-image-thumbnail--save-current-filter)
-  (dired-image-thumbnail--apply-sort-and-filter)
+  (dired-image-thumbnail--apply-filter)
   (message "Size filter: %s - %s"
            (if dired-image-thumbnail--filter-size-min
                (file-size-human-readable dired-image-thumbnail--filter-size-min)
@@ -1738,8 +1779,7 @@ Enter size in human-readable format (e.g., 100k, 1M)."
   (setq dired-image-thumbnail--filter-name nil)
   (setq dired-image-thumbnail--filter-size-min nil)
   (setq dired-image-thumbnail--filter-size-max nil)
-  (dired-image-thumbnail--save-current-filter)
-  (dired-image-thumbnail--apply-sort-and-filter)
+  (dired-image-thumbnail--apply-filter)
   (message "Filters cleared"))
 
 (defun dired-image-thumbnail-filter ()
@@ -1874,6 +1914,26 @@ without running the bulk update the count cache relies on."
 
 ;;; File operations
 
+(defun dired-image-thumbnail--drop-from-state (file)
+  "Drop FILE from the current and all thumbnail image lists."
+  (setq dired-image-thumbnail--current-images
+        (remove file dired-image-thumbnail--current-images))
+  (setq dired-image-thumbnail--all-images
+        (remove file dired-image-thumbnail--all-images))
+  (dired-image-thumbnail--rebuild-image-index))
+
+(defun dired-image-thumbnail--revert-dired-buffer ()
+  "Revert the associated Dired buffer, if any."
+  (when (and dired-image-thumbnail--dired-buffer
+             (buffer-live-p dired-image-thumbnail--dired-buffer))
+    (with-current-buffer dired-image-thumbnail--dired-buffer
+      (revert-buffer))))
+
+(defun dired-image-thumbnail--trash-file (file)
+  "Move FILE to the system trash."
+  (let ((delete-by-moving-to-trash t))
+    (delete-file file t)))
+
 (defun dired-image-thumbnail-move (target-dir)
   "Move the marked images, or the image at point, into TARGET-DIR.
 When images are marked in the associated Dired buffer those are moved,
@@ -1903,15 +1963,9 @@ are refreshed afterwards."
                     (yes-or-no-p (format "%s exists; overwrite? " dest)))
             (rename-file file dest t)
             (setq moved (1+ moved))
-            (setq dired-image-thumbnail--current-images
-                  (remove file dired-image-thumbnail--current-images))
-            (setq dired-image-thumbnail--all-images
-                  (remove file dired-image-thumbnail--all-images)))))
+            (dired-image-thumbnail--drop-from-state file))))
       ;; Refresh dired buffer
-      (when (and dired-image-thumbnail--dired-buffer
-                 (buffer-live-p dired-image-thumbnail--dired-buffer))
-        (with-current-buffer dired-image-thumbnail--dired-buffer
-          (revert-buffer)))
+      (dired-image-thumbnail--revert-dired-buffer)
       (dired-image-thumbnail-refresh)
       (message "Moved %d image%s to %s"
                moved (if (= moved 1) "" "s") target))))
@@ -1945,21 +1999,11 @@ are refreshed afterwards."
       (user-error "No images to delete"))
     (when (or dired-image-thumbnail-auto-accept
               (yes-or-no-p (format "Delete %d image(s)? " (length files))))
-      ;; Force trash semantics: the TRASH argument alone only trashes
-      ;; when `delete-by-moving-to-trash' is non-nil (nil by default),
-      ;; which would permanently delete the images.
-      (let ((delete-by-moving-to-trash t))
-        (dolist (file files)
-          (delete-file file t)
-          (setq dired-image-thumbnail--current-images
-                (remove file dired-image-thumbnail--current-images))
-          (setq dired-image-thumbnail--all-images
-                (remove file dired-image-thumbnail--all-images))))
+      (dolist (file files)
+        (dired-image-thumbnail--trash-file file)
+        (dired-image-thumbnail--drop-from-state file))
       ;; Refresh dired buffer
-      (when (and dired-image-thumbnail--dired-buffer
-                 (buffer-live-p dired-image-thumbnail--dired-buffer))
-        (with-current-buffer dired-image-thumbnail--dired-buffer
-          (revert-buffer)))
+      (dired-image-thumbnail--revert-dired-buffer)
       (dired-image-thumbnail-refresh)
       (message "Deleted %d image(s)" (length files)))))
 
@@ -1991,18 +2035,12 @@ the system default application."
       (when (or dired-image-thumbnail-auto-accept
                 (yes-or-no-p (format "Delete %s? " (file-name-nondirectory file))))
         ;; Find the next image to move to after deletion
-        (let ((index (cl-position file dired-image-thumbnail--current-images :test #'equal)))
-          (let ((delete-by-moving-to-trash t))
-            (delete-file file t))
-          (setq dired-image-thumbnail--current-images
-                (remove file dired-image-thumbnail--current-images))
-          (setq dired-image-thumbnail--all-images
-                (remove file dired-image-thumbnail--all-images))
+        (let ((index (or (gethash file dired-image-thumbnail--image-index)
+                         0)))
+          (dired-image-thumbnail--trash-file file)
+          (dired-image-thumbnail--drop-from-state file)
           ;; Refresh dired buffer
-          (when (and dired-image-thumbnail--dired-buffer
-                     (buffer-live-p dired-image-thumbnail--dired-buffer))
-            (with-current-buffer dired-image-thumbnail--dired-buffer
-              (revert-buffer)))
+          (dired-image-thumbnail--revert-dired-buffer)
           (dired-image-thumbnail-refresh)
           ;; Move to the same index position (or last if we deleted the last one)
           (when dired-image-thumbnail--current-images
@@ -2140,6 +2178,7 @@ enhanced features like sorting and filtering."
         ;; Reset state so initialization re-scans from the new dired buffer
         (setq dired-image-thumbnail--all-images nil)
         (setq dired-image-thumbnail--current-images nil)
+        (dired-image-thumbnail--rebuild-image-index)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
         (setq dired-image-thumbnail--source-dir source-dir)
         (setq dired-image-thumbnail--recursive recursive)
@@ -2703,8 +2742,7 @@ while it runs."
                      (and scale (< scale 1.0))))
           (let* ((file (image-dired-original-file-name))
                  (idx (and file
-                           (cl-position file dired-image-thumbnail--current-images
-                                        :test #'equal)))
+                           (gethash file dired-image-thumbnail--image-index)))
                   (offsets (if (eq (dired-image-thumbnail--current-quality) 'draft)
                                '(1 -1 2 -2)
                              '(1 -1)))
@@ -2858,12 +2896,8 @@ This permanently deletes the file from disk and removes its thumbnail."
     (when (and file-name
                (or dired-image-thumbnail-auto-accept
                    (y-or-n-p (format "Delete %s? " (file-name-nondirectory file-name)))))
-      (let ((delete-by-moving-to-trash t))
-        (delete-file file-name t))
-      (setq dired-image-thumbnail--current-images
-            (remove file-name dired-image-thumbnail--current-images))
-      (setq dired-image-thumbnail--all-images
-            (remove file-name dired-image-thumbnail--all-images))
+      (dired-image-thumbnail--trash-file file-name)
+      (dired-image-thumbnail--drop-from-state file-name)
       (image-dired-delete-char)
       ;; Respect the auto-display setting: when off, just move to the
       ;; next thumbnail without decoding and displaying it.
@@ -2886,27 +2920,15 @@ since the display buffer is not a file-visiting buffer."
       (user-error "No image at point"))
     (when (or dired-image-thumbnail-auto-accept
               (y-or-n-p (format "Delete %s? " (file-name-nondirectory current-file))))
-      (let ((delete-by-moving-to-trash t))
-        (delete-file current-file t))
+      (dired-image-thumbnail--trash-file current-file)
       ;; Update internal lists and remove the thumbnail, locating it by
       ;; file name because point in the display buffer need not match
       ;; point in the thumbnail buffer.
       (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
         (with-current-buffer thumb-buf
-          (setq dired-image-thumbnail--current-images
-                (remove current-file dired-image-thumbnail--current-images))
-          (setq dired-image-thumbnail--all-images
-                (remove current-file dired-image-thumbnail--all-images))
-          (let ((origin (point)) found)
-            (save-excursion
-              (goto-char (point-min))
-              (let ((pos (point-min)))
-                (while (and (not found) pos (< pos (point-max)))
-                  (when (equal (get-text-property pos 'original-file-name)
-                               current-file)
-                    (setq found pos))
-                  (setq pos (next-single-property-change
-                             pos 'original-file-name nil (point-max))))))
+          (dired-image-thumbnail--drop-from-state current-file)
+          (let ((origin (point))
+                (found (dired-image-thumbnail--position-of-file current-file)))
             (if found
                 (progn
                   (goto-char found)
