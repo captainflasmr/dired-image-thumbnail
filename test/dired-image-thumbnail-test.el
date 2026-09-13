@@ -155,6 +155,32 @@
                      (lambda (&rest _) "orig") nil "/b.jpg" "99/99" nil nil)))
         (should (string-match-p "\\[2/3 images\\]" result))))))
 
+(ert-deftest dit-mode-line-thumb-size ()
+  (with-temp-buffer
+    (setq-local dired-image-thumbnail--display-size 160)
+    (should (string-match-p "\\[160px\\]"
+                            (dired-image-thumbnail--mode-line-size-string)))
+    (setq-local dired-image-thumbnail--display-size nil)
+    (setq-local image-dired-thumb-size 128)
+    (should (string-match-p "\\[128px\\]"
+                            (dired-image-thumbnail--mode-line-size-string)))))
+
+(ert-deftest dit-setup-mode-line-inserts-segments ()
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (kill-local-variable 'mode-line-format)
+    (setq-local mode-line-format
+                '("%e" mode-line-front-space mode-line-buffer-identification
+                  mode-line-end-spaces))
+    (dired-image-thumbnail--setup-mode-line)
+    (should (memq 'dired-image-thumbnail--mode-line-quality mode-line-format))
+    (should (memq 'dired-image-thumbnail--mode-line-size mode-line-format))
+    (should (eq (cadr (memq 'mode-line-buffer-identification mode-line-format))
+                'dired-image-thumbnail--mode-line-quality))
+    (should (eq (cadr (memq 'dired-image-thumbnail--mode-line-quality
+                            mode-line-format))
+                'dired-image-thumbnail--mode-line-size))))
+
 (ert-deftest dit-count-thumbnail-work ()
   (with-temp-buffer
     (setq dired-image-thumbnail--current-images '("/tmp/dit-nonexistent-xyz.jpg"))
@@ -224,7 +250,35 @@
   (should (not (dired-image-thumbnail--valid-dir-setting-p
                 'dired-image-thumbnail-display-quality 'bogus)))
   (should (dired-image-thumbnail--valid-dir-setting-p
-           'dired-image-thumbnail-default-filter '(:name "foo" :size-min 1))))
+           'dired-image-thumbnail-default-filter '(:name "foo" :size-min 1)))
+  (should (dired-image-thumbnail--valid-dir-setting-p
+           'dired-image-thumbnail-default-display-size 160))
+  (should (dired-image-thumbnail--valid-dir-setting-p
+           'dired-image-thumbnail-default-display-size nil))
+  (should (not (dired-image-thumbnail--valid-dir-setting-p
+                'dired-image-thumbnail-default-display-size 16)))
+  (should (not (dired-image-thumbnail--valid-dir-setting-p
+                'dired-image-thumbnail-default-display-size 1024)))
+  (should (not (dired-image-thumbnail--valid-dir-setting-p
+                'dired-image-thumbnail-default-display-size "160"))))
+
+(ert-deftest dit-apply-dir-settings-display-size ()
+  (dit--with-temp-dir dir
+    (dired-image-thumbnail--write-dir-locals
+     dir '((dired-image-thumbnail-default-display-size . 192)))
+    (with-temp-buffer
+      (setq-local dired-image-thumbnail--source-dir dir)
+      (let ((dired-image-thumbnail-default-display-size nil)
+            (dired-image-thumbnail--display-size nil))
+        (dired-image-thumbnail--apply-dir-settings)
+        (should (= dired-image-thumbnail--display-size 192)))))
+  (dit--with-temp-dir dir
+    (with-temp-buffer
+      (setq-local dired-image-thumbnail--source-dir dir)
+      (let ((dired-image-thumbnail-default-display-size 160)
+            (dired-image-thumbnail--display-size nil))
+        (dired-image-thumbnail--apply-dir-settings)
+        (should (= dired-image-thumbnail--display-size 160))))))
 
 (ert-deftest dit-dir-locals-roundtrip ()
   (dit--with-temp-dir dir
