@@ -423,15 +423,16 @@ File: dired-image-thumbnail.info,  Node: Header Line,  Next: Customization,  Pre
 
 The enhanced header line displays:
 
+   • *Image count* -- Number of images, shown at the start (e.g., ‘[156
+     images]’); with a filter on, the filtered set over the total (e.g.,
+     ‘[12/156 images]’)
+   • *Marked count* -- Number of marked images, shown when one or more
+     are marked (e.g., ‘[3 marked]’)
    • *Mark indicator* -- A ‘*’ if the current image is marked
-   • *Marked count* -- Number of marked images, shown at the start when
-     one or more are marked (e.g., ‘[3 marked]’)
    • *Filename* -- Relative to source directory when subdirectories are
      inserted
    • *Directory* -- Location of the current image, abbreviated (e.g.,
      ‘~/Photos/’); falls back to the source directory
-   • *Image count* -- Current position / number of displayed images
-     (e.g., ‘23/156’); with a filter on, the filtered set (e.g., ‘3/12’)
    • *Dimensions* -- Width x Height in pixels (e.g., ‘1920x1080’)
    • *File size* -- Human-readable size (e.g., ‘2.4M’)
    • *Sort indicator* -- Current sort field and direction (e.g., ‘[name
@@ -875,30 +876,30 @@ Node: Dired Buffer Keys10532
 Node: Thumbnail Buffer Keys11185
 Node: Image Display Buffer Keys13051
 Node: Header Line13402
-Node: Customization14422
-Node: Default Sort Settings15249
-Node: Display Options15598
-Node: Window Layout15856
-Node: Display Quality16420
-Node: Image Validation17009
-Node: External Editor17686
-Node: Navigation Behavior18146
-Node: Auto-Accepting Actions18716
-Node: Image Extensions19181
-Node: Example Configuration19528
-Node: Workflow Examples20513
-Node: Reviewing a Photo Collection21054
-Node: Finding Large Images21697
-Node: Quick Culling Workflow22391
-Node: Finding High-Resolution Images22883
-Node: Working with Subdirectories Example23347
-Node: Organizing by Date23964
-Node: Comparison with Standard image-dired24344
-Node: Transient Menu Support25485
-Node: Performance Notes26091
-Node: Troubleshooting27536
-Node: Related Packages29616
-Node: License30227
+Node: Customization14437
+Node: Default Sort Settings15264
+Node: Display Options15613
+Node: Window Layout15871
+Node: Display Quality16435
+Node: Image Validation17024
+Node: External Editor17701
+Node: Navigation Behavior18161
+Node: Auto-Accepting Actions18731
+Node: Image Extensions19196
+Node: Example Configuration19543
+Node: Workflow Examples20528
+Node: Reviewing a Photo Collection21069
+Node: Finding Large Images21712
+Node: Quick Culling Workflow22406
+Node: Finding High-Resolution Images22898
+Node: Working with Subdirectories Example23362
+Node: Organizing by Date23979
+Node: Comparison with Standard image-dired24359
+Node: Transient Menu Support25500
+Node: Performance Notes26106
+Node: Troubleshooting27551
+Node: Related Packages29631
+Node: License30242
 
 End Tag Table
 

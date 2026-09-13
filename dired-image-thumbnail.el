@@ -1169,20 +1169,22 @@ line.  Otherwise, fall back to the original function."
                                         'ascending)
                                     "<" ">")))
              (filter-info (dired-image-thumbnail--format-active-filters))
-              (marked-count (dired-image-thumbnail--count-marked))
-              (count-info (let ((pos (and file
-                                          (gethash file
-                                                   dired-image-thumbnail--image-index))))
-                            (if pos
-                                (format "%d/%d"
-                                        (1+ pos)
-                                        (length dired-image-thumbnail--current-images))
-                              image-count)))
+             (filtered (not (string-empty-p filter-info)))
+             (shown-count (length dired-image-thumbnail--current-images))
+             (total-count (length dired-image-thumbnail--all-images))
+             (image-count-info
+              (if filtered
+                  (format "[%d/%d images]" shown-count total-count)
+                (format "[%d image%s]" shown-count
+                        (if (= shown-count 1) "" "s"))))
+             (marked-count (dired-image-thumbnail--count-marked))
              (rel-name (dired-image-thumbnail--relative-name file))
              (dir (dired-image-thumbnail--format-directory file))
              (size (dired-image-thumbnail--format-file-size file))
              (dimensions (dired-image-thumbnail--format-image-dimensions file)))
         (concat
+         " "
+         (propertize image-count-info 'face 'dired-image-thumbnail-header-info)
          " "
          (if (> marked-count 0)
              (propertize (format "[%d marked] " marked-count)
@@ -1191,8 +1193,6 @@ line.  Otherwise, fall back to the original function."
          (propertize dir 'face 'dired-image-thumbnail-header-info)
          " "
          (propertize rel-name 'face 'dired-image-thumbnail-header-info)
-         " "
-         (propertize count-info 'face 'dired-image-thumbnail-header-info)
          " "
          (propertize size 'face 'dired-image-thumbnail-header-info)
          " "

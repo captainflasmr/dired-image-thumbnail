@@ -212,11 +212,11 @@ Note: All standard =image-dired= keybindings (=n=, =p=, =m=, =u=, =U=, etc.) con
 
 The enhanced header line displays:
 
-- *Marked count* - Number of marked images, shown at the start when one or more are marked (e.g., =[3 marked]=)
+- *Image count* - Number of images, shown at the start (e.g., =[156 images]=); with a filter on, the filtered set over the total (e.g., =[12/156 images]=)
+- *Marked count* - Number of marked images, shown when one or more are marked (e.g., =[3 marked]=)
 - *Mark indicator* - A =*= if the current image is marked
 - *Filename* - Relative to source directory when subdirectories are inserted
 - *Directory* - Location of the current image, abbreviated (e.g., =~/Photos/=); falls back to the source directory
-- *Image count* - Current position / number of displayed images (e.g., =23/156=); with a filter on, the filtered set (e.g., =3/12=)
 - *Dimensions* - Width × Height in pixels (e.g., =1920x1080=)
 - *File size* - Human-readable size (e.g., =2.4M=)
 - *Sort indicator* - Current sort field and direction (e.g., =[name ↑]=)

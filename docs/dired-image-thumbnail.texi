@@ -426,15 +426,15 @@ The enhanced header line displays:
 
 @itemize @bullet
 @item
-@strong{Mark indicator} --- A @samp{*} if the current image is marked
+@strong{Image count} --- Number of images, shown at the start (e.g., @samp{[156 images]}); with a filter on, the filtered set over the total (e.g., @samp{[12/156 images]})
 @item
-@strong{Marked count} --- Number of marked images, shown at the start when one or more are marked (e.g., @samp{[3 marked]})
+@strong{Marked count} --- Number of marked images, shown when one or more are marked (e.g., @samp{[3 marked]})
+@item
+@strong{Mark indicator} --- A @samp{*} if the current image is marked
 @item
 @strong{Filename} --- Relative to source directory when subdirectories are inserted
 @item
 @strong{Directory} --- Location of the current image, abbreviated (e.g., @samp{~/Photos/}); falls back to the source directory
-@item
-@strong{Image count} --- Current position / number of displayed images (e.g., @samp{23/156}); with a filter on, the filtered set (e.g., @samp{3/12})
 @item
 @strong{Dimensions} --- Width x Height in pixels (e.g., @samp{1920x1080})
 @item

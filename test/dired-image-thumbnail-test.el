@@ -136,7 +136,7 @@
     (should (equal dired-image-thumbnail--all-images '("/b.jpg")))
     (should (= (gethash "/b.jpg" dired-image-thumbnail--image-index) 0))))
 
-(ert-deftest dit-header-uses-index ()
+(ert-deftest dit-header-shows-image-count ()
   (with-temp-buffer
     (image-dired-thumbnail-mode)
     (setq dired-image-thumbnail--all-images '("/a.jpg" "/b.jpg" "/c.jpg")
@@ -146,7 +146,14 @@
     (let ((dired-image-thumbnail--identify-cached-command nil))
       (let ((result (dired-image-thumbnail--format-properties-string
                      (lambda (&rest _) "orig") nil "/b.jpg" "99/99" nil nil)))
-        (should (string-match-p "2/3" result))))))
+        (should (string-match-p "\\[3 images\\]" result))
+        (should-not (string-match-p "2/3" result)))
+      (setq dired-image-thumbnail--current-images '("/a.jpg" "/b.jpg")
+            dired-image-thumbnail--filter-name "a")
+      (dired-image-thumbnail--rebuild-image-index)
+      (let ((result (dired-image-thumbnail--format-properties-string
+                     (lambda (&rest _) "orig") nil "/b.jpg" "99/99" nil nil)))
+        (should (string-match-p "\\[2/3 images\\]" result))))))
 
 (ert-deftest dit-count-thumbnail-work ()
   (with-temp-buffer
