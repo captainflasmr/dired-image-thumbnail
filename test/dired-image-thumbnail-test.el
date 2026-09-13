@@ -299,5 +299,167 @@
         (when (buffer-live-p dired-buf)
           (kill-buffer dired-buf))))))
 
+;;; Thumbnail generation flow
+
+(ert-deftest dit-queue-missing-once ()
+  (with-temp-buffer
+    (setq dired-image-thumbnail--current-images '("/tmp/dit-missing-a.jpg"
+                                                  "/tmp/dit-missing-b.jpg"))
+    (clrhash dired-image-thumbnail--thumb-queued)
+    (clrhash dired-image-thumbnail--thumb-attempts)
+    (let ((state (dired-image-thumbnail--make-work-state))
+          (created 0))
+      (cl-letf (((symbol-function 'image-dired-create-thumb)
+                 (lambda (_o _t) (setq created (1+ created)))))
+        (dired-image-thumbnail--queue-missing-thumbnails state)
+        (dired-image-thumbnail--queue-missing-thumbnails state))
+      (should (= created 2))
+      (should (= (dired-image-thumbnail--work-state-queued state) 2)))))
+
+(ert-deftest dit-queue-missing-resets-attempts-on-success ()
+  (dit--with-temp-dir dir
+    (let* ((file (expand-file-name "img.jpg" dir))
+           (image-dired-dir (expand-file-name "thumbs" dir))
+           (created 0))
+      (make-directory image-dired-dir t)
+      (with-temp-buffer
+        (setq dired-image-thumbnail--current-images (list file))
+        (clrhash dired-image-thumbnail--thumb-queued)
+        (puthash file 3 dired-image-thumbnail--thumb-attempts)
+        (write-region "x" nil (image-dired-thumb-name file) nil 'silent)
+        (cl-letf (((symbol-function 'image-dired-create-thumb)
+                   (lambda (_o _t) (setq created (1+ created)))))
+          (dired-image-thumbnail--queue-missing-thumbnails
+           (dired-image-thumbnail--make-work-state)))
+        ;; An image rewritten externally gets a fresh retry budget once
+        ;; its thumbnail exists again.
+        (should (zerop created))
+        (should (null (gethash file dired-image-thumbnail--thumb-attempts)))))))
+
+(ert-deftest dit-queue-missing-honours-attempt-cap ()
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (let ((file "/tmp/dit-missing-cap.jpg")
+          (created 0))
+      (setq dired-image-thumbnail--current-images (list file))
+      (clrhash dired-image-thumbnail--thumb-queued)
+      (clrhash dired-image-thumbnail--thumb-attempts)
+      (cl-letf (((symbol-function 'image-dired-create-thumb)
+                 (lambda (_o _t) (setq created (1+ created)))))
+        (dotimes (_ 5)
+          (clrhash dired-image-thumbnail--thumb-queued)
+          (dired-image-thumbnail--queue-missing-thumbnails
+           (dired-image-thumbnail--make-work-state))))
+      ;; A permanently failing image must not loop forever.
+      (should (= created 3))
+      (should (= (gethash file dired-image-thumbnail--thumb-attempts) 3)))))
+
+(ert-deftest dit-invalidate-files-resets-retry-budget ()
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (let ((file "/tmp/dit-invalidate-budget.jpg"))
+      (puthash file 3 dired-image-thumbnail--thumb-attempts)
+      (dired-image-thumbnail-invalidate-files (list file))
+      (should (null (gethash file dired-image-thumbnail--thumb-attempts))))))
+
+(ert-deftest dit-thumb-queued-appeared-and-prune ()
+  (dit--with-temp-dir dir
+    (let* ((file (expand-file-name "img.jpg" dir))
+           (image-dired-dir (expand-file-name "thumbs" dir)))
+      (make-directory image-dired-dir t)
+      (with-temp-buffer
+        (setq dired-image-thumbnail--current-images (list file))
+        (clrhash dired-image-thumbnail--thumb-queued)
+        (puthash file t dired-image-thumbnail--thumb-queued)
+        (should (not (dired-image-thumbnail--thumb-queued-appeared-p)))
+        (write-region "x" nil (image-dired-thumb-name file) nil 'silent)
+        (should (dired-image-thumbnail--thumb-queued-appeared-p))
+        (dired-image-thumbnail--prune-thumb-queued)
+        (should (zerop (hash-table-count dired-image-thumbnail--thumb-queued)))))))
+
+(ert-deftest dit-resize-display-deferral ()
+  (with-temp-buffer
+    (setq dired-image-thumbnail--all-images '("/tmp/a.jpg")
+          dired-image-thumbnail--current-images '("/tmp/a.jpg")
+          dired-image-thumbnail--thumbs-generated-at 128
+          dired-image-thumbnail--display-size 160)
+    (let ((refreshed 0)
+          (queued 0))
+      (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
+                 (lambda () (setq refreshed (1+ refreshed))))
+                ((symbol-function 'dired-image-thumbnail--queue-thumb-regeneration)
+                 (lambda () (setq queued (1+ queued)))))
+        (dired-image-thumbnail--resize-display))
+      (should (= refreshed 0))
+      (should (= queued 1))))
+  (with-temp-buffer
+    (setq dired-image-thumbnail--all-images '("/tmp/a.jpg")
+          dired-image-thumbnail--current-images '("/tmp/a.jpg")
+          dired-image-thumbnail--thumbs-generated-at 160
+          dired-image-thumbnail--display-size 160)
+    (let ((refreshed 0))
+      (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
+                 (lambda () (setq refreshed (1+ refreshed)))))
+        (dired-image-thumbnail--resize-display))
+      (should (= refreshed 1)))))
+
+(ert-deftest dit-poll-refreshes-progressively-but-not-during-resize ()
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (setq dired-image-thumbnail--current-images '("/tmp/dit-missing-a.jpg"))
+    (clrhash dired-image-thumbnail--thumb-queued)
+    (puthash "/tmp/dit-missing-a.jpg" t dired-image-thumbnail--thumb-queued)
+    (let ((refreshed 0)
+          (image-dired-thumbnail-buffer (buffer-name))
+          (image-dired-queue-active-jobs 1))
+      (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
+                 (lambda () (setq refreshed (1+ refreshed))))
+                ((symbol-function 'dired-image-thumbnail--thumb-queued-appeared-p)
+                 (lambda () t)))
+        ;; resize pending: no progressive refresh
+        (setq dired-image-thumbnail--resize-pending t)
+        (dired-image-thumbnail--poll-thumb-queue)
+        (should (= refreshed 0))
+        ;; not pending and a thumb appeared: progressive refresh
+        (setq dired-image-thumbnail--resize-pending nil)
+        (dired-image-thumbnail--poll-thumb-queue)
+        (should (= refreshed 1))))))
+
+(ert-deftest dit-regenerate-thumbs-defers-until-ready ()
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (setq dired-image-thumbnail--current-images '("/tmp/dit-reg-a.jpg")
+          dired-image-thumbnail--display-size 160
+          dired-image-thumbnail--thumbs-generated-at 128)
+    (let ((image-dired-thumbnail-buffer (buffer-name))
+          (created 0)
+          (refreshed 0))
+      (cl-letf (((symbol-function 'dired-image-thumbnail--thumbnails-busy-p)
+                 (lambda () nil))
+                ((symbol-function 'image-dired-create-thumb)
+                 (lambda (_o _t) (setq created (1+ created))))
+                ((symbol-function 'dired-image-thumbnail-refresh)
+                 (lambda () (setq refreshed (1+ refreshed)))))
+        (dired-image-thumbnail--regenerate-thumbs))
+      (should (= created 1))
+      (should (= refreshed 0))
+      (should dired-image-thumbnail--resize-pending)
+      (should (= dired-image-thumbnail--thumbs-generated-at 160)))))
+
+(ert-deftest dit-regenerate-thumbs-busy-requeues ()
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (setq dired-image-thumbnail--current-images '("/tmp/dit-reg-a.jpg")
+          dired-image-thumbnail--display-size 160
+          dired-image-thumbnail--thumbs-generated-at 128)
+    (let ((image-dired-thumbnail-buffer (buffer-name))
+          (requeued 0))
+      (cl-letf (((symbol-function 'dired-image-thumbnail--thumbnails-busy-p)
+                 (lambda () t))
+                ((symbol-function 'dired-image-thumbnail--queue-thumb-regeneration)
+                 (lambda () (setq requeued (1+ requeued)))))
+        (dired-image-thumbnail--regenerate-thumbs))
+      (should (= requeued 1)))))
+
 (provide 'dired-image-thumbnail-test)
 ;;; dired-image-thumbnail-test.el ends here

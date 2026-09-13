@@ -20,6 +20,10 @@ project's main git repository.
 - *Quality in the thumbnail mode line* -- The thumbnail buffer mode line now shows the current display quality right after the buffer name, e.g. =[Q4 faster]= (number and name, following the =Q= numbering). It updates automatically when the quality changes or a directory's remembered setting is applied, is re-ensured on every refresh (so reloaded code takes effect in a live session without recreating the buffer), and is removed again on unload. (Fixed: the construct symbol needs the =risky-local-variable= property or Emacs silently skips its =:eval= form -- the segment was in the format but never rendered.)
 - *Preview always fits the window* -- The fast preview display now scales the (possibly small) preview image up as well as down to fit the display window, preserving the aspect ratio, instead of showing quarter-size =faster= previews at their small native size. Lower qualities look softer rather than smaller.
 
+*** Bug Fixes
+
+- *Transformed images stuck as gray placeholders* -- `transmute` rewrites an image in place (for example on rotation) and deletes its cached thumbnail so it is regenerated, but the per-image retry cap that stops a permanently failing image from looping forever counted those intentional regenerations. After a few transformations of the same file the cap was reached, the thumbnail was never regenerated again and the gray placeholder stayed on screen until the buffer was recreated. The retry budget is now restored as soon as a thumbnail exists, whenever `dired-image-thumbnail-invalidate-files` is called (as `transmute` does after every batch) and after a hard refresh, while a genuinely failing image still stops after three attempts.
+
 ** <2026-09-01 Tue> *2.6.0*
 
 Directory location shown in the thumbnail header line.
