@@ -83,12 +83,17 @@
 (require 'dired)
 (require 'cl-lib)
 (require 'subr-x)                       ; string-empty-p, string-trim
+(require 'text-property-search)         ; text-property-search-forward
 
 (declare-function image-size "image.c" (spec &optional pixels frame))
 (declare-function w32-shell-execute "w32fns.c"
                   (operation document &optional parameters show-flag))
 (declare-function dired-image-thumbnail-transient-setup-keys
                   "dired-image-thumbnail-transient")
+(declare-function image-crop "image-crop" (&optional cut))
+(declare-function image-crop--crop-image-update "image-crop"
+                  (area data size type cut text))
+(declare-function image--get-image "image.el" (&optional position))
 
 ;; This package builds on a number of internal (double-dash) `image-dired'
 ;; functions introduced with the image-dired rewrite in Emacs 29.1.  They
@@ -1263,6 +1268,9 @@ accumulate as residue in image directories."
 ;; exist yet when we want to crop it.
 (defvar image-dired-queue)
 (defvar image-dired-queue-active-jobs)
+;; Defined by image-dired; declared here for the byte-compiler and to
+;; document that the save/refresh paths depend on the standard buffer.
+(defvar image-dired-thumbnail-buffer)
 
 (defun dired-image-thumbnail--thumbnails-busy-p ()
   "Return non-nil while image-dired has queued or running thumbnail jobs."
@@ -2647,6 +2655,9 @@ or partial preview is never cached."
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map special-mode-map)
     (define-key map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)
+    ;; Cropping and saving; see "Image cropping and saving".
+    (define-key map (kbd "c") #'image-crop)
+    (define-key map (kbd "s") #'dired-image-thumbnail-save-cropped-image)
     map)
   "Keymap for the fast full-size image display buffer.")
 
@@ -2654,6 +2665,16 @@ or partial preview is never cached."
   "Major mode for the `dired-image-thumbnail' full-size image display buffer.
 Used by the fast scaled-display path so that bindings such as \\`C-d'
 are available even though the buffer is not file-visiting.")
+
+(defvar-local dired-image-thumbnail--display-file nil
+  "Original image file shown in this image display buffer.
+This is the file that a cropped version should be saved over.")
+
+(defvar-local dired-image-thumbnail--display-source nil
+  "File the displayed image was actually built from.
+When display quality is below `high' this is a scaled temp preview
+rather than `dired-image-thumbnail--display-file', and crops made
+from it must not be saved over the original.")
 
 (defun dired-image-thumbnail--fit-image-spec (display-file win-width win-height)
   "Create an image spec for DISPLAY-FILE scaled to fit WIN-WIDTH x WIN-HEIGHT.
@@ -2683,17 +2704,20 @@ only) when the native size cannot be determined."
                     :max-width win-width
                     :max-height win-height))))
 
-(defun dired-image-thumbnail--display-image-fast (file)
+(defun dired-image-thumbnail--display-image-fast (file &optional original-p)
   "Display FILE scaled according to `dired-image-thumbnail-display-quality'.
 For `high' quality, loads the file directly with window-fitting constraints.
 For lower qualities, produces a small preview via an external tool so that
 Emacs never decodes the full image.  In both cases the displayed
 image is scaled (up or down) to fit the display window, preserving
-the aspect ratio."
+the aspect ratio.  When ORIGINAL-P is non-nil, always load the
+original FILE at full resolution, bypassing the preview path, so
+that a subsequent crop operates on the original rather than a
+scaled preview."
   (setq file (expand-file-name file))
   (unless (file-exists-p file)
     (error "No such file: %s" file))
-  (let* ((scale (dired-image-thumbnail--quality-scale))
+  (let* ((scale (if original-p 1.0 (dired-image-thumbnail--quality-scale)))
          (buf (get-buffer-create image-dired-display-image-buffer))
          (cur-win (selected-window))
          (display-win (or (get-buffer-window buf)
@@ -2730,6 +2754,11 @@ the aspect ratio."
       ;; buffer and fail on our manually inserted image descriptor.
       (unless (derived-mode-p 'dired-image-thumbnail-display-mode)
         (dired-image-thumbnail-display-mode))
+      ;; Record what this buffer shows so that cropping and saving can
+      ;; target the original file (see
+      ;; `dired-image-thumbnail-save-cropped-image').
+      (setq dired-image-thumbnail--display-file file)
+      (setq dired-image-thumbnail--display-source display-file)
       (let ((inhibit-read-only t)
             (create-lockfiles nil))
         (erase-buffer)
@@ -2740,6 +2769,139 @@ the aspect ratio."
       (set-window-buffer display-win buf))
     (select-window cur-win)
     (dired-image-thumbnail--queue-prefetch)))
+
+;;; Image cropping and saving
+
+(defun dired-image-thumbnail--crop-original-image (orig-fun &optional cut)
+  "Make `image-crop' operate on the original image in the display buffer.
+At display qualities below `high' the image view buffer shows a
+scaled temp preview rather than the original file; cropping that
+preview would produce a low-resolution re-encoded crop that must
+never be saved back over the original.  When a crop is started on
+such a preview, redisplay the original file first (ORIG-FUN then
+crops the original at full resolution)."
+  (when (and (derived-mode-p 'dired-image-thumbnail-display-mode)
+             dired-image-thumbnail--display-file
+             dired-image-thumbnail--display-source
+             (not (file-equal-p dired-image-thumbnail--display-source
+                                dired-image-thumbnail--display-file)))
+    (message "Displaying the original image for cropping...")
+    (dired-image-thumbnail--display-image-fast
+     dired-image-thumbnail--display-file 'original))
+  (funcall orig-fun cut))
+
+(defun dired-image-thumbnail--keep-point-on-cropped-image (orig-fun &rest args)
+  "Keep point on the image after `image-crop' replaces it.
+`image-crop--crop-image-update' (Emacs 29.1 through at least 31.1)
+inserts the cropped image at point and leaves point after it, at
+the end of the buffer, where no `display' property exists, so
+`image--get-image' and `image-save' fail with \"No recognizable
+image under point\".  Preserving point around the call leaves it at
+the start of the inserted image instead."
+  (save-excursion (apply orig-fun args)))
+
+(defun dired-image-thumbnail--image-in-buffer ()
+  "Return the image spec displayed in the current buffer, or nil.
+Tries `image--get-image' at point first; when there is no image
+under point (Emacs 29 through 31 `image-crop' leaves point past the
+inserted image), scans the buffer for `display' text properties
+and returns the first one that is an image."
+  (or (ignore-errors (image--get-image))
+      (catch 'found
+        (save-excursion
+          (goto-char (point-min))
+          (let (match)
+            (while (setq match (text-property-search-forward 'display))
+              (let ((image (ignore-errors
+                             (image--get-image
+                              (prop-match-beginning match)))))
+                (when image (throw 'found image)))))))))
+
+(defun dired-image-thumbnail--image-save-target (image)
+  "Return the file a cropped image in this buffer should be saved over.
+Prefers the buffer's visited file, then the file tracked by the
+image display buffer, then the image spec's own `:file'."
+  (or (buffer-file-name)
+      dired-image-thumbnail--display-file
+      (plist-get (cdr image) :file)))
+
+(defun dired-image-thumbnail-save-cropped-image (&optional ask-file)
+  "Save the image cropped in this buffer over its original file.
+Overwrites the original file immediately and without asking.  With
+prefix argument ASK-FILE, prompt for a different file to overwrite
+instead (also without confirmation).
+
+Works in the `dired-image-thumbnail' image display buffer, in
+`image-mode' buffers and in the standard `image-dired' display
+buffer.  The buffer's image must contain cropped image data (from
+`image-crop' or `image-cut'); the cropped bytes are written out
+unchanged and thumbnails for the file are regenerated.
+
+Refuses to save when the crop was made from a scaled preview rather
+than the original: start the crop again and the original is
+displayed automatically."
+  (interactive "P")
+  (let ((image (dired-image-thumbnail--image-in-buffer)))
+    (unless image (user-error "No image in this buffer"))
+    (let ((data (plist-get (cdr image) :data)))
+      (unless data
+        (user-error "No cropped image here; run `image-crop' first"))
+      (when (and dired-image-thumbnail--display-file
+                 dired-image-thumbnail--display-source
+                 (not (file-equal-p dired-image-thumbnail--display-source
+                                   dired-image-thumbnail--display-file)))
+        (user-error
+         "This crop was made from a scaled preview, not the original; \
+crop again (the original is displayed automatically) before saving"))
+      (let ((target (dired-image-thumbnail--image-save-target image)))
+        (when ask-file
+          (setq target (read-file-name
+                        "Save cropped image to: "
+                        (and target (file-name-directory target))
+                        nil nil
+                        (and target (file-name-nondirectory target)))))
+        (unless target (user-error "No file to save the cropped image over"))
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert data)
+          (let ((coding-system-for-write 'no-conversion))
+            (write-region (point-min) (point-max) target)))
+        (when (and (buffer-file-name)
+                   (file-equal-p (buffer-file-name) target))
+          (set-buffer-modified-p nil))
+        (dired-image-thumbnail--after-image-saved target)
+        (message "Saved cropped image to %s" target)))))
+
+(defun dired-image-thumbnail--after-image-saved (file)
+  "Invalidate cached data for FILE after its image was overwritten.
+Deletes the cached thumbnails so they are regenerated, clears the
+image cache, refreshes the dimension cache, and refreshes the
+thumbnail buffer when it displays FILE."
+  (ignore-errors (delete-file (image-dired-thumb-name file)))
+  (ignore-errors (delete-file (dired-image-thumbnail--square-thumb-name file)))
+  ;; `clear-image-cache' signals on non-graphical frames (e.g. batch).
+  (ignore-errors (clear-image-cache))
+  (dired-image-thumbnail-invalidate-files (list file))
+  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+    (when (buffer-live-p thumb-buf)
+      (with-current-buffer thumb-buf
+        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                   (member file dired-image-thumbnail--all-images))
+          (dired-image-thumbnail-refresh file))))))
+
+(defun dired-image-thumbnail--record-displayed-file (file &rest _)
+  "Record FILE in the standard `image-dired' display buffer.
+Sets `dired-image-thumbnail--display-file' and
+`dired-image-thumbnail--display-source' so that
+`dired-image-thumbnail-save-cropped-image' knows the original file
+when the standard display path is used (display quality `full')."
+  (when (stringp file)
+    (let ((file (expand-file-name file))
+          (buf (get-buffer image-dired-display-image-buffer)))
+      (when (buffer-live-p buf)
+        (with-current-buffer buf
+          (setq dired-image-thumbnail--display-file file)
+          (setq dired-image-thumbnail--display-source file))))))
 
 (defvar dired-image-thumbnail--prefetch-timer nil
   "Idle timer used to pre-generate preview images around the current one.")
@@ -3212,6 +3374,10 @@ is idempotent and can be re-run to track changes to
   (advice-add 'image-dired--thumb-update-marks :after #'dired-image-thumbnail--invalidate-marked-count)
   ;; Suppress lock files on image files visited for display (read-only).
   (advice-add 'image-dired-display-image :around #'dired-image-thumbnail--display-image-no-lock)
+  ;; Track which file the standard display buffer shows, so a crop
+  ;; saved from it overwrites the original.
+  (advice-add 'image-dired-display-image :after
+              #'dired-image-thumbnail--record-displayed-file)
   ;; Hook to initialize our variables when entering thumbnail mode
   (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer)
   ;; Initialize after thumbnails are inserted, so starting from plain
@@ -3221,6 +3387,14 @@ is idempotent and can be re-run to track changes to
   ;; Scope C-d to the image-dired display buffer only
   (when (keymapp image-dired-display-image-mode-map)
     (define-key image-dired-display-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
+
+;; Fix Emacs's `image-crop' integration in the image display buffer:
+;; crop the original rather than a scaled preview, and keep point on the
+;; cropped image so image commands can find it.
+(with-eval-after-load 'image-crop
+  (advice-add 'image-crop :around #'dired-image-thumbnail--crop-original-image)
+  (advice-add 'image-crop--crop-image-update :around
+              #'dired-image-thumbnail--keep-point-on-cropped-image))
 
 ;; Clean up the temporary preview directory when Emacs exits.
 (add-hook 'kill-emacs-hook #'dired-image-thumbnail-clear-preview-cache)
@@ -3243,6 +3417,13 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
                  #'dired-image-thumbnail--invalidate-marked-count)
   (advice-remove 'image-dired-display-image
                  #'dired-image-thumbnail--display-image-no-lock)
+  (advice-remove 'image-dired-display-image
+                 #'dired-image-thumbnail--record-displayed-file)
+  (when (fboundp 'image-crop)
+    (advice-remove 'image-crop #'dired-image-thumbnail--crop-original-image))
+  (when (fboundp 'image-crop--crop-image-update)
+    (advice-remove 'image-crop--crop-image-update
+                   #'dired-image-thumbnail--keep-point-on-cropped-image))
   (remove-hook 'image-dired-thumbnail-mode-hook
                #'dired-image-thumbnail--initialize-buffer)
   (advice-remove 'image-dired-display-thumbs
