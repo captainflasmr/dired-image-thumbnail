@@ -203,11 +203,11 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 *In Image Display Buffer:*
 
-| Key   | Command                                       | Description                    |
-|-------+-----------------------------------------------+--------------------------------|
-| =C-d= | ~dired-image-thumbnail-delete-image-and-next~   | Delete image and move to next  |
-| =c=   | ~image-crop~                                  | Crop the image interactively   |
-| =s=   | ~dired-image-thumbnail-save-cropped-image~    | Save crop over the original    |
+| Key   | Command                                       | Description                          |
+|-------+-----------------------------------------------+--------------------------------------|
+| =C-d= | ~dired-image-thumbnail-delete-image-and-next~ | Delete image and move to next        |
+| =c=   | ~image-crop~                                  | Crop the image interactively         |
+| =s=   | ~dired-image-thumbnail-save-cropped-image~    | Save crop, return to the thumbnails  |
 
 Note: All standard =image-dired= keybindings (=n=, =p=, =m=, =u=, =U=, etc.) continue to work as expected.
 
@@ -217,11 +217,11 @@ Crop the image shown in the image display buffer with =c=:
 
 1. Press =c= in the image display buffer
 2. Click and drag with the mouse to select the area to keep; =RET= crops and =q= cancels (these are =image-crop='s own bindings)
-3. Press =s= to save the crop over the original file
+3. Press =s= to save the crop over the original file; focus returns to the thumbnail buffer
 
-=s= (=dired-image-thumbnail-save-cropped-image=) overwrites the original file immediately and without prompting, then regenerates its cached thumbnails. Use =C-u s= to save the crop to a different file instead (also overwritten without confirmation).
+=s= (=dired-image-thumbnail-save-cropped-image=) overwrites the original file immediately and without prompting, then regenerates its cached thumbnails and returns focus to the thumbnail buffer so browsing can continue. Use =C-u s= to save the crop to a different file instead (also overwritten without confirmation).
 
-When the display quality is below =high= (the default is =faster=), the display buffer normally shows a scaled-down preview for speed. Starting a crop in that state automatically redisplays the original image first, so the crop is always taken from the full-resolution file and never from the preview. The save command also refuses to save a crop that was somehow made from a preview.
+When the display quality is below =high= (the default is =faster=), the display buffer normally shows a scaled-down preview for speed. Starting a crop in that state automatically redisplays the original image first, and crops are always taken from the full-resolution original: the image is fitted to the window with =:max-width=/=:max-height= rather than explicit =:width=/=:height= properties, so =image-crop= never resizes the source to the display size before cropping. The save command also refuses to save a crop that was somehow made from a preview.
 
 * Header Line
 

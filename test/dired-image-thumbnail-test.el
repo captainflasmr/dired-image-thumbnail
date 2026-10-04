@@ -522,5 +522,59 @@
         (dired-image-thumbnail--regenerate-thumbs))
       (should (= requeued 1)))))
 
+;;; Cropping
+
+(ert-deftest dit-fit-image-spec-preserve-resolution ()
+  (cl-letf (((symbol-function 'image-size) (lambda (&rest _) '(4000 . 3000)))
+            ((symbol-function 'create-image)
+             (lambda (file &optional _type _data-p &rest props)
+               (cons 'image (append (list :file file) props)))))
+    ;; Normal display uses explicit dimensions, upscaling previews to
+    ;; fill the window.
+    (let ((spec (dired-image-thumbnail--fit-image-spec "/tmp/x.jpg" 800 600)))
+      (should (equal (plist-get (cdr spec) :width) 800))
+      (should (equal (plist-get (cdr spec) :height) 600)))
+    ;; Crop-safe display must not set :width/:height, since image-crop
+    ;; resizes the source to that width before cropping.
+    (let ((spec (dired-image-thumbnail--fit-image-spec "/tmp/x.jpg" 800 600 t)))
+      (should-not (plist-member (cdr spec) :width))
+      (should-not (plist-member (cdr spec) :height))
+      (should (equal (plist-get (cdr spec) :max-width) 800))
+      (should (equal (plist-get (cdr spec) :max-height) 600)))
+    ;; An image smaller than the window is not upscaled for cropping.
+    (cl-letf (((symbol-function 'image-size) (lambda (&rest _) '(200 . 150))))
+      (let ((spec (dired-image-thumbnail--fit-image-spec "/tmp/x.jpg" 800 600 t)))
+        (should-not (plist-member (cdr spec) :width))
+        (should (equal (plist-get (cdr spec) :max-width) 800))))))
+
+(ert-deftest dit-save-cropped-image-returns-to-thumbnails ()
+  (dit--with-temp-dir dir
+    (let ((target (expand-file-name "crop.jpg" dir))
+          (thumb-buf (get-buffer-create "*dit-test-thumbs*"))
+          (image-buf (get-buffer-create "*dit-test-image*"))
+          (image-dired-thumbnail-buffer "*dit-test-thumbs*")
+          (other-win nil))
+      (unwind-protect
+          (progn
+            (write-region "" nil target)
+            (set-window-buffer (selected-window) thumb-buf)
+            (setq other-win (split-window))
+            (select-window other-win)
+            (set-window-buffer other-win image-buf)
+            (with-current-buffer image-buf
+              (setq dired-image-thumbnail--display-file target)
+              (setq dired-image-thumbnail--display-source target)
+              (cl-letf (((symbol-function 'dired-image-thumbnail--image-in-buffer)
+                         (lambda () '(image :data "cropped-bytes")))
+                        ((symbol-function 'dired-image-thumbnail--after-image-saved)
+                         #'ignore))
+                (dired-image-thumbnail-save-cropped-image))
+              (should (eq (selected-window) (get-buffer-window thumb-buf))))
+            (should (file-exists-p target)))
+        (when (and other-win (window-live-p other-win))
+          (delete-window other-win))
+        (kill-buffer thumb-buf)
+        (kill-buffer image-buf)))))
+
 (provide 'dired-image-thumbnail-test)
 ;;; dired-image-thumbnail-test.el ends here

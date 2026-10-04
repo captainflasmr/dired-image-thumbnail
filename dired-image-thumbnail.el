@@ -2676,12 +2676,21 @@ When display quality is below `high' this is a scaled temp preview
 rather than `dired-image-thumbnail--display-file', and crops made
 from it must not be saved over the original.")
 
-(defun dired-image-thumbnail--fit-image-spec (display-file win-width win-height)
+(defun dired-image-thumbnail--fit-image-spec (display-file win-width win-height
+                                                           &optional preserve-resolution)
   "Create an image spec for DISPLAY-FILE scaled to fit WIN-WIDTH x WIN-HEIGHT.
 Preserves the aspect ratio, allowing both upscaling and
 downscaling, so the preview always fills the window as much as
 possible.  Falls back to `:max-width'/`:max-height' (downscale
-only) when the native size cannot be determined."
+only) when the native size cannot be determined.
+
+When PRESERVE-RESOLUTION is non-nil the spec never carries
+explicit `:width'/`:height' properties: the image is scaled down
+to fit the window but never upscaled.  This matters for cropping,
+because `image-crop' reads a `:width' property as a request to
+resize the source data to that width before cropping, which would
+cap the crop at the display resolution instead of the original
+file's."
   (let ((native (ignore-errors (image-size (create-image display-file) t))))
     (if (and native
              (consp native)
@@ -2693,7 +2702,8 @@ only) when the native size cannot be determined."
                (ih (float (cdr native)))
                (s (min (/ (float win-width) iw)
                        (/ (float win-height) ih))))
-          (if (and (numberp s) (> s 0) (not (= s 1.0)))
+          (if (and (numberp s) (> s 0) (not (= s 1.0))
+                   (not preserve-resolution))
               (create-image display-file nil nil
                             :width (max 1 (round (* iw s)))
                             :height (max 1 (round (* ih s))))
@@ -2728,15 +2738,19 @@ scaled preview."
          (win-height (or (and display-win (window-body-height display-win t)) 600))
          (decode-w (max 1 (truncate (* win-width scale))))
          (decode-h (max 1 (truncate (* win-height scale))))
-          ;; For high quality, load original; otherwise make a small preview
-          (display-file (if (>= scale 1.0)
-                            file
-                          (dired-image-thumbnail--make-preview file decode-w decode-h)))
-          ;; Fit the (possibly small) preview to the window, scaling
-          ;; up as well as down so e.g. quarter-size `faster'
-          ;; previews still fill the display window.
-          (img (dired-image-thumbnail--fit-image-spec
-                display-file win-width win-height)))
+         ;; For high quality, load original; otherwise make a small preview
+         (original-display (>= scale 1.0))
+         (display-file (if original-display
+                           file
+                         (dired-image-thumbnail--make-preview file decode-w decode-h)))
+         ;; The original file is displayed at its own resolution
+         ;; (fitted to the window) and without explicit
+         ;; `:width'/`:height' properties, so `image-crop' crops the
+         ;; full-resolution original rather than data rewound to the
+         ;; display size.  Previews keep explicit dimensions so a
+         ;; small preview still fills the window.
+         (img (dired-image-thumbnail--fit-image-spec
+               display-file win-width win-height original-display)))
     (with-current-buffer buf
       ;; If this buffer was previously used by image-dired-display-image
       ;; to visit a file, sever the file visit before modifying the
@@ -2825,6 +2839,17 @@ image display buffer, then the image spec's own `:file'."
       dired-image-thumbnail--display-file
       (plist-get (cdr image) :file)))
 
+(defun dired-image-thumbnail--return-to-thumbnails ()
+  "Select the window showing the thumbnail buffer, when there is one.
+Called after saving a crop so that focus returns to the thumbnail
+grid and browsing can continue.  Does nothing when the thumbnail
+buffer is not displayed on the selected frame or is already the
+current buffer."
+  (let ((win (get-buffer-window image-dired-thumbnail-buffer)))
+    (when (and win
+               (not (eq (window-buffer win) (current-buffer))))
+      (select-window win))))
+
 (defun dired-image-thumbnail-save-cropped-image (&optional ask-file)
   "Save the image cropped in this buffer over its original file.
 Overwrites the original file immediately and without asking.  With
@@ -2839,7 +2864,8 @@ unchanged and thumbnails for the file are regenerated.
 
 Refuses to save when the crop was made from a scaled preview rather
 than the original: start the crop again and the original is
-displayed automatically."
+displayed automatically.  When the thumbnail buffer is displayed
+in a window, focus returns to it after saving."
   (interactive "P")
   (let ((image (dired-image-thumbnail--image-in-buffer)))
     (unless image (user-error "No image in this buffer"))
@@ -2870,7 +2896,8 @@ crop again (the original is displayed automatically) before saving"))
                    (file-equal-p (buffer-file-name) target))
           (set-buffer-modified-p nil))
         (dired-image-thumbnail--after-image-saved target)
-        (message "Saved cropped image to %s" target)))))
+        (message "Saved cropped image to %s" target)
+        (dired-image-thumbnail--return-to-thumbnails)))))
 
 (defun dired-image-thumbnail--after-image-saved (file)
   "Invalidate cached data for FILE after its image was overwritten.
