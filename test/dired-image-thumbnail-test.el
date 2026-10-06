@@ -32,6 +32,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'dired-image-thumbnail)
 
 ;;; Utilities
@@ -575,6 +576,78 @@
           (delete-window other-win))
         (kill-buffer thumb-buf)
         (kill-buffer image-buf)))))
+
+;;; EXIF orientation
+
+(ert-deftest dit-exif-rotation-maps-codes ()
+  (dolist (case '((nil . nil) (1 . nil) (2 . nil) (3 . 180) (4 . nil)
+                  (5 . 90) (6 . 90) (7 . 270) (8 . 270)))
+    (cl-letf (((symbol-function 'dired-image-thumbnail--exif-orientation)
+               (lambda (_file) (car case))))
+      (should (equal (dired-image-thumbnail--exif-rotation "photo.jpg")
+                     (cdr case))))))
+
+(ert-deftest dit-orientation-transforms-table ()
+  (should (equal (cdr (assq 6 dired-image-thumbnail--orientation-transforms))
+                 '("-rotate" "90")))
+  (should (null (assq 1 dired-image-thumbnail--orientation-transforms)))
+  (dolist (code '(2 3 4 5 6 7 8))
+    (should (cdr (assq code dired-image-thumbnail--orientation-transforms)))))
+
+;; file-attributes layout: (nil UID GID ATIME MTIME CTIME SIZE MODE ...)
+(ert-deftest dit-preview-path-includes-ctime-and-size ()
+  ;; Same attributes -> stable key; a rewrite that restores the
+  ;; modification time but changes status time/size -> new key, so
+  ;; the stale pre-rewrite preview cannot be served.
+  (cl-letf* (((symbol-function 'dired-image-thumbnail--preview-dir)
+              (lambda () "/tmp/dit-preview-dir/"))
+             ((symbol-function 'file-attributes)
+              (lambda (file &rest _)
+                (if (string= file "/p/rewritten.jpg")
+                    '(nil 1000 1000 (10 0) (100 200) (200 310) 12346 420)
+                  '(nil 1000 1000 (10 0) (100 200) (200 300) 12345 420)))))
+    (let ((before (dired-image-thumbnail--preview-path "/p/a.jpg" 100))
+          (same (dired-image-thumbnail--preview-path "/p/a.jpg" 100))
+          (after (dired-image-thumbnail--preview-path "/p/rewritten.jpg" 100)))
+      (should (equal before same))
+      (should-not (equal before after)))))
+
+(ert-deftest dit-apply-orientation-turns-jpeg ()
+  (skip-unless (and (executable-find "jpegtran")
+                    (executable-find "magick")
+                    (executable-find "identify")))
+  (dit--with-temp-dir dir
+    (let ((jpg (expand-file-name "turned.jpg" dir)))
+      (should (zerop (call-process "magick" nil nil nil
+                                   "-size" "80x40" "gradient:red-blue" jpg)))
+      (should (dired-image-thumbnail--apply-orientation jpg 6))
+      (with-temp-buffer
+        (should (zerop (call-process "identify" nil t nil
+                                     "-format" "%w %h" jpg)))
+        (should (string= (string-trim (buffer-string)) "40 80")))
+      ;; Orientation 1 (normal) and nil need no transform.
+      (should-not (dired-image-thumbnail--apply-orientation jpg 1))
+      (should-not (dired-image-thumbnail--apply-orientation jpg nil)))))
+
+(ert-deftest dit-exif-orientation-reads-tag ()
+  (skip-unless (and (executable-find "magick")
+                    (executable-find "exiftool")))
+  (dit--with-temp-dir dir
+    (let ((jpg (expand-file-name "tagged.jpg" dir)))
+      (should (zerop (call-process "magick" nil nil nil
+                                   "-size" "40x20" "gradient:red-blue" jpg)))
+      (should (zerop (call-process "exiftool" nil nil nil
+                                   "-overwrite_original" "-Orientation#=6" jpg)))
+      (clrhash dired-image-thumbnail--orientation-cache)
+      (should (equal (dired-image-thumbnail--exif-orientation jpg) 6))
+      ;; Cached: a second read does not touch the file again.
+      (cl-letf (((symbol-function 'insert-file-contents-literally)
+                 (lambda (&rest _) (error "unexpected re-read"))))
+        (should (equal (dired-image-thumbnail--exif-orientation jpg) 6)))
+      ;; Rewriting the file (attributes change) re-reads it.
+      (should (zerop (call-process "exiftool" nil nil nil
+                                   "-overwrite_original" "-Orientation#=8" jpg)))
+      (should (equal (dired-image-thumbnail--exif-orientation jpg) 8)))))
 
 (provide 'dired-image-thumbnail-test)
 ;;; dired-image-thumbnail-test.el ends here

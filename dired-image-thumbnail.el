@@ -80,6 +80,7 @@
 (require 'image-dired)
 (require 'image-dired-util)
 (require 'image)
+(require 'exif)
 (require 'dired)
 (require 'cl-lib)
 (require 'subr-x)                       ; string-empty-p, string-trim
@@ -102,6 +103,11 @@
 (declare-function image-dired--line-up-with-method "image-dired")
 (declare-function image-dired--thumb-update-marks "image-dired")
 (declare-function image-dired--update-header-line "image-dired")
+
+;; Referenced by `dired-image-thumbnail-invalidate-files' and
+;; `dired-image-thumbnail-clear-preview-cache' before its defining
+;; `defvar' in the "Fast image display" section.
+(defvar dired-image-thumbnail--orientation-cache)
 
 ;;; Customization
 
@@ -877,7 +883,7 @@ the `[N marked]' segment reflects the change immediately."
       (setq result
             (seq-filter
              (lambda (file)
-               (when-let ((attrs (file-attributes file)))
+               (when-let* ((attrs (file-attributes file)))
                  (let ((size (file-attribute-size attrs)))
                    (and (or (null dired-image-thumbnail--filter-size-min)
                             (>= size dired-image-thumbnail--filter-size-min))
@@ -1178,7 +1184,7 @@ and by `dired-image-thumbnail--display-thumbs-advice' after
   "Initialize the thumbnail buffer after `image-dired-display-thumbs'.
 `image-dired-display-thumbs' leaves the associated Dired buffer
 current, so switch to the thumbnail buffer explicitly."
-  (when-let ((buf (get-buffer image-dired-thumbnail-buffer)))
+  (when-let* ((buf (get-buffer image-dired-thumbnail-buffer)))
     (with-current-buffer buf
       (when (derived-mode-p 'image-dired-thumbnail-mode)
         (dired-image-thumbnail--initialize-buffer)))))
@@ -1609,7 +1615,7 @@ after refreshing. Otherwise, try to maintain position on the current file."
       ;; Remember the thumbnail window width at line-up time so that a
       ;; later display can detect a layout change and re-align.
       (setq dired-image-thumbnail--lineup-width
-            (when-let ((win (get-buffer-window nil t)))
+            (when-let* ((win (get-buffer-window nil t)))
               (window-body-width win)))
       ;; Restore mark display
       (image-dired--thumb-update-marks)
@@ -1661,12 +1667,18 @@ Useful after an external tool has resized images on disk."
           (dolist (file dired-image-thumbnail--current-images)
             (dired-image-thumbnail--get-image-dimensions file)))
         (image-dired--update-header-line)))))
+
 (defun dired-image-thumbnail-invalidate-files (files)
   "Invalidate caches for the specific list of FILES.
 FILES should be a list of expanded file names.  The dimension cache is
 cleared and the thumbnail retry budget is restored, so images rewritten
 externally are regenerated even if their thumbnails previously failed."
   (let ((files (mapcar #'expand-file-name files)))
+    ;; The EXIF orientation cache is global; drop the rewritten
+    ;; files so their orientation is re-read (for example after a
+    ;; lossless rotation rewrote an image in place).
+    (dolist (f files)
+      (remhash f dired-image-thumbnail--orientation-cache))
     (dolist (buf (buffer-list))
       (with-current-buffer buf
         (when (and (derived-mode-p 'image-dired-thumbnail-mode)
@@ -1715,7 +1727,7 @@ If PREFERRED-TARGET is provided, move point there after refresh."
 
 (defun dired-image-thumbnail--re-scan-internal ()
   "Internal function to re-populate `all-images' from disk."
-  (when-let ((source-dir (and (boundp 'dired-image-thumbnail--source-dir)
+  (when-let* ((source-dir (and (boundp 'dired-image-thumbnail--source-dir)
                                 dired-image-thumbnail--source-dir)))
     (setq dired-image-thumbnail--all-images
           (dired-image-thumbnail--find-images
@@ -2090,7 +2102,7 @@ are refreshed afterwards."
                     (seq-filter (lambda (file) (gethash file marked-set))
                                 dired-image-thumbnail--current-images)))))
     (or marked
-        (when-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
+        (when-let* ((file (dired-image-thumbnail--nearest-image-original-file-name)))
           (list file)))))
 
 (defun dired-image-thumbnail-delete-marked ()
@@ -2114,7 +2126,7 @@ are refreshed afterwards."
 Uses `dired-image-thumbnail-external-editor' if set, otherwise
 the system default application."
   (interactive)
-  (if-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
+  (if-let* ((file (dired-image-thumbnail--nearest-image-original-file-name)))
       (let ((program dired-image-thumbnail-external-editor)
             (expanded (expand-file-name file)))
         (if program
@@ -2133,7 +2145,7 @@ the system default application."
 (defun dired-image-thumbnail-delete ()
   "Delete the image at or near point."
   (interactive)
-  (if-let ((file (dired-image-thumbnail--nearest-image-original-file-name)))
+  (if-let* ((file (dired-image-thumbnail--nearest-image-original-file-name)))
       (when (or dired-image-thumbnail-auto-accept
                 (yes-or-no-p (format "Delete %s? " (file-name-nondirectory file))))
         ;; Find the next image to move to after deletion
@@ -2275,7 +2287,7 @@ enhanced features like sorting and filtering."
     
     ;; Now refresh the thumbnail buffer with our enhancements
     ;; We need to find the thumbnail buffer first
-    (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+    (when-let* ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
       (with-current-buffer thumb-buf
         ;; Reset state so initialization re-scans from the new dired buffer
         (setq dired-image-thumbnail--all-images nil)
@@ -2546,7 +2558,9 @@ effect without recreating the buffer."
              dired-image-thumbnail--preview-dir
              (file-directory-p dired-image-thumbnail--preview-dir))
     (delete-directory dired-image-thumbnail--preview-dir t)
-    (setq dired-image-thumbnail--preview-dir nil)))
+    (setq dired-image-thumbnail--preview-dir nil)
+    (when (boundp 'dired-image-thumbnail--orientation-cache)
+      (clrhash dired-image-thumbnail--orientation-cache))))
 
 (defun dired-image-thumbnail--jpeg-p (file)
   "Return non-nil if FILE is a JPEG."
@@ -2562,18 +2576,127 @@ directly to the nearest djpeg fraction."
         ((<= quality-scale 0.5)   "1/2")
         (t                         "1/1")))
 
+(defvar dired-image-thumbnail--orientation-cache (make-hash-table :test 'equal)
+  "Cache of EXIF orientation codes, keyed by file name.
+Values are (MTIME CTIME SIZE . CODE); an entry is re-read whenever
+the file's attributes change, so an image rewritten in place --
+for example by a lossless rotation that restores the original
+modification time -- is re-read.  Global (not buffer-local), since
+both the preview pipeline and the display paths consult it.")
+
+(defun dired-image-thumbnail--exif-orientation (file)
+  "Return FILE's EXIF Orientation tag value (1-8), or nil.
+Returns nil when FILE is not a JPEG (the built-in `exif' library
+only parses JPEG APP1 data), has no or malformed EXIF, or does not
+exist.  Some tools write the tag as a rational rather than a
+short; such fixed-point values are normalised here (393216, i.e.
+6*65536, is returned as 6).
+This is the same reader `image-mode' uses when it turns visited
+files upright per EXIF orientation.  The result is cached (see
+`dired-image-thumbnail--orientation-cache') and re-read only when
+the file's modification time, status time or size changes."
+  (let* ((attrs (file-attributes file))
+         (key (and attrs
+                   (list (file-attribute-modification-time attrs)
+                         (file-attribute-status-change-time attrs)
+                         (file-attribute-size attrs))))
+         (cached (gethash file dired-image-thumbnail--orientation-cache)))
+    (if (and cached (equal (car cached) key))
+        (cdr cached)
+      (let ((code (and (dired-image-thumbnail--jpeg-p file)
+                       (ignore-errors
+                         (let* ((value (exif-field 'orientation
+                                                   (exif-parse-file file)))
+                                (code (cond
+                                       ((not (integerp value)) nil)
+                                       ;; Fixed-point rational encoding.
+                                       ((> value 8) (ash value -16))
+                                       (t value))))
+                           (and (natnump code) (>= code 1) (<= code 8) code))))))
+        (puthash file (cons key code)
+                 dired-image-thumbnail--orientation-cache)
+        code))))
+
+(defun dired-image-thumbnail--exif-rotation (file)
+  "Return FILE's EXIF orientation as a display rotation in degrees.
+90, 180 or 270 for the turned orientation codes, nil for anything
+else (no EXIF, orientation 1, or a non-JPEG file).  Mirrored
+orientations (2, 4, 5, 7) contribute only their turn component,
+matching what `exif-orientation' hands `image-mode'; `create-image'
+has no mirror property, and the preview pipeline bakes the full
+orientation into its pixels instead."
+  (pcase (dired-image-thumbnail--exif-orientation file)
+    ((or 5 6) 90)
+    (3 180)
+    ((or 7 8) 270)
+    (_ nil)))
+
+(defconst dired-image-thumbnail--orientation-transforms
+  '((2 "-flip" "horizontal")
+    (3 "-rotate" "180")
+    (4 "-flip" "vertical")
+    (5 "-transpose")
+    (6 "-rotate" "90")
+    (7 "-transverse")
+    (8 "-rotate" "270"))
+  "jpegtran arguments that turn a JPEG's stored pixels upright.
+Keyed by EXIF orientation code; orientation 1 (normal) needs no
+transform.  Baking the entry for a file's code into the pixels
+makes the file display upright even for viewers that ignore EXIF
+(such as the fast preview pipeline), exactly as an EXIF-aware
+viewer (such as `image-mode') shows the original file.")
+
+(defun dired-image-thumbnail--apply-orientation (file orientation)
+  "Turn JPEG FILE in place upright, as EXIF ORIENTATION (2-8) requires.
+Uses `jpegtran', which is lossless and fast even on large files.
+Does nothing and returns nil when FILE does not exist,
+ORIENTATION is nil or 1, or `jpegtran' is unavailable.  FILE is
+replaced by the transformed image only when jpegtran succeeds and
+the result is a non-empty file; otherwise it is left untouched (a
+turned preview is better than none).  Returns non-nil when FILE
+was transformed."
+  (let ((args (cdr (assq orientation
+                         dired-image-thumbnail--orientation-transforms))))
+    (when (and args
+               (file-exists-p file)
+               (executable-find "jpegtran"))
+      (let ((transformed (make-temp-file
+                          "dired-image-preview-orient-" nil ".jpg")))
+        (unwind-protect
+            (when (dired-image-thumbnail--process-succeeded-p
+                   (apply #'call-process "jpegtran" nil nil nil
+                          (append args (list "-outfile" transformed file))))
+              (when (and (file-exists-p transformed)
+                         (> (or (file-attribute-size
+                                 (file-attributes transformed))
+                                0)
+                            0))
+                (rename-file transformed file t)
+                (setq transformed nil)
+                t))
+          (when (and transformed (file-exists-p transformed))
+            (delete-file transformed)))))))
+
 (defun dired-image-thumbnail--preview-path (file width)
-  "Return the cache path for a preview of FILE decoded at WIDTH pixels."
-  (expand-file-name
-   (concat (sha1 (concat file
-                         (number-to-string width)
-                         (format-time-string
-                          "%s"
-                          (or (file-attribute-modification-time
-                               (file-attributes file))
-                              0))))
-           ".jpg")
-   (dired-image-thumbnail--preview-dir)))
+  "Return the cache path for a preview of FILE decoded at WIDTH pixels.
+The key includes the file's modification time, status time and
+size, so a file rewritten in place -- for example a lossless
+rotation that restores the original modification time -- gets a
+new key and a fresh preview instead of serving the stale
+pre-rewrite preview.  (The status time cannot be restored by
+`touch', so any rewrite changes it.)"
+  (let* ((attrs (file-attributes file))
+         (mtime (or (and attrs (file-attribute-modification-time attrs)) 0))
+         (ctime (or (and attrs (file-attribute-status-change-time attrs)) 0))
+         (size (or (and attrs (file-attribute-size attrs)) 0)))
+    (expand-file-name
+     (concat (sha1 (concat file "|"
+                           (number-to-string width) "|"
+                           (format-time-string "%s" mtime) "|"
+                           (format-time-string "%s" ctime) "|"
+                           (number-to-string size)))
+             ".jpg")
+     (dired-image-thumbnail--preview-dir))))
 
 (defun dired-image-thumbnail--preview-quality ()
   "Return the JPEG encode quality for the current display quality.
@@ -2596,6 +2719,14 @@ For JPEGs, uses djpeg/cjpeg with DCT scaling (very fast).
 For other formats, uses magick/convert with -thumbnail.
 The encode quality follows `dired-image-thumbnail-display-quality',
 so lower quality modes produce smaller, quicker-loading files.
+EXIF orientation is applied to the preview pixels -- djpeg/cjpeg
+know nothing about EXIF, so a turned photo (most phone photos
+taken in portrait) is turned upright with a lossless jpegtran
+transform on the fast path, and with -auto-orient on the
+magick/convert fallback -- so the preview shows the photo upright
+exactly as `image-mode' (and any EXIF-aware viewer) displays the
+original.  djpeg/cjpeg keep the fast path only when the file has
+no orientation to apply or jpegtran is available to apply it.
 The preview is written to a temporary file and only published
 after the encoding succeeds and the result decodes, so a failed
 or partial preview is never cached."
@@ -2603,6 +2734,7 @@ or partial preview is never cached."
     (unless (file-exists-p preview-path)
       (let* ((expanded (expand-file-name file))
              (quality (number-to-string (dired-image-thumbnail--preview-quality)))
+             (orientation (dired-image-thumbnail--exif-orientation file))
              (out-temp (make-temp-file
                         (expand-file-name "preview-out-"
                                           (dired-image-thumbnail--preview-dir))
@@ -2612,7 +2744,12 @@ or partial preview is never cached."
             (progn
               (if (and (dired-image-thumbnail--jpeg-p file)
                        (executable-find "djpeg")
-                       (executable-find "cjpeg"))
+                       (executable-find "cjpeg")
+                       ;; djpeg/cjpeg ignore EXIF orientation; a
+                       ;; turned JPEG can still use the fast path
+                       ;; when jpegtran can apply the turn.
+                       (or (memql orientation '(nil 1))
+                           (executable-find "jpegtran")))
                   ;; Fast path: djpeg DCT scaling + cjpeg (skips full
                   ;; decode).  An intermediate file is used instead of a
                   ;; shell pipeline so this works portably.
@@ -2628,8 +2765,14 @@ or partial preview is never cached."
                                  (call-process "cjpeg" nil (list :file out-temp) nil
                                                "-quality" quality decoded))))
                       (when (file-exists-p decoded)
-                        (delete-file decoded))))
-                ;; Fallback: magick/convert -thumbnail
+                        (delete-file decoded)))
+                    ;; Turn the preview upright per EXIF orientation.
+                    ;; (No-op for orientation nil or 1.)
+                    (when ok
+                      (dired-image-thumbnail--apply-orientation
+                       out-temp orientation)))
+                ;; Fallback: magick/convert -thumbnail, with
+                ;; -auto-orient so turned photos preview upright.
                 (let ((magick (or (executable-find "magick")
                                   (executable-find "convert"))))
                   (when magick
@@ -2637,6 +2780,7 @@ or partial preview is never cached."
                           (dired-image-thumbnail--process-succeeded-p
                            (call-process magick nil nil nil
                                          expanded
+                                         "-auto-orient"
                                          "-thumbnail" (format "%dx%d" width height)
                                          "-quality" quality
                                          out-temp))))))
@@ -2677,7 +2821,7 @@ rather than `dired-image-thumbnail--display-file', and crops made
 from it must not be saved over the original.")
 
 (defun dired-image-thumbnail--fit-image-spec (display-file win-width win-height
-                                                           &optional preserve-resolution)
+                                                           &optional preserve-resolution rotation)
   "Create an image spec for DISPLAY-FILE scaled to fit WIN-WIDTH x WIN-HEIGHT.
 Preserves the aspect ratio, allowing both upscaling and
 downscaling, so the preview always fills the window as much as
@@ -2690,29 +2834,48 @@ to fit the window but never upscaled.  This matters for cropping,
 because `image-crop' reads a `:width' property as a request to
 resize the source data to that width before cropping, which would
 cap the crop at the display resolution instead of the original
-file's."
-  (let ((native (ignore-errors (image-size (create-image display-file) t))))
-    (if (and native
-             (consp native)
-             (numberp (car native)) (numberp (cdr native))
-             (> (car native) 0) (> (cdr native) 0)
-             (numberp win-width) (numberp win-height)
-             (> win-width 0) (> win-height 0))
-        (let* ((iw (float (car native)))
-               (ih (float (cdr native)))
-               (s (min (/ (float win-width) iw)
-                       (/ (float win-height) ih))))
-          (if (and (numberp s) (> s 0) (not (= s 1.0))
-                   (not preserve-resolution))
-              (create-image display-file nil nil
-                            :width (max 1 (round (* iw s)))
-                            :height (max 1 (round (* ih s))))
-            (create-image display-file nil nil
-                          :max-width win-width
-                          :max-height win-height)))
-      (create-image display-file nil nil
-                    :max-width win-width
-                    :max-height win-height))))
+file's.
+
+ROTATION, when non-nil, is a display rotation in degrees -- 90,
+180 or 270 -- applied to the spec with `:rotation'.  It is used
+when an EXIF-orientated original is displayed directly (the `high'
+quality display and the crop re-display), because `create-image'
+does not read EXIF orientation the way `image-mode' does when a
+file is visited.  With a rotation the spec always uses
+`:max-width'/`:max-height', with the window dimensions swapped
+for 90/270 (the same rule `image-mode' uses): an explicit
+`:width'/`:height' would resize the stored pixels before the
+rotation is applied and distort the image.  Previews bake their
+orientation into the pixels and pass no rotation."
+  (let* ((rot (and (numberp rotation) (/= rotation 0) rotation))
+         (swap (and rot (zerop (mod (+ rot 90) 180))))
+         (fit-w (if swap win-height win-width))
+         (fit-h (if swap win-width win-height)))
+    (if rot
+        (create-image display-file nil nil
+                      :max-width fit-w :max-height fit-h :rotation rot)
+      (let ((native (ignore-errors (image-size (create-image display-file) t))))
+        (if (and native
+                 (consp native)
+                 (numberp (car native)) (numberp (cdr native))
+                 (> (car native) 0) (> (cdr native) 0)
+                 (numberp win-width) (numberp win-height)
+                 (> win-width 0) (> win-height 0))
+            (let* ((iw (float (car native)))
+                   (ih (float (cdr native)))
+                   (s (min (/ (float win-width) iw)
+                           (/ (float win-height) ih))))
+              (if (and (numberp s) (> s 0) (not (= s 1.0))
+                       (not preserve-resolution))
+                  (create-image display-file nil nil
+                                :width (max 1 (round (* iw s)))
+                                :height (max 1 (round (* ih s))))
+                (create-image display-file nil nil
+                              :max-width win-width
+                              :max-height win-height)))
+          (create-image display-file nil nil
+                        :max-width win-width
+                        :max-height win-height))))))
 
 (defun dired-image-thumbnail--display-image-fast (file &optional original-p)
   "Display FILE scaled according to `dired-image-thumbnail-display-quality'.
@@ -2723,7 +2886,13 @@ image is scaled (up or down) to fit the display window, preserving
 the aspect ratio.  When ORIGINAL-P is non-nil, always load the
 original FILE at full resolution, bypassing the preview path, so
 that a subsequent crop operates on the original rather than a
-scaled preview."
+scaled preview.  EXIF orientation is applied as a display
+rotation when the original file itself is shown (`high' quality,
+the crop re-display, or when no external tool is available so the
+original is displayed instead of a preview), so turned photos
+display upright the way `image-mode' shows them; previews bake
+the orientation into their pixels (see
+`dired-image-thumbnail--make-preview')."
   (setq file (expand-file-name file))
   (unless (file-exists-p file)
     (error "No such file: %s" file))
@@ -2743,6 +2912,15 @@ scaled preview."
          (display-file (if original-display
                            file
                          (dired-image-thumbnail--make-preview file decode-w decode-h)))
+         ;; EXIF orientation: turned photos (most phone photos taken in
+         ;; portrait) store turned pixels plus a tag saying how to turn
+         ;; them; `image-mode' applies the turn when visiting, but
+         ;; `create-image' does not, so apply it here when the original
+         ;; file itself is shown (or when no external tool was available
+         ;; and the original is displayed instead of a preview).
+         (rotation (and (or original-display
+                            (file-equal-p display-file file))
+                        (dired-image-thumbnail--exif-rotation file)))
          ;; The original file is displayed at its own resolution
          ;; (fitted to the window) and without explicit
          ;; `:width'/`:height' properties, so `image-crop' crops the
@@ -2750,7 +2928,7 @@ scaled preview."
          ;; display size.  Previews keep explicit dimensions so a
          ;; small preview still fills the window.
          (img (dired-image-thumbnail--fit-image-spec
-               display-file win-width win-height original-display)))
+               display-file win-width win-height original-display rotation)))
     (with-current-buffer buf
       ;; If this buffer was previously used by image-dired-display-image
       ;; to visit a file, sever the file visit before modifying the
@@ -3268,7 +3446,7 @@ since the display buffer is not a file-visiting buffer."
   (interactive)
   (let ((current-file
          (or (buffer-file-name)
-             (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+             (when-let* ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
                (with-current-buffer thumb-buf
                  (image-dired-original-file-name))))))
     (unless current-file
@@ -3279,7 +3457,7 @@ since the display buffer is not a file-visiting buffer."
       ;; Update internal lists and remove the thumbnail, locating it by
       ;; file name because point in the display buffer need not match
       ;; point in the thumbnail buffer.
-      (when-let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+      (when-let* ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
         (with-current-buffer thumb-buf
           (dired-image-thumbnail--drop-from-state current-file)
           (let ((origin (point))
@@ -3300,7 +3478,7 @@ since the display buffer is not a file-visiting buffer."
   "Set up the thumbnail and image windows.
 The arrangement follows `dired-image-thumbnail-window-layout'.  Called
 from `dired-image-thumbnail' after buffers have been created."
-  (when-let ((layout dired-image-thumbnail-window-layout)
+  (when-let* ((layout dired-image-thumbnail-window-layout)
              (thumb-buf (get-buffer image-dired-thumbnail-buffer)))
     (delete-other-windows)
     (if (eq layout 'thumb-only)
@@ -3412,8 +3590,8 @@ is idempotent and can be re-run to track changes to
   (advice-add 'image-dired-display-thumbs :after
               #'dired-image-thumbnail--display-thumbs-advice)
   ;; Scope C-d to the image-dired display buffer only
-  (when (keymapp image-dired-display-image-mode-map)
-    (define-key image-dired-display-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
+  (when (keymapp image-dired-image-mode-map)
+    (define-key image-dired-image-mode-map (kbd "C-d") #'dired-image-thumbnail-delete-image-and-next)))
 
 ;; Fix Emacs's `image-crop' integration in the image display buffer:
 ;; crop the original rather than a scaled preview, and keep point on the
