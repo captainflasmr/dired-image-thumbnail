@@ -69,6 +69,8 @@
 ;;   U   - Unmark all
 ;;   t   - Toggle all marks
 ;;   d   - Go to Dired buffer
+;;   W   - Open image at point externally
+;;   J   - Open marked images in gthumb (fallback: externally)
 ;;   D   - Delete image at point
 ;;   C-d - Delete image and move to next
 ;;   x   - Delete marked images
@@ -2122,26 +2124,59 @@ are refreshed afterwards."
       (dired-image-thumbnail-refresh)
       (message "Deleted %d image(s)" (length files)))))
 
+(defun dired-image-thumbnail--open-external-file (file)
+  "Open FILE in an external program.
+Uses `dired-image-thumbnail-external-editor' if set, otherwise
+the system default application.  Returns the process, if any."
+  (let ((program dired-image-thumbnail-external-editor)
+        (expanded (expand-file-name file)))
+    (if program
+        (start-process "dit-external" nil program expanded)
+      (cond
+       ((eq system-type 'gnu/linux)
+        (start-process "dit-external" nil "xdg-open" expanded))
+       ((eq system-type 'darwin)
+        (start-process "dit-external" nil "open" expanded))
+       ((memq system-type '(windows-nt cygwin ms-dos))
+        (w32-shell-execute "open" expanded)
+        nil)
+       (t (start-process "dit-external" nil "xdg-open" expanded))))))
+
 (defun dired-image-thumbnail-open-external ()
   "Open the image at point in an external editor.
 Uses `dired-image-thumbnail-external-editor' if set, otherwise
 the system default application."
   (interactive)
   (if-let* ((file (dired-image-thumbnail--nearest-image-original-file-name)))
-      (let ((program dired-image-thumbnail-external-editor)
-            (expanded (expand-file-name file)))
-        (if program
-            (start-process "dit-external" nil program expanded)
-          (cond
-           ((eq system-type 'gnu/linux)
-            (start-process "dit-external" nil "xdg-open" expanded))
-           ((eq system-type 'darwin)
-            (start-process "dit-external" nil "open" expanded))
-           ((memq system-type '(windows-nt cygwin ms-dos))
-            (w32-shell-execute "open" expanded))
-           (t (start-process "dit-external" nil "xdg-open" expanded))))
+      (progn
+        (dired-image-thumbnail--open-external-file file)
         (message "Opened %s externally" (file-name-nondirectory file)))
     (message "No image at point")))
+
+(defun dired-image-thumbnail-open-gthumb ()
+  "Open marked images in the gthumb image viewer.
+Uses the marked images, or the image at point when none are
+marked -- the thumbnail equivalent of `my/dired-open-gthumb' in
+Dired (bound to `J' there).  When gthumb is available the viewer
+is run detached via `nohup' (like in Dired) so it survives Emacs
+exit.  When gthumb is not installed, fall back to opening each
+image with `dired-image-thumbnail-external-editor' or the system
+default application."
+  (interactive)
+  (let ((files (dired-image-thumbnail-get-marked)))
+    (unless files
+      (user-error "No image at point"))
+    (if-let* ((gthumb (executable-find "gthumb")))
+        (let* ((nohup (executable-find "nohup"))
+               (proc (if nohup
+                         (apply #'start-process "dit-gthumb" nil nohup gthumb files)
+                       (apply #'start-process "dit-gthumb" nil gthumb files))))
+          (set-process-query-on-exit-flag proc nil)
+          (message "Opened %d file(s) in gthumb" (length files)))
+      (dolist (file files)
+        (dired-image-thumbnail--open-external-file file))
+      (message "gthumb not found; opened %d file(s) externally"
+               (length files)))))
 
 (defun dired-image-thumbnail-delete ()
   "Delete the image at or near point."
@@ -2436,6 +2471,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-select-display-quality)
     ;; External
     (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
+    (define-key image-dired-thumbnail-mode-map (kbd "J") #'dired-image-thumbnail-open-gthumb)
     ;; Subdirectories (insertion is normally done from dired, e.g. C-t z)
     (define-key image-dired-thumbnail-mode-map (kbd "z") #'dired-image-thumbnail-insert-subdir-recursive)
     ;; Other

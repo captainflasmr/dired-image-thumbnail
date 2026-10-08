@@ -199,6 +199,7 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 | Key   | Command                                | Description                    |
 |-------+----------------------------------------+--------------------------------|
 | =W=   | ~dired-image-thumbnail-open-external~    | Open in external editor        |
+| =J=   | ~dired-image-thumbnail-open-gthumb~      | Open marked images in gthumb   |
 | =?=   | ~dired-image-thumbnail-transient~        | Transient menu (all commands)  |
 
 *In Image Display Buffer:*

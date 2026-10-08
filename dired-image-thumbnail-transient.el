@@ -71,6 +71,7 @@
 (declare-function dired-image-thumbnail-select-display-quality "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-insert-subdir-recursive "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-open-external "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-open-gthumb "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-move "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-square-thumbnails "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-auto-display "dired-image-thumbnail")
@@ -167,6 +168,7 @@
     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
     ("W" "Open externally" dired-image-thumbnail-open-external :transient nil)
+    ("J" "Open in gthumb" dired-image-thumbnail-open-gthumb :transient nil)
     ("q" "Quit menu" transient-quit-one)]])
 
 ;;;###autoload
