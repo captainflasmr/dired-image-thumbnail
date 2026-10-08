@@ -61,6 +61,7 @@
 ;;   /   - Filter (completing-read: name/size/clear)
 ;;   g   - Refresh display
 ;;   n/p, f/b - Next/previous image (with auto-display when enabled)
+;;   C-l - Centre/top/bottom the grid around the image at point
 ;;   +/- - Increase/decrease size
 ;;   m   - Mark image (uses image-dired's native marking with border)
 ;;   u   - Unmark image
@@ -2424,6 +2425,8 @@ keybindings will not be installed.  This can happen when `image-dired'\
     ;; Enhanced navigation (auto-display checked at runtime)
     (define-key image-dired-thumbnail-mode-map (kbd "n") #'dired-image-thumbnail-next-image)
     (define-key image-dired-thumbnail-mode-map (kbd "p") #'dired-image-thumbnail-previous-image)
+    ;; Re-centre the grid around point, like `recenter-top-bottom' in text.
+    (define-key image-dired-thumbnail-mode-map (kbd "C-l") #'dired-image-thumbnail-recenter-top-bottom)
     ;; vi-style navigation aliases
     (define-key image-dired-thumbnail-mode-map (kbd "f") #'dired-image-thumbnail-next-image)
     (define-key image-dired-thumbnail-mode-map (kbd "b") #'dired-image-thumbnail-previous-image)
@@ -3420,6 +3423,26 @@ the full-size image is automatically displayed."
   (image-dired-backward-image)
   (when (dired-image-thumbnail--auto-display-p)
     (dired-image-thumbnail--display-this)))
+
+(defun dired-image-thumbnail-recenter-top-bottom (&optional arg)
+  "Re-centre the thumbnail grid around the image at point.
+Cycles the current thumbnail's row between centre, top and
+bottom, like `recenter-top-bottom' does in a text buffer, so the
+focussed image can be re-oriented after navigating the grid.
+
+With prefix ARG, behave exactly like `recenter-top-bottom' with
+that argument: a numeric ARG puts point's row ARG lines from the
+window top, while plain \\[universal-argument] always centres.
+
+When point is not on a thumbnail, first move to the nearest one,
+so the grid always re-orients around a real image."
+  (interactive "P")
+  (unless (image-dired-image-at-point-p)
+    (when-let* ((file (dired-image-thumbnail--nearest-image-original-file-name))
+                (pos (dired-image-thumbnail--position-of-file file)))
+      (goto-char pos)
+      (image-dired--update-header-line)))
+  (recenter-top-bottom arg))
 
 (defun dired-image-thumbnail-delete-and-next ()
   "Delete current image file and move to next thumbnail.
