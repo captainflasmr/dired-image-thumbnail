@@ -577,6 +577,50 @@
         (kill-buffer thumb-buf)
         (kill-buffer image-buf)))))
 
+;;; Display header dimensions
+
+(ert-deftest dit-original-dimensions-prefers-thumbnail-cache ()
+  (let* ((thumb-buf (get-buffer-create "*dit-test-dim-thumbs*"))
+         (file (expand-file-name "/tmp/dit-dim-cached.jpg"))
+         (image-dired-thumbnail-buffer "*dit-test-dim-thumbs*"))
+    (unwind-protect
+        (progn
+          (with-current-buffer thumb-buf
+            (setq dired-image-thumbnail--dimension-cache
+                  (make-hash-table :test 'equal))
+            (puthash file '(1234 . 567) dired-image-thumbnail--dimension-cache))
+          ;; The answered cache is preferred: `image-size' must not be
+          ;; consulted, so a hard error in it would fail the test.
+          (cl-letf (((symbol-function 'image-size)
+                     (lambda (&rest _) (error "must not be called"))))
+            (should (equal (dired-image-thumbnail--original-dimensions file)
+                           '(1234 . 567)))
+            (should (equal (dired-image-thumbnail--dimensions-string file)
+                           "1234x567"))))
+      (kill-buffer thumb-buf))))
+
+(ert-deftest dit-original-dimensions-image-size-fallback ()
+  (let ((file (expand-file-name "/tmp/dit-dim-fallback.jpg")))
+    (cl-letf (((symbol-function 'image-size) (lambda (&rest _) '(640 . 480))))
+      (should (equal (dired-image-thumbnail--original-dimensions file)
+                     '(640 . 480)))
+      (should (equal (dired-image-thumbnail--dimensions-string file)
+                     "640x480")))))
+
+(ert-deftest dit-original-dimensions-nil-when-unavailable ()
+  (let ((file (expand-file-name "/tmp/dit-dim-unknown.jpg")))
+    (cl-letf (((symbol-function 'image-size)
+               (lambda (&rest _) (error "no window system frame"))))
+      (should-not (dired-image-thumbnail--original-dimensions file))
+      (should (equal (dired-image-thumbnail--dimensions-string file) "?")))))
+
+(ert-deftest dit-set-display-header-shows-original-dimensions ()
+  (with-temp-buffer
+    (cl-letf (((symbol-function 'dired-image-thumbnail--original-dimensions)
+               (lambda (_file) '(800 . 600))))
+      (dired-image-thumbnail--set-display-header "/tmp/dit-header.jpg"))
+    (should (equal header-line-format " 800x600 "))))
+
 ;;; EXIF orientation
 
 (ert-deftest dit-exif-rotation-maps-codes ()

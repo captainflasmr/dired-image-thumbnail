@@ -112,6 +112,11 @@
 ;; `defvar' in the "Fast image display" section.
 (defvar dired-image-thumbnail--orientation-cache)
 
+;; Referenced by the dimension-query sentinel (see
+;; `dired-image-thumbnail--start-identify-process') before its defining
+;; `defvar-local' in the "Fast image display" section.
+(defvar dired-image-thumbnail--display-file)
+
 ;;; Customization
 
 (defgroup dired-image-thumbnail nil
@@ -657,7 +662,20 @@ scanning one character at a time."
                            (dolist (b (buffer-list))
                              (with-current-buffer b
                                (when (derived-mode-p 'image-dired-thumbnail-mode)
-                                 (image-dired--update-header-line)))))))))
+                                 (image-dired--update-header-line))))
+                           ;; Refresh the image display window's header
+                           ;; line when it is showing this file, so the
+                           ;; dimensions appear there as soon as they
+                           ;; are known.
+                           (let ((disp-buf (get-buffer image-dired-display-image-buffer)))
+                             (when (buffer-live-p disp-buf)
+                               (with-current-buffer disp-buf
+                                 (when (and dired-image-thumbnail--display-file
+                                            (equal (expand-file-name
+                                                    dired-image-thumbnail--display-file)
+                                                   (expand-file-name file-attr)))
+                                   (dired-image-thumbnail--set-display-header
+                                    dired-image-thumbnail--display-file))))))))))
                (when (buffer-live-p (process-buffer proc))
                  (kill-buffer (process-buffer proc)))
                (when (buffer-live-p thumb-buf)
@@ -800,6 +818,32 @@ This collects all marks in a single pass through the dired buffer."
     (if (and dims (> (car dims) 0) (> (cdr dims) 0))
         (format "%dx%d" (car dims) (cdr dims))
       "?")))
+
+(defun dired-image-thumbnail--original-dimensions (file)
+  "Return the original dimensions of FILE as (WIDTH . HEIGHT), or nil.
+Unlike `dired-image-thumbnail--get-image-dimensions', this does not
+queue a query in the current buffer and never returns (0 . 0):
+dimensions already queried for the thumbnail header line (see
+`dired-image-thumbnail--dimension-cache') are preferred, since that
+cache is filled asynchronously and shared with the display header
+line; otherwise the image header is read directly with `image-size',
+which is fast (it does not decode the image pixels).  Returns nil
+when neither source can provide the dimensions."
+  (let ((file (expand-file-name file)))
+    (or (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+          (when (buffer-live-p thumb-buf)
+            (with-current-buffer thumb-buf
+              (let ((dims (gethash file dired-image-thumbnail--dimension-cache)))
+                (and (consp dims)
+                     (numberp (car dims)) (numberp (cdr dims))
+                     (> (car dims) 0) (> (cdr dims) 0)
+                     dims)))))
+        (ignore-errors
+          (let ((dims (image-size (create-image file) t)))
+            (and (consp dims)
+                 (numberp (car dims)) (numberp (cdr dims))
+                 (> (car dims) 0) (> (cdr dims) 0)
+                 dims))))))
 
 (defun dired-image-thumbnail--rebuild-image-index ()
   "Rebuild the file-to-index hash from `dired-image-thumbnail--current-images'."
@@ -2916,6 +2960,26 @@ orientation into the pixels and pass no rotation."
                         :max-width win-width
                         :max-height win-height))))))
 
+(defun dired-image-thumbnail--dimensions-string (file)
+  "Return FILE's original dimensions as \"WxH\", or \"?\" when unknown.
+See `dired-image-thumbnail--original-dimensions'."
+  (if-let* ((dims (dired-image-thumbnail--original-dimensions file)))
+      (format "%dx%d" (car dims) (cdr dims))
+    "?"))
+
+(defun dired-image-thumbnail--set-display-header (file)
+  "Show FILE's original dimensions in the current buffer's header line.
+FILE is the original image file, not the possibly scaled preview
+file being displayed, so the dimensions are always those of the
+original.  Uses the `dired-image-thumbnail-header-info' face, like
+the thumbnail buffer's own header line, so the text stays readable
+on any theme."
+  (setq-local header-line-format
+              (concat " "
+                      (propertize (dired-image-thumbnail--dimensions-string file)
+                                  'face 'dired-image-thumbnail-header-info)
+                      " ")))
+
 (defun dired-image-thumbnail--display-image-fast (file &optional original-p)
   "Display FILE scaled according to `dired-image-thumbnail-display-quality'.
 For `high' quality, loads the file directly with window-fitting constraints.
@@ -2931,75 +2995,83 @@ the crop re-display, or when no external tool is available so the
 original is displayed instead of a preview), so turned photos
 display upright the way `image-mode' shows them; previews bake
 the orientation into their pixels (see
-`dired-image-thumbnail--make-preview')."
+`dired-image-thumbnail--make-preview').
+The buffer's header line shows the original image's dimensions at
+every quality level (see `dired-image-thumbnail--set-display-header')."
   (setq file (expand-file-name file))
   (unless (file-exists-p file)
     (error "No such file: %s" file))
   (let* ((scale (if original-p 1.0 (dired-image-thumbnail--quality-scale)))
          (buf (get-buffer-create image-dired-display-image-buffer))
-         (cur-win (selected-window))
-         (display-win (or (get-buffer-window buf)
-                          (progn
-                            (display-buffer buf)
-                            (get-buffer-window buf))))
-         (win-width (or (and display-win (window-body-width display-win t)) 800))
-         (win-height (or (and display-win (window-body-height display-win t)) 600))
-         (decode-w (max 1 (truncate (* win-width scale))))
-         (decode-h (max 1 (truncate (* win-height scale))))
-         ;; For high quality, load original; otherwise make a small preview
-         (original-display (>= scale 1.0))
-         (display-file (if original-display
-                           file
-                         (dired-image-thumbnail--make-preview file decode-w decode-h)))
-         ;; EXIF orientation: turned photos (most phone photos taken in
-         ;; portrait) store turned pixels plus a tag saying how to turn
-         ;; them; `image-mode' applies the turn when visiting, but
-         ;; `create-image' does not, so apply it here when the original
-         ;; file itself is shown (or when no external tool was available
-         ;; and the original is displayed instead of a preview).
-         (rotation (and (or original-display
-                            (file-equal-p display-file file))
-                        (dired-image-thumbnail--exif-rotation file)))
-         ;; The original file is displayed at its own resolution
-         ;; (fitted to the window) and without explicit
-         ;; `:width'/`:height' properties, so `image-crop' crops the
-         ;; full-resolution original rather than data rewound to the
-         ;; display size.  Previews keep explicit dimensions so a
-         ;; small preview still fills the window.
-         (img (dired-image-thumbnail--fit-image-spec
-               display-file win-width win-height original-display rotation)))
+         (cur-win (selected-window)))
+    ;; Set up the buffer before fitting the image: setting the major
+    ;; mode resets buffer-local variables, and the header line showing
+    ;; the original dimensions takes a line off the window body, which
+    ;; `window-body-height' excludes, so it must be in place first.
+    ;; Use `dired-image-thumbnail-display-mode' (special-mode) rather
+    ;; than image-dired-image-mode or image-mode: those set up
+    ;; image-fit-to-window timers that expect a file-visiting buffer
+    ;; and fail on our manually inserted image descriptor.
     (with-current-buffer buf
-      ;; If this buffer was previously used by image-dired-display-image
-      ;; to visit a file, sever the file visit before modifying the
-      ;; buffer.  Without this, erase-buffer triggers Emacs's lazy
-      ;; locking (prepare_to_modify_buffer_1 in insdel.c) which creates
-      ;; a .#filename lock symlink on the previously-displayed image.
-      ;; Clearing buffer-file-name / buffer-file-truename prevents the
-      ;; lock and also avoids a modified-buffer prompt on kill.
-      (when (buffer-file-name)
-        (set-buffer-modified-p nil)
-        (set-visited-file-name nil))
-      ;; Use special-mode for a clean read-only buffer with q to quit.
-      ;; Do NOT use image-dired-image-mode or image-mode here — they
-      ;; set up image-fit-to-window timers that expect a file-visiting
-      ;; buffer and fail on our manually inserted image descriptor.
       (unless (derived-mode-p 'dired-image-thumbnail-display-mode)
         (dired-image-thumbnail-display-mode))
-      ;; Record what this buffer shows so that cropping and saving can
-      ;; target the original file (see
-      ;; `dired-image-thumbnail-save-cropped-image').
-      (setq dired-image-thumbnail--display-file file)
-      (setq dired-image-thumbnail--display-source display-file)
-      (let ((inhibit-read-only t)
-            (create-lockfiles nil))
-        (erase-buffer)
-        (insert-image img)
-        (goto-char (point-min)))
-      (setq cursor-type nil))
-    (when display-win
-      (set-window-buffer display-win buf))
-    (select-window cur-win)
-    (dired-image-thumbnail--queue-prefetch)))
+      (dired-image-thumbnail--set-display-header file))
+    (let* ((display-win (or (get-buffer-window buf)
+                            (progn
+                              (display-buffer buf)
+                              (get-buffer-window buf))))
+           (win-width (or (and display-win (window-body-width display-win t)) 800))
+           (win-height (or (and display-win (window-body-height display-win t)) 600))
+           (decode-w (max 1 (truncate (* win-width scale))))
+           (decode-h (max 1 (truncate (* win-height scale))))
+           ;; For high quality, load original; otherwise make a small preview
+           (original-display (>= scale 1.0))
+           (display-file (if original-display
+                             file
+                           (dired-image-thumbnail--make-preview file decode-w decode-h)))
+           ;; EXIF orientation: turned photos (most phone photos taken in
+           ;; portrait) store turned pixels plus a tag saying how to turn
+           ;; them; `image-mode' applies the turn when visiting, but
+           ;; `create-image' does not, so apply it here when the original
+           ;; file itself is shown (or when no external tool was available
+           ;; and the original is displayed instead of a preview).
+           (rotation (and (or original-display
+                              (file-equal-p display-file file))
+                          (dired-image-thumbnail--exif-rotation file)))
+           ;; The original file is displayed at its own resolution
+           ;; (fitted to the window) and without explicit
+           ;; `:width'/`:height' properties, so `image-crop' crops the
+           ;; full-resolution original rather than data rewound to the
+           ;; display size.  Previews keep explicit dimensions so a
+           ;; small preview still fills the window.
+           (img (dired-image-thumbnail--fit-image-spec
+                 display-file win-width win-height original-display rotation)))
+      (with-current-buffer buf
+        ;; If this buffer was previously used by image-dired-display-image
+        ;; to visit a file, sever the file visit before modifying the
+        ;; buffer.  Without this, erase-buffer triggers Emacs's lazy
+        ;; locking (prepare_to_modify_buffer_1 in insdel.c) which creates
+        ;; a .#filename lock symlink on the previously-displayed image.
+        ;; Clearing buffer-file-name / buffer-file-truename prevents the
+        ;; lock and also avoids a modified-buffer prompt on kill.
+        (when (buffer-file-name)
+          (set-buffer-modified-p nil)
+          (set-visited-file-name nil))
+        ;; Record what this buffer shows so that cropping and saving can
+        ;; target the original file (see
+        ;; `dired-image-thumbnail-save-cropped-image').
+        (setq dired-image-thumbnail--display-file file)
+        (setq dired-image-thumbnail--display-source display-file)
+        (let ((inhibit-read-only t)
+              (create-lockfiles nil))
+          (erase-buffer)
+          (insert-image img)
+          (goto-char (point-min)))
+        (setq cursor-type nil))
+      (when display-win
+        (set-window-buffer display-win buf))
+      (select-window cur-win)
+      (dired-image-thumbnail--queue-prefetch))))
 
 ;;; Image cropping and saving
 
@@ -3138,14 +3210,17 @@ thumbnail buffer when it displays FILE."
 Sets `dired-image-thumbnail--display-file' and
 `dired-image-thumbnail--display-source' so that
 `dired-image-thumbnail-save-cropped-image' knows the original file
-when the standard display path is used (display quality `full')."
+when the standard display path is used (display quality `full'),
+and shows FILE's original dimensions in the buffer's header line
+\(see `dired-image-thumbnail--set-display-header')."
   (when (stringp file)
     (let ((file (expand-file-name file))
           (buf (get-buffer image-dired-display-image-buffer)))
       (when (buffer-live-p buf)
         (with-current-buffer buf
           (setq dired-image-thumbnail--display-file file)
-          (setq dired-image-thumbnail--display-source file))))))
+          (setq dired-image-thumbnail--display-source file)
+          (dired-image-thumbnail--set-display-header file))))))
 
 (defvar dired-image-thumbnail--prefetch-timer nil
   "Idle timer used to pre-generate preview images around the current one.")
