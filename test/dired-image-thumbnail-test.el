@@ -166,6 +166,29 @@
     (should (string-match-p "\\[128px\\]"
                             (dired-image-thumbnail--mode-line-size-string)))))
 
+(ert-deftest dit-mode-line-segments-use-mode-line-face ()
+  "Quality and size segments must follow the theme's mode-line colours.
+They use `dired-image-thumbnail-mode-line-info', which sets no
+foreground or background of its own, so the mode line supplies
+them (including `mode-line-inactive' in unselected windows)."
+  (should (eq (face-attribute 'dired-image-thumbnail-mode-line-info
+                              :foreground nil t)
+              'unspecified))
+  (should (eq (face-attribute 'dired-image-thumbnail-mode-line-info
+                              :background nil t)
+              'unspecified))
+  (with-temp-buffer
+    (setq-local dired-image-thumbnail--display-quality 'faster)
+    (let ((quality (dired-image-thumbnail--mode-line-quality-string)))
+      (should (string-match-p "\\[Q4 faster\\]" quality))
+      (should (eq (get-text-property 0 'face quality)
+                  'dired-image-thumbnail-mode-line-info)))
+    (setq-local dired-image-thumbnail--display-size 160)
+    (let ((size (dired-image-thumbnail--mode-line-size-string)))
+      (should (string-match-p "\\[160px\\]" size))
+      (should (eq (get-text-property 0 'face size)
+                  'dired-image-thumbnail-mode-line-info)))))
+
 (ert-deftest dit-setup-mode-line-inserts-segments ()
   (with-temp-buffer
     (image-dired-thumbnail-mode)

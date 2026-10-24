@@ -193,6 +193,18 @@ inherit from the `header-line' face.  Customize this face to
 adjust the colours."
   :group 'dired-image-thumbnail)
 
+(defface dired-image-thumbnail-mode-line-info
+  '((t (:weight bold)))
+  "Face used for the quality and size segments in the mode line.
+Only the weight is specified: the foreground and background are
+supplied by the mode line itself (`mode-line' for the selected
+window, `mode-line-inactive' otherwise).  The segments therefore
+always use the active theme's mode-line colours and keep the same
+contrast as the rest of the mode line, instead of depending on
+how a theme styles `mode-line-emphasis'.  Customize this face to
+adjust the emphasis."
+  :group 'dired-image-thumbnail)
+
 (defcustom dired-image-thumbnail-highlight-current-thumbnail t
   "Whether to highlight the currently selected thumbnail.
 When non-nil, the thumbnail at point is outlined using the
@@ -2548,8 +2560,11 @@ by `dired-image-thumbnail--setup-mode-line'.")
 (defun dired-image-thumbnail--mode-line-quality-string ()
   "Return the mode-line quality segment, e.g. \"[Q4 faster]\".
 Reflects `dired-image-thumbnail--current-quality', so it follows
-`Q' changes and per-directory settings automatically.  Never
-signals an error, since mode-line evaluation must not fail."
+`Q' changes and per-directory settings automatically.  The text
+uses `dired-image-thumbnail-mode-line-info', whose colours come
+from the active theme's mode line, so it stays readable with any
+theme.  Never signals an error, since mode-line evaluation must
+not fail."
   (condition-case nil
       (let ((quality (dired-image-thumbnail--current-quality)))
         (propertize (format "[Q%s %s]"
@@ -2557,7 +2572,7 @@ signals an error, since mode-line evaluation must not fail."
                                              dired-image-thumbnail--quality-choices))
                                 "?")
                             quality)
-                    'face 'mode-line-emphasis))
+                    'face 'dired-image-thumbnail-mode-line-info))
     (error "")))
 
 (defvar dired-image-thumbnail--mode-line-size
@@ -2570,14 +2585,17 @@ thumbnail buffers by `dired-image-thumbnail--setup-mode-line'.")
 (defun dired-image-thumbnail--mode-line-size-string ()
   "Return the mode-line thumbnail-size segment, e.g. \"[160px]\".
 Reflects the zoom level (`dired-image-thumbnail--display-size'), or
-image-dired's own thumbnail size when not zoomed.  Never signals an
-error, since mode-line evaluation must not fail."
+image-dired's own thumbnail size when not zoomed.  Uses the same
+theme-aware `dired-image-thumbnail-mode-line-info' face as the
+quality segment.  Never signals an error, since mode-line
+evaluation must not fail."
   (condition-case nil
       (let ((size (or dired-image-thumbnail--display-size
                       (and (numberp image-dired-thumb-size)
                            image-dired-thumb-size)
                       (dired-image-thumbnail--base-thumb-size))))
-        (propertize (format "[%dpx]" size) 'face 'mode-line-emphasis))
+        (propertize (format "[%dpx]" size)
+                    'face 'dired-image-thumbnail-mode-line-info))
     (error "")))
 
 (defun dired-image-thumbnail--setup-mode-line ()

@@ -278,7 +278,9 @@ Control the speed/fidelity trade-off when navigating with =n=/=p=:
 
 The current quality and thumbnail size are shown in the thumbnail buffer
 mode line right after the buffer name, e.g. =[Q4 faster] [160px]=.  The
-size segment follows the =+= / =-= zoom keys.
+size segment follows the =+= / =-= zoom keys.  Both segments use the mode
+line's own foreground and background, so they stay clearly readable with
+any theme.
 
 Lower quality levels use external tools (=djpeg=/=cjpeg= for JPEGs, =magick= for
 others) to generate small preview files, so Emacs decodes less data.  Press =Q=
