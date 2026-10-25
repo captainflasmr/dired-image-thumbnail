@@ -361,6 +361,152 @@ them (including `mode-line-inactive' in unselected windows)."
       (setq dired-image-thumbnail-window-ratio saved-ratio)
       (setq display-buffer-alist saved-alist))))
 
+;;; Multiple galleries
+
+(ert-deftest dit-new-gallery-names-are-paired-and-unique ()
+  (let* ((dir (file-name-as-directory (make-temp-file "dit-gallery-" t)))
+         (stem (dired-image-thumbnail--gallery-stem dir))
+         (names (dired-image-thumbnail--new-gallery-names dir)))
+    (unwind-protect
+        (progn
+          (should (string-prefix-p dired-image-thumbnail--thumbnail-buffer-prefix
+                                   (car names)))
+          (should (string-prefix-p dired-image-thumbnail--display-buffer-prefix
+                                   (cdr names)))
+          (should (string-match-p (regexp-quote stem) (car names)))
+          (should (string-match-p (regexp-quote stem) (cdr names)))
+          ;; A second gallery for a different directory must not take
+          ;; the same names.
+          (should-not (equal names
+                             (dired-image-thumbnail--new-gallery-names
+                              (file-name-as-directory
+                               (make-temp-file "dit-gallery-other-" t)))))
+          ;; An existing gallery prefix forces a fresh, non-clashing stem.
+          (let ((thumb (get-buffer-create (car names))))
+            (unwind-protect
+                (should (equal (dired-image-thumbnail--unique-gallery-stem stem)
+                               (format "%s<2>" stem)))
+              (kill-buffer thumb))))
+      (delete-directory dir t))))
+
+(ert-deftest dit-link-gallery-buffers-pairs-both-sides ()
+  (let ((thumb (get-buffer-create "*image-dired: dit-link-test*"))
+        (img (get-buffer-create
+              "*image-dired-display-image: dit-link-test*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer thumb (image-dired-thumbnail-mode))
+          (with-current-buffer img (dired-image-thumbnail-display-mode))
+          (dired-image-thumbnail--link-gallery-buffers thumb img)
+          (with-current-buffer thumb
+            (should (equal image-dired-thumbnail-buffer (buffer-name thumb)))
+            (should (equal image-dired-display-image-buffer (buffer-name img)))
+            (should (eq dired-image-thumbnail--gallery-display-buffer img))
+            (should (eq (dired-image-thumbnail--associated-display-buffer) img)))
+          (with-current-buffer img
+            (should (equal image-dired-display-image-buffer (buffer-name img)))
+            (should (equal image-dired-thumbnail-buffer (buffer-name thumb)))
+            (should (eq dired-image-thumbnail--gallery-thumbnail-buffer thumb))
+            (should (eq (dired-image-thumbnail--associated-thumbnail-buffer)
+                        thumb))))
+      (kill-buffer thumb)
+      (kill-buffer img))))
+
+(ert-deftest dit-ensure-gallery-reuses-directory-gallery ()
+  (dit--with-temp-dir dir
+    (let* ((source (file-name-as-directory dir))
+           (names (dired-image-thumbnail--new-gallery-names source))
+           (thumb (get-buffer-create (car names)))
+           (img (get-buffer-create (cdr names))))
+      (unwind-protect
+          (progn
+            (with-current-buffer thumb
+              (image-dired-thumbnail-mode)
+              (setq dired-image-thumbnail--source-dir source)
+              (setq dired-image-thumbnail--dired-buffer nil))
+            (dired-image-thumbnail--link-gallery-buffers thumb img)
+            ;; Revisiting the directory (without a live Dired buffer)
+            ;; finds the existing gallery instead of creating a new one.
+            (should (equal (dired-image-thumbnail--ensure-gallery nil source)
+                           names))
+            ;; A different directory gets different buffer names.
+            (should-not (equal (dired-image-thumbnail--ensure-gallery
+                                nil (file-name-as-directory
+                                     (make-temp-file "dit-other-" t)))
+                               names)))
+        (kill-buffer thumb)
+        (kill-buffer img)))))
+
+(ert-deftest dit-apply-layout-preserves-visible-gallery ()
+  (let* ((saved-layout dired-image-thumbnail-window-layout)
+         (old-thumb (get-buffer-create "*image-dired: dit-old*"))
+         (old-img (get-buffer-create
+                   "*image-dired-display-image: dit-old*"))
+         (new-thumb (get-buffer-create "*image-dired: dit-new*"))
+         (new-img (get-buffer-create
+                   "*image-dired-display-image: dit-new*"))
+         (source-buf (get-buffer-create "*dit-gallery-source*"))
+         (config (current-window-configuration)))
+    (unwind-protect
+        (progn
+          (with-current-buffer old-thumb (image-dired-thumbnail-mode))
+          (with-current-buffer old-img (dired-image-thumbnail-display-mode))
+          (with-current-buffer new-thumb (image-dired-thumbnail-mode))
+          (with-current-buffer new-img (dired-image-thumbnail-display-mode))
+          (setq dired-image-thumbnail-window-layout 'thumb-only)
+          (delete-other-windows)
+          (set-window-buffer (selected-window) old-thumb)
+          (let ((old-thumb-win (selected-window))
+                (old-img-win (split-window-right)))
+            (select-window old-img-win)
+            (set-window-buffer old-img-win old-img)
+            (let ((source-win (split-window-right)))
+              (select-window source-win)
+              (set-window-buffer source-win source-buf)
+              (dired-image-thumbnail--apply-layout new-thumb new-img)
+              ;; The old gallery is still visible; the new gallery was
+              ;; built elsewhere instead of replacing it.
+              (should (window-live-p old-thumb-win))
+              (should (eq (window-buffer old-thumb-win) old-thumb))
+              (should (window-live-p old-img-win))
+              (should (eq (window-buffer old-img-win) old-img))
+              (should (eq (window-buffer (selected-window)) new-thumb)))))
+      (set-window-configuration config)
+      (setq dired-image-thumbnail-window-layout saved-layout)
+      (dolist (buf (list old-thumb old-img new-thumb new-img source-buf))
+        (when (buffer-live-p buf)
+          (kill-buffer buf))))))
+
+(ert-deftest dit-goto-dired-keeps-thumbnail-window ()
+  (let* ((config (current-window-configuration))
+         (thumb (get-buffer-create "*image-dired: dit-goto*"))
+         (img (get-buffer-create
+               "*image-dired-display-image: dit-goto*"))
+         (dired-buf (get-buffer-create "*dit-goto-dired*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer thumb
+            (image-dired-thumbnail-mode)
+            (setq dired-image-thumbnail--dired-buffer dired-buf))
+          (with-current-buffer img (dired-image-thumbnail-display-mode))
+          (dired-image-thumbnail--link-gallery-buffers thumb img)
+          (delete-other-windows)
+          (set-window-buffer (selected-window) thumb)
+          (let ((img-win (split-window-right)))
+            (set-window-buffer img-win img)
+            (select-window img-win)
+            (with-current-buffer thumb
+              (dired-image-thumbnail-goto-dired))
+            ;; Dired replaces the image view, leaving the thumbnail
+            ;; grid visible in its own window.
+            (should (eq (selected-window) img-win))
+            (should (eq (window-buffer img-win) dired-buf))
+            (should (get-buffer-window thumb))))
+      (set-window-configuration config)
+      (dolist (buf (list thumb img dired-buf))
+        (when (buffer-live-p buf)
+          (kill-buffer buf))))))
+
 ;;; Subdirectory handling
 
 (ert-deftest dit-find-subdirs-cycle ()

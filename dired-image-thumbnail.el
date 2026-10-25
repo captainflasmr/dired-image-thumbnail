@@ -529,6 +529,187 @@ When showing the full-size image changes the window layout (and so
 this width), the thumbnails are refreshed so they re-align and the
 columns fit the new window width.")
 
+;; Each directory can have its own thumbnail gallery.  The upstream
+;; `image-dired' variables name buffers globally, so every gallery
+;; records its partner buffer locally; commands running with a gallery
+;; buffer current then find the right buffers instead of replacing the
+;; one global `*image-dired*' gallery.
+
+(defvar-local dired-image-thumbnail--gallery-display-buffer nil
+  "Image display buffer belonging to this thumbnail gallery.")
+(put 'dired-image-thumbnail--gallery-display-buffer 'permanent-local t)
+
+(defvar-local dired-image-thumbnail--gallery-thumbnail-buffer nil
+  "Thumbnail buffer belonging to this image display buffer.")
+(put 'dired-image-thumbnail--gallery-thumbnail-buffer 'permanent-local t)
+
+(defconst dired-image-thumbnail--thumbnail-buffer-prefix "*image-dired: "
+  "Prefix of per-gallery thumbnail buffer names.")
+
+(defconst dired-image-thumbnail--display-buffer-prefix
+  "*image-dired-display-image: "
+  "Prefix of per-gallery image display buffer names.")
+
+(defvar dired-image-thumbnail--in-gallery-command nil
+  "Non-nil while gallery buffer names are already bound for a command.")
+
+(defun dired-image-thumbnail--gallery-buffer-p (buffer)
+  "Return non-nil if BUFFER is a thumbnail or image display buffer."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (or (derived-mode-p 'image-dired-thumbnail-mode)
+             (derived-mode-p 'dired-image-thumbnail-display-mode)
+             (derived-mode-p 'image-dired-image-mode)))))
+
+(defun dired-image-thumbnail--gallery-stem (dir)
+  "Return a short, human-readable buffer-name stem for DIR."
+  (let* ((dir (directory-file-name (expand-file-name dir)))
+         (name (file-name-nondirectory dir))
+         (parent (file-name-nondirectory (file-name-directory dir))))
+    (cond ((and (stringp name) (not (string-empty-p name))) name)
+          ((and (stringp parent) (not (string-empty-p parent))) parent)
+          (t "images"))))
+
+(defun dired-image-thumbnail--unique-gallery-stem (stem)
+  "Return a variant of STEM not used by any existing gallery buffer."
+  (let ((candidate stem)
+        (counter 1))
+    (while (or (get-buffer (concat dired-image-thumbnail--thumbnail-buffer-prefix
+                                   candidate "*"))
+               (get-buffer (concat dired-image-thumbnail--display-buffer-prefix
+                                   candidate "*")))
+      (setq counter (1+ counter)
+            candidate (format "%s<%d>" stem counter)))
+    candidate))
+
+(defun dired-image-thumbnail--new-gallery-names (dir)
+  "Return a fresh (THUMBNAIL-NAME . DISPLAY-NAME) pair for DIR."
+  (let ((stem (dired-image-thumbnail--unique-gallery-stem
+               (dired-image-thumbnail--gallery-stem dir))))
+    (cons (concat dired-image-thumbnail--thumbnail-buffer-prefix stem "*")
+          (concat dired-image-thumbnail--display-buffer-prefix stem "*"))))
+
+(defun dired-image-thumbnail--find-gallery-buffer (dired-buf source-dir)
+  "Return the existing gallery thumbnail buffer for DIRED-BUF or SOURCE-DIR.
+SOURCE-DIR is matched by directory, so reopening a directory (or
+revisiting it through a new Dired buffer) reuses its gallery instead
+of creating a duplicate."
+  (catch 'found
+    (dolist (buf (buffer-list))
+      (when (with-current-buffer buf
+              (and (derived-mode-p 'image-dired-thumbnail-mode)
+                   (or (and dired-buf
+                            (eq dired-image-thumbnail--dired-buffer dired-buf))
+                       (and source-dir
+                            (equal (file-name-as-directory
+                                    (expand-file-name
+                                     (or dired-image-thumbnail--source-dir
+                                         default-directory)))
+                                   (file-name-as-directory
+                                    (expand-file-name source-dir)))))))
+        (throw 'found buf)))
+    nil))
+
+(defun dired-image-thumbnail--ensure-gallery (dired-buf source-dir)
+  "Return (THUMBNAIL-NAME . DISPLAY-NAME) for DIRED-BUF or SOURCE-DIR.
+Reuse the directory's existing gallery when there is one, otherwise
+generate a new, unique pair of buffer names."
+  (setq source-dir (file-name-as-directory
+                    (expand-file-name (or source-dir default-directory))))
+  (let ((existing (dired-image-thumbnail--find-gallery-buffer
+                   dired-buf source-dir)))
+    (if (not (buffer-live-p existing))
+        (dired-image-thumbnail--new-gallery-names source-dir)
+      (cons (buffer-name existing)
+            (with-current-buffer existing
+              (or (and (buffer-live-p dired-image-thumbnail--gallery-display-buffer)
+                       (buffer-name dired-image-thumbnail--gallery-display-buffer))
+                  (and (local-variable-p 'image-dired-display-image-buffer)
+                       (stringp image-dired-display-image-buffer)
+                       (not (string-empty-p image-dired-display-image-buffer))
+                       image-dired-display-image-buffer)
+                  (concat dired-image-thumbnail--display-buffer-prefix
+                          (dired-image-thumbnail--gallery-stem source-dir) "*")))))))
+
+(defun dired-image-thumbnail--link-gallery-buffers (thumb-buf img-buf)
+  "Record THUMB-BUF and IMG-BUF as each other's gallery partners.
+Each buffer also gets buffer-local values for image-dired's buffer
+name variables, so upstream commands run in the buffer find the
+right gallery instead of the global default buffers."
+  (let ((thumb-live (buffer-live-p thumb-buf))
+        (img-live (buffer-live-p img-buf)))
+    (when thumb-live
+      (with-current-buffer thumb-buf
+        (setq-local image-dired-thumbnail-buffer (buffer-name))
+        (when img-live
+          (setq-local image-dired-display-image-buffer (buffer-name img-buf)))
+        (when (local-variable-p 'image-dired-display-image-buffer)
+          (setq-local dired-image-thumbnail--gallery-display-buffer
+                      (and img-live img-buf)))))
+    (when img-live
+      (with-current-buffer img-buf
+        (setq-local image-dired-display-image-buffer (buffer-name))
+        (when thumb-live
+          (setq-local image-dired-thumbnail-buffer (buffer-name thumb-buf))
+          (setq-local dired-image-thumbnail--gallery-thumbnail-buffer thumb-buf)))))
+  nil)
+
+(defun dired-image-thumbnail--associated-thumbnail-buffer (&optional buffer)
+  "Return the thumbnail buffer associated with BUFFER.
+BUFFER defaults to the current buffer.  Works from a thumbnail
+buffer, from its image display buffer, and from Dired.  Falls back
+to the dynamically or globally bound `image-dired-thumbnail-buffer'."
+  (with-current-buffer (or buffer (current-buffer))
+    (or (cond
+         ((derived-mode-p 'image-dired-thumbnail-mode)
+          (current-buffer))
+         ((and (bound-and-true-p dired-image-thumbnail--gallery-thumbnail-buffer)
+               (buffer-live-p dired-image-thumbnail--gallery-thumbnail-buffer))
+          dired-image-thumbnail--gallery-thumbnail-buffer)
+         ((derived-mode-p 'dired-mode)
+          (dired-image-thumbnail--find-gallery-buffer
+           (current-buffer) default-directory)))
+        (let ((buf (and (boundp 'image-dired-thumbnail-buffer)
+                        (get-buffer image-dired-thumbnail-buffer))))
+          (and (buffer-live-p buf) buf)))))
+
+(defun dired-image-thumbnail--associated-display-buffer (&optional buffer)
+  "Return the image display buffer associated with BUFFER.
+BUFFER defaults to the current buffer.  Works from a thumbnail
+buffer, from the image display buffer itself, and from Dired.
+Falls back to the dynamically or globally bound
+`image-dired-display-image-buffer'."
+  (with-current-buffer (or buffer (current-buffer))
+    (or (cond
+         ((and (bound-and-true-p dired-image-thumbnail--gallery-display-buffer)
+               (buffer-live-p dired-image-thumbnail--gallery-display-buffer))
+          dired-image-thumbnail--gallery-display-buffer)
+         ((derived-mode-p 'dired-image-thumbnail-display-mode
+                          'image-dired-image-mode)
+          (current-buffer))
+         ((derived-mode-p 'dired-mode)
+          (when-let* ((thumb (dired-image-thumbnail--find-gallery-buffer
+                              (current-buffer) default-directory)))
+            (dired-image-thumbnail--associated-display-buffer thumb))))
+        (let ((buf (and (boundp 'image-dired-display-image-buffer)
+                        (get-buffer image-dired-display-image-buffer))))
+          (and (buffer-live-p buf) buf)))))
+
+(defun dired-image-thumbnail--display-buffer-for-thumb-buffer (thumb-buf)
+  "Return the display buffer paired with THUMB-BUF, if it exists."
+  (dired-image-thumbnail--associated-display-buffer thumb-buf))
+
+(defun dired-image-thumbnail--other-gallery-window-p (thumb-buf img-buf)
+  "Return non-nil if a window shows a gallery other than THUMB-BUF/IMG-BUF."
+  (catch 'found
+    (dolist (win (window-list nil 'nomini))
+      (let ((buf (window-buffer win)))
+        (unless (or (eq buf thumb-buf)
+                    (and img-buf (eq buf img-buf)))
+          (when (dired-image-thumbnail--gallery-buffer-p buf)
+            (throw 'found t)))))
+    nil))
+
 (defvar dired-image-thumbnail--identify-cached-command 'unchecked
   "Cached command used to query image dimensions.
 A list (PROGRAM ARGS...) or nil when no suitable ImageMagick
@@ -679,7 +860,9 @@ scanning one character at a time."
                            ;; line when it is showing this file, so the
                            ;; dimensions appear there as soon as they
                            ;; are known.
-                           (let ((disp-buf (get-buffer image-dired-display-image-buffer)))
+                           (let ((disp-buf
+                                  (dired-image-thumbnail--display-buffer-for-thumb-buffer
+                                   thumb-buf)))
                              (when (buffer-live-p disp-buf)
                                (with-current-buffer disp-buf
                                  (when (and dired-image-thumbnail--display-file
@@ -842,7 +1025,7 @@ line; otherwise the image header is read directly with `image-size',
 which is fast (it does not decode the image pixels).  Returns nil
 when neither source can provide the dimensions."
   (let ((file (expand-file-name file)))
-    (or (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+    (or (let ((thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer)))
           (when (buffer-live-p thumb-buf)
             (with-current-buffer thumb-buf
               (let ((dims (gethash file dired-image-thumbnail--dimension-cache)))
@@ -1163,6 +1346,19 @@ This is called via hook when entering `image-dired-thumbnail-mode'
 and by `dired-image-thumbnail--display-thumbs-advice' after
 `image-dired-display-thumbs', so that starting from plain
 `image-dired' also sets up the enhanced workflow."
+  ;; Give this gallery its own buffer names.  The dynamic bindings
+  ;; installed by `dired-image-thumbnail--with-gallery' (or the
+  ;; defaults when plain image-dired is used) tell us the display
+  ;; buffer name; recording both locally keeps every later command in
+  ;; this gallery independent from other galleries.
+  (setq-local image-dired-thumbnail-buffer (buffer-name))
+  (unless (local-variable-p 'image-dired-display-image-buffer)
+    (setq-local image-dired-display-image-buffer
+                (if (boundp 'image-dired-display-image-buffer)
+                    image-dired-display-image-buffer
+                  (concat dired-image-thumbnail--display-buffer-prefix
+                          (dired-image-thumbnail--gallery-stem default-directory)
+                          "*"))))
   ;; Keep the current-thumbnail highlight in step with point movement.
   (add-hook 'post-command-hook #'dired-image-thumbnail--update-current-highlight nil t)
   ;; Colour the cursor to match, buffer-locally.
@@ -1243,10 +1439,70 @@ and by `dired-image-thumbnail--display-thumbs-advice' after
   "Initialize the thumbnail buffer after `image-dired-display-thumbs'.
 `image-dired-display-thumbs' leaves the associated Dired buffer
 current, so switch to the thumbnail buffer explicitly."
-  (when-let* ((buf (get-buffer image-dired-thumbnail-buffer)))
-    (with-current-buffer buf
-      (when (derived-mode-p 'image-dired-thumbnail-mode)
-        (dired-image-thumbnail--initialize-buffer)))))
+  (let ((buf (or (and (derived-mode-p 'image-dired-thumbnail-mode)
+                      (current-buffer))
+                 (and (derived-mode-p 'dired-mode)
+                      (dired-image-thumbnail--find-gallery-buffer
+                       (current-buffer) default-directory))
+                 (get-buffer image-dired-thumbnail-buffer))))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (when (derived-mode-p 'image-dired-thumbnail-mode)
+          (dired-image-thumbnail--initialize-buffer)
+          (dired-image-thumbnail--link-gallery-buffers
+           buf (dired-image-thumbnail--associated-display-buffer buf)))))))
+
+(defun dired-image-thumbnail--with-gallery (dired-buf source-dir function)
+  "Call FUNCTION with the gallery buffer names for DIRED-BUF bound.
+SOURCE-DIR identifies the gallery when DIRED-BUF is nil.  The
+gallery is reused when it already exists, otherwise fresh unique
+buffer names are generated.  Returns (THUMB-BUF . IMG-BUF) for the
+buffers that exist afterwards."
+  (let* ((gallery (dired-image-thumbnail--ensure-gallery dired-buf source-dir))
+         (thumb-name (car gallery))
+         (img-name (cdr gallery)))
+    (let ((image-dired-thumbnail-buffer thumb-name)
+          (image-dired-display-image-buffer img-name)
+          (dired-image-thumbnail--in-gallery-command t))
+      (funcall function))
+    (let ((thumb-buf (get-buffer thumb-name))
+          (img-buf (get-buffer img-name)))
+      (when (buffer-live-p thumb-buf)
+        (dired-image-thumbnail--link-gallery-buffers thumb-buf img-buf))
+      (cons thumb-buf img-buf))))
+
+(defun dired-image-thumbnail--show-all-in-gallery (orig-fun dirname &rest args)
+  "Run `image-dired-show-all-from-dir' against DIRNAME's own gallery.
+This makes each directory opened through plain `image-dired' keep a
+separate thumbnail and display buffer instead of reusing (and
+replacing) one global gallery."
+  (if dired-image-thumbnail--in-gallery-command
+      (apply orig-fun dirname args)
+    (let* ((source-dir (cond
+                        ((stringp dirname) (expand-file-name dirname))
+                        ((consp dirname) (expand-file-name (car dirname)))
+                        (t default-directory)))
+           (dired-buf (and (derived-mode-p 'dired-mode)
+                           (equal (file-name-as-directory
+                                   (expand-file-name default-directory))
+                                  (file-name-as-directory
+                                   (expand-file-name source-dir)))
+                           (current-buffer))))
+      (dired-image-thumbnail--with-gallery
+       dired-buf source-dir
+       (lambda () (apply orig-fun dirname args))))))
+
+(defun dired-image-thumbnail--display-thumbs-in-gallery (orig-fun &rest args)
+  "Run `image-dired-display-thumbs' against the Dired buffer's gallery.
+Commands such as `image-dired-dired-display-thumbs' then append to
+the gallery belonging to the current directory rather than the
+global default gallery."
+  (if (or dired-image-thumbnail--in-gallery-command
+          (not (derived-mode-p 'dired-mode)))
+      (apply orig-fun args)
+    (dired-image-thumbnail--with-gallery
+     (current-buffer) default-directory
+     (lambda () (apply orig-fun args)))))
 
 ;;; Header line
 
@@ -1754,9 +2010,9 @@ externally are regenerated even if their thumbnails previously failed."
 
 (defun dired-image-thumbnail-refresh-current-display ()
   "Refresh the full-size image display if it's active.
-Updates the `image-dired-display-image-buffer' based on the image at point
+Updates the gallery's image display buffer based on the image at point
 in the thumbnail buffer."
-  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+  (let ((thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer)))
     (when (and thumb-buf (buffer-live-p thumb-buf))
       (with-current-buffer thumb-buf
         (when (derived-mode-p 'image-dired-thumbnail-mode)
@@ -1765,9 +2021,10 @@ in the thumbnail buffer."
 (defun dired-image-thumbnail-hide-display ()
   "Hide the full-size image display window and kill its buffer.
 Killing the buffer (rather than burying it) releases the image data
-from memory and removes any lock file on the visited image."
+from memory and removes any lock file on the visited image.  Only
+the current gallery's display buffer is affected."
   (interactive)
-  (let ((buf (get-buffer image-dired-display-image-buffer)))
+  (let ((buf (dired-image-thumbnail--associated-display-buffer)))
     (when (and buf (buffer-live-p buf))
       (let ((win (get-buffer-window buf)))
         (when win
@@ -2144,13 +2401,29 @@ are refreshed afterwards."
                moved (if (= moved 1) "" "s") target))))
 
 (defun dired-image-thumbnail-goto-dired ()
-  "Switch to the associated Dired buffer."
+  "Switch to the associated Dired buffer.
+When this gallery's image display window is visible, Dired is shown
+there, so the thumbnail grid stays visible while choosing another
+directory.  Otherwise fall back to `pop-to-buffer'."
   (interactive)
-  (if (and dired-image-thumbnail--dired-buffer
-           (buffer-live-p dired-image-thumbnail--dired-buffer))
-      (pop-to-buffer dired-image-thumbnail--dired-buffer)
-    (when dired-image-thumbnail--source-dir
-      (dired dired-image-thumbnail--source-dir))))
+  (let ((dired-buf (and dired-image-thumbnail--dired-buffer
+                        (buffer-live-p dired-image-thumbnail--dired-buffer)
+                        dired-image-thumbnail--dired-buffer)))
+    (cond
+     ((null dired-buf)
+      (when dired-image-thumbnail--source-dir
+        (dired dired-image-thumbnail--source-dir)))
+     ((get-buffer-window dired-buf)
+      (select-window (get-buffer-window dired-buf)))
+     (t
+      (let ((win (get-buffer-window
+                  (dired-image-thumbnail--associated-display-buffer)
+                  (selected-frame))))
+        (if (window-live-p win)
+            (progn
+              (select-window win)
+              (switch-to-buffer dired-buf))
+          (pop-to-buffer dired-buf)))))))
 
 (defun dired-image-thumbnail-get-marked ()
   "Return list of marked images, or image at/near point if none marked."
@@ -2355,6 +2628,10 @@ The display quality, sort order, filter and thumbnail size
 remembered for this directory in its `.dir-locals.el' (see
 `dired-image-thumbnail-save-dir-settings') are restored.
 
+Each directory gets its own thumbnail and image display buffers, so
+galleries of other directories stay open and can be displayed at the
+same time.  Reopening the same directory reuses its gallery.
+
 This works with inserted subdirectories - use \\`i' (`dired-maybe-insert-subdir')
 to insert subdirectories before calling this command to include images from
 those subdirectories. See `dired-image-thumbnail-insert-subdir-recursive'
@@ -2365,49 +2642,70 @@ enhanced features like sorting and filtering."
   (interactive)
   (unless (derived-mode-p 'dired-mode)
     (user-error "Not in a dired buffer"))
-  (let ((dired-buf (current-buffer))
-        (source-dir default-directory)
-        ;; More than one entry in `dired-subdir-alist' means subdirectories
-        ;; have been inserted, so images may live below `source-dir'.
-        (recursive (> (length dired-subdir-alist) 1)))
+  (let* ((dired-buf (current-buffer))
+         (source-dir default-directory)
+         ;; More than one entry in `dired-subdir-alist' means subdirectories
+         ;; have been inserted, so images may live below `source-dir'.
+         (recursive (> (length dired-subdir-alist) 1))
+         ;; Reuse this directory's gallery when it exists, otherwise
+         ;; create a new pair of buffers.  Galleries of other
+         ;; directories are left untouched.
+         (gallery (dired-image-thumbnail--ensure-gallery dired-buf source-dir))
+         (thumb-name (car gallery))
+         (img-name (cdr gallery)))
     ;; Store state for our hooks to use
     (setq-local dired-image-thumbnail--source-dir source-dir)
     (setq-local dired-image-thumbnail--dired-buffer dired-buf)
-    
-    ;; Call vanilla image-dired which will trigger our hooks and enhancements
-    (call-interactively 'image-dired)
-    
+
+    ;; Call vanilla image-dired with this directory's own buffer names.
+    ;; Binding them dynamically covers the whole call, including the
+    ;; final `pop-to-buffer' in `image-dired-show-all-from-dir'.
+    (let ((image-dired-thumbnail-buffer thumb-name)
+          (image-dired-display-image-buffer img-name)
+          ;; Let the thumbnail replace the current (Dired) window rather
+          ;; than letting `display-buffer-alist' pick a window: the
+          ;; layout below builds the gallery, and must not disturb any
+          ;; gallery that is already on screen.
+          (display-buffer-overriding-action '(display-buffer-same-window))
+          (dired-image-thumbnail--in-gallery-command t))
+      (image-dired source-dir))
+
     ;; Now refresh the thumbnail buffer with our enhancements
-    ;; We need to find the thumbnail buffer first
-    (when-let* ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
-      (with-current-buffer thumb-buf
-        ;; Reset state so initialization re-scans from the new dired buffer
-        (setq dired-image-thumbnail--all-images nil)
-        (setq dired-image-thumbnail--current-images nil)
-        (dired-image-thumbnail--rebuild-image-index)
-        (setq dired-image-thumbnail--resize-pending nil)
-        (clrhash dired-image-thumbnail--thumb-queued)
-        (setq dired-image-thumbnail--dired-buffer dired-buf)
-        (setq dired-image-thumbnail--source-dir source-dir)
-        (setq dired-image-thumbnail--recursive recursive)
-        (setq dired-image-thumbnail--filter-name nil)
-        (setq dired-image-thumbnail--filter-size-min nil)
-        (setq dired-image-thumbnail--filter-size-max nil)
-        ;; Restore the quality, sort, filter and size choices
-        ;; remembered for this directory (if any).
-        (dired-image-thumbnail--apply-dir-settings))
-      ;; Refresh display-buffer rules so they track the current layout/ratio
-      ;; custom values, then apply the layout BEFORE refresh so that line-up
-      ;; sees the correct (narrower) window width for column calculation.
-      (dired-image-thumbnail-setup-display-buffer)
-      (dired-image-thumbnail--apply-layout)
-      (with-current-buffer thumb-buf
-        (dired-image-thumbnail-refresh)
-        (goto-char (point-min))
-        ;; Show an initial preview of the first image when follow
-        ;; (auto-display) is enabled, so stepping through starts at once.
-        (when (dired-image-thumbnail--auto-display-p)
-          (dired-image-thumbnail--display-this))))))
+    (when-let* ((thumb-buf (get-buffer thumb-name)))
+      (let ((img-buf (and (not (eq dired-image-thumbnail-window-layout
+                                     'thumb-only))
+                          (get-buffer-create img-name))))
+        ;; Record the pairing in both buffers so later commands and
+        ;; timers operate on this gallery only.
+        (dired-image-thumbnail--link-gallery-buffers thumb-buf img-buf)
+        (with-current-buffer thumb-buf
+          ;; Reset state so initialization re-scans from the new dired buffer
+          (setq dired-image-thumbnail--all-images nil)
+          (setq dired-image-thumbnail--current-images nil)
+          (dired-image-thumbnail--rebuild-image-index)
+          (setq dired-image-thumbnail--resize-pending nil)
+          (clrhash dired-image-thumbnail--thumb-queued)
+          (setq dired-image-thumbnail--dired-buffer dired-buf)
+          (setq dired-image-thumbnail--source-dir source-dir)
+          (setq dired-image-thumbnail--recursive recursive)
+          (setq dired-image-thumbnail--filter-name nil)
+          (setq dired-image-thumbnail--filter-size-min nil)
+          (setq dired-image-thumbnail--filter-size-max nil)
+          ;; Restore the quality, sort, filter and size choices
+          ;; remembered for this directory (if any).
+          (dired-image-thumbnail--apply-dir-settings))
+        ;; Refresh display-buffer rules so they track the current layout/ratio
+        ;; custom values, then apply the layout BEFORE refresh so that line-up
+        ;; sees the correct (narrower) window width for column calculation.
+        (dired-image-thumbnail-setup-display-buffer)
+        (dired-image-thumbnail--apply-layout thumb-buf img-buf)
+        (with-current-buffer thumb-buf
+          (dired-image-thumbnail-refresh)
+          (goto-char (point-min))
+          ;; Show an initial preview of the first image when follow
+          ;; (auto-display) is enabled, so stepping through starts at once.
+          (when (dired-image-thumbnail--auto-display-p)
+            (dired-image-thumbnail--display-this)))))))
 
 (defun dired-image-thumbnail--subdir-target-buffer ()
   "Return the dired buffer that subdirectory commands should act on.
@@ -3021,6 +3319,7 @@ every quality level (see `dired-image-thumbnail--set-display-header')."
     (error "No such file: %s" file))
   (let* ((scale (if original-p 1.0 (dired-image-thumbnail--quality-scale)))
          (buf (get-buffer-create image-dired-display-image-buffer))
+         (thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer))
          (cur-win (selected-window)))
     ;; Set up the buffer before fitting the image: setting the major
     ;; mode resets buffer-local variables, and the header line showing
@@ -3033,6 +3332,11 @@ every quality level (see `dired-image-thumbnail--set-display-header')."
     (with-current-buffer buf
       (unless (derived-mode-p 'dired-image-thumbnail-display-mode)
         (dired-image-thumbnail-display-mode))
+      ;; Keep the two gallery buffers paired, so commands run from
+      ;; either one find this gallery rather than another gallery's
+      ;; buffers (or the global defaults).
+      (when (buffer-live-p thumb-buf)
+        (dired-image-thumbnail--link-gallery-buffers thumb-buf buf))
       (dired-image-thumbnail--set-display-header file))
     (let* ((display-win (or (get-buffer-window buf)
                             (progn
@@ -3152,10 +3456,12 @@ Called after saving a crop so that focus returns to the thumbnail
 grid and browsing can continue.  Does nothing when the thumbnail
 buffer is not displayed on the selected frame or is already the
 current buffer."
-  (let ((win (get-buffer-window image-dired-thumbnail-buffer)))
-    (when (and win
-               (not (eq (window-buffer win) (current-buffer))))
-      (select-window win))))
+  (let ((thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer)))
+    (when (buffer-live-p thumb-buf)
+      (let ((win (get-buffer-window thumb-buf)))
+        (when (and win
+                   (not (eq (window-buffer win) (current-buffer))))
+          (select-window win))))))
 
 (defun dired-image-thumbnail-save-cropped-image (&optional ask-file)
   "Save the image cropped in this buffer over its original file.
@@ -3216,7 +3522,7 @@ thumbnail buffer when it displays FILE."
   ;; `clear-image-cache' signals on non-graphical frames (e.g. batch).
   (ignore-errors (clear-image-cache))
   (dired-image-thumbnail-invalidate-files (list file))
-  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+  (let ((thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer)))
     (when (buffer-live-p thumb-buf)
       (with-current-buffer thumb-buf
         (when (and (derived-mode-p 'image-dired-thumbnail-mode)
@@ -3232,42 +3538,73 @@ when the standard display path is used (display quality `full'),
 and shows FILE's original dimensions in the buffer's header line
 \(see `dired-image-thumbnail--set-display-header')."
   (when (stringp file)
-    (let ((file (expand-file-name file))
-          (buf (get-buffer image-dired-display-image-buffer)))
+    (let* ((file (expand-file-name file))
+           (thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer))
+           (buf (dired-image-thumbnail--associated-display-buffer)))
       (when (buffer-live-p buf)
         (with-current-buffer buf
+          ;; Pair this display buffer with the gallery that produced it,
+          ;; so C-d, cropping and saving stay inside the gallery.
+          (when (buffer-live-p thumb-buf)
+            (setq-local image-dired-thumbnail-buffer (buffer-name thumb-buf))
+            (setq-local dired-image-thumbnail--gallery-thumbnail-buffer thumb-buf))
+          (setq-local image-dired-display-image-buffer (buffer-name))
           (setq dired-image-thumbnail--display-file file)
           (setq dired-image-thumbnail--display-source file)
           (dired-image-thumbnail--set-display-header file))))))
 
-(defvar dired-image-thumbnail--prefetch-timer nil
+(defvar-local dired-image-thumbnail--prefetch-timer nil
   "Idle timer used to pre-generate preview images around the current one.")
 
 (defun dired-image-thumbnail--decode-dimensions ()
   "Return (WIDTH . HEIGHT) to decode previews at for the display window."
   (let* ((scale (or (dired-image-thumbnail--quality-scale) 0.5))
-         (win (get-buffer-window image-dired-display-image-buffer t))
+         (img-buf (dired-image-thumbnail--associated-display-buffer))
+         (win (and img-buf (get-buffer-window img-buf t)))
          (win-width (or (and win (window-body-width win t)) 800))
          (win-height (or (and win (window-body-height win t)) 600)))
     (cons (max 1 (truncate (* win-width scale)))
           (max 1 (truncate (* win-height scale))))))
 
-(defvar dired-image-thumbnail--thumb-regen-timer nil
+(defvar-local dired-image-thumbnail--thumb-regen-timer nil
   "Idle timer for the deferred thumbnail-cache regeneration.")
 
-(defvar dired-image-thumbnail--thumb-queue-poll-timer nil
+(defvar-local dired-image-thumbnail--thumb-queue-poll-timer nil
   "Timer polling the thumbnail creation queue.
 While the queue is busy the buffer is refreshed as thumbnails
 appear, and once it drains a final refresh is done, so generated
 thumbnails show up without ever blocking the display.")
 
+(defun dired-image-thumbnail--timer-for-buffer (buffer function interval repeat)
+  "Arrange for FUNCTION to run in BUFFER every INTERVAL seconds.
+When REPEAT is nil run only once.  The returned timer cancels
+itself if BUFFER has been killed, so per-gallery timers do not
+outlive their buffer."
+  (let (timer)
+    (setq timer
+          (if repeat
+              (run-with-timer
+               interval interval
+               (lambda ()
+                 (if (buffer-live-p buffer)
+                     (with-current-buffer buffer (funcall function))
+                   (cancel-timer timer))))
+            (run-with-idle-timer
+             interval repeat
+             (lambda ()
+               (if (buffer-live-p buffer)
+                   (with-current-buffer buffer (funcall function))
+                 (cancel-timer timer))))))
+    timer))
+
 (defun dired-image-thumbnail--arm-queue-poll ()
   "Poll the thumbnail creation queue, refreshing as thumbnails appear."
   (when dired-image-thumbnail--thumb-queue-poll-timer
     (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer))
-  (setq dired-image-thumbnail--thumb-queue-poll-timer
-        (run-with-timer 0.3 0.3
-                        #'dired-image-thumbnail--poll-thumb-queue)))
+  (setq-local dired-image-thumbnail--thumb-queue-poll-timer
+              (dired-image-thumbnail--timer-for-buffer
+               (current-buffer) #'dired-image-thumbnail--poll-thumb-queue
+               0.3 t)))
 
 (defun dired-image-thumbnail--thumb-queued-appeared-p ()
   "Return non-nil if any queued thumbnail has appeared on disk."
@@ -3295,23 +3632,20 @@ thumbnail has appeared on disk, so thumbnails \"come in\" instead of
 leaving a grid of placeholders until the very end.  During a deferred
 resize (`dired-image-thumbnail--resize-pending') only the final
 refresh happens, so the current thumbnails stay on screen until the
-new size is ready.  Once the queue drains a final refresh is done."
-  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
-    (if (or image-dired-queue (> image-dired-queue-active-jobs 0))
-        (when (and thumb-buf (buffer-live-p thumb-buf))
-          (with-current-buffer thumb-buf
-            (when (and (derived-mode-p 'image-dired-thumbnail-mode)
-                       (null dired-image-thumbnail--resize-pending)
-                       (dired-image-thumbnail--thumb-queued-appeared-p))
-              (dired-image-thumbnail-refresh))))
-      (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer)
-      (setq dired-image-thumbnail--thumb-queue-poll-timer nil)
-      (when (and thumb-buf (buffer-live-p thumb-buf))
-        (with-current-buffer thumb-buf
-          (when (derived-mode-p 'image-dired-thumbnail-mode)
-            (setq dired-image-thumbnail--resize-pending nil)
-            (clrhash dired-image-thumbnail--thumb-queued)
-            (dired-image-thumbnail-refresh)))))))
+new size is ready.  Once the queue drains a final refresh is done.
+Runs in the gallery's own thumbnail buffer."
+  (if (or image-dired-queue (> image-dired-queue-active-jobs 0))
+      (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                 (null dired-image-thumbnail--resize-pending)
+                 (dired-image-thumbnail--thumb-queued-appeared-p))
+        (dired-image-thumbnail-refresh))
+    (when (timerp dired-image-thumbnail--thumb-queue-poll-timer)
+      (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer))
+    (setq dired-image-thumbnail--thumb-queue-poll-timer nil)
+    (when (derived-mode-p 'image-dired-thumbnail-mode)
+      (setq dired-image-thumbnail--resize-pending nil)
+      (clrhash dired-image-thumbnail--thumb-queued)
+      (dired-image-thumbnail-refresh))))
 
 (defun dired-image-thumbnail--placeholder-file ()
   "Return the path of a gray placeholder thumbnail image, creating it if needed.
@@ -3342,91 +3676,95 @@ the grid and point stay valid instead of showing a blank buffer."
   "Queue a background regeneration of thumbnails at the display size.
 The stale-sized cached thumbnails stay visible until the
 regeneration replaces them, so the thumbnail buffer is never blank
-while the new sizes are generated."
+while the new sizes are generated.  The timer belongs to the
+current gallery, so resizing one gallery does not cancel another
+gallery's pending regeneration."
   (when dired-image-thumbnail--thumb-regen-timer
     (cancel-timer dired-image-thumbnail--thumb-regen-timer))
-  (setq dired-image-thumbnail--thumb-regen-timer
-        (run-with-idle-timer 1.0 nil
-                             #'dired-image-thumbnail--regenerate-thumbs)))
+  (setq-local dired-image-thumbnail--thumb-regen-timer
+              (dired-image-thumbnail--timer-for-buffer
+               (current-buffer) #'dired-image-thumbnail--regenerate-thumbs
+               1.0 nil)))
 
 (defun dired-image-thumbnail--regenerate-thumbs ()
   "Regenerate cached thumbnails at `dired-image-thumbnail--display-size'.
 The stale-sized cached files are replaced in the background; the
 buffer keeps showing the current thumbnails until the new ones are
-ready, so no placeholder thumbnails flash up during a resize."
+ready, so no placeholder thumbnails flash up during a resize.
+Runs in the gallery's own thumbnail buffer."
   (setq dired-image-thumbnail--thumb-regen-timer nil)
-  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
-    (when (and thumb-buf (buffer-live-p thumb-buf))
-      (with-current-buffer thumb-buf
-        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
-                   (numberp dired-image-thumbnail--display-size)
-                   (numberp dired-image-thumbnail--thumbs-generated-at)
-                   (/= dired-image-thumbnail--display-size
-                       dired-image-thumbnail--thumbs-generated-at))
-          (if (dired-image-thumbnail--thumbnails-busy-p)
-              (dired-image-thumbnail--queue-thumb-regeneration)
-            ;; Generate at the new size.  The old (already decoded)
-            ;; thumbnails stay on screen until the queue drains, at which
-            ;; point the poll refresh swaps them for the new size.
-            (setq-local image-dired-thumb-size
-                        dired-image-thumbnail--display-size)
-            (dolist (file dired-image-thumbnail--current-images)
-              (let ((thumb-file (image-dired-thumb-name file)))
-                (when (file-exists-p thumb-file)
-                  (delete-file thumb-file)))
-              (let ((square-file (dired-image-thumbnail--square-thumb-name file)))
-                (when (file-exists-p square-file)
-                  (delete-file square-file))))
-            (setq dired-image-thumbnail--thumbs-generated-at
+  (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+             (numberp dired-image-thumbnail--display-size)
+             (numberp dired-image-thumbnail--thumbs-generated-at)
+             (/= dired-image-thumbnail--display-size
+                 dired-image-thumbnail--thumbs-generated-at))
+    (if (dired-image-thumbnail--thumbnails-busy-p)
+        (dired-image-thumbnail--queue-thumb-regeneration)
+      ;; Generate at the new size.  The old (already decoded)
+      ;; thumbnails stay on screen until the queue drains, at which
+      ;; point the poll refresh swaps them for the new size.
+      (setq-local image-dired-thumb-size
                   dired-image-thumbnail--display-size)
-            (setq dired-image-thumbnail--resize-pending t)
-            (dolist (file dired-image-thumbnail--current-images)
-              (let ((thumb-file (image-dired-thumb-name file)))
-                (puthash file t dired-image-thumbnail--thumb-queued)
-                (image-dired-create-thumb file thumb-file)))
-            (dired-image-thumbnail--arm-queue-poll)))))))
+      (dolist (file dired-image-thumbnail--current-images)
+        (let ((thumb-file (image-dired-thumb-name file)))
+          (when (file-exists-p thumb-file)
+            (delete-file thumb-file)))
+        (let ((square-file (dired-image-thumbnail--square-thumb-name file)))
+          (when (file-exists-p square-file)
+            (delete-file square-file))))
+      (setq dired-image-thumbnail--thumbs-generated-at
+            dired-image-thumbnail--display-size)
+      (setq dired-image-thumbnail--resize-pending t)
+      (dolist (file dired-image-thumbnail--current-images)
+        (let ((thumb-file (image-dired-thumb-name file)))
+          (puthash file t dired-image-thumbnail--thumb-queued)
+          (image-dired-create-thumb file thumb-file)))
+      (dired-image-thumbnail--arm-queue-poll))))
 
 (defun dired-image-thumbnail--queue-prefetch ()
-  "Queue idle-time pre-generation of previews around the current image."
-  (when dired-image-thumbnail--prefetch-timer
-    (cancel-timer dired-image-thumbnail--prefetch-timer))
-  (setq dired-image-thumbnail--prefetch-timer
-        (run-with-idle-timer 0.3 nil #'dired-image-thumbnail--prefetch-neighbors)))
+  "Queue idle-time pre-generation of previews around the current image.
+The timer is attached to this gallery's thumbnail buffer, so
+prefetching for one gallery does not affect another."
+  (when-let* ((thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer)))
+    (with-current-buffer thumb-buf
+      (when dired-image-thumbnail--prefetch-timer
+        (cancel-timer dired-image-thumbnail--prefetch-timer))
+      (setq-local dired-image-thumbnail--prefetch-timer
+                  (dired-image-thumbnail--timer-for-buffer
+                   (current-buffer) #'dired-image-thumbnail--prefetch-neighbors
+                   0.3 nil)))))
 
 (defun dired-image-thumbnail--prefetch-neighbors ()
   "Pre-generate previews for the images adjacent to the current one.
 Runs on an idle timer so that navigation in follow mode usually
 lands on images whose preview already exists and can be shown
 instantly.  Generation stops early when the current image changes
-while it runs."
-  (let ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
-    (when (and thumb-buf (buffer-live-p thumb-buf))
-      (with-current-buffer thumb-buf
-        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
-                   (let ((scale (dired-image-thumbnail--quality-scale)))
-                     (and scale (< scale 1.0))))
-          (let* ((file (image-dired-original-file-name))
-                 (idx (and file
-                           (gethash file dired-image-thumbnail--image-index)))
-                  (offsets (if (eq (dired-image-thumbnail--current-quality) 'draft)
-                               '(1 -1 2 -2)
-                             '(1 -1)))
-                 (dims (dired-image-thumbnail--decode-dimensions))
-                 (width (car dims))
-                 (height (cdr dims)))
-            (when idx
-              (dolist (offset offsets)
-                (let ((nb (and (>= (+ idx offset) 0)
-                               (nth (+ idx offset)
-                                    dired-image-thumbnail--current-images))))
-                  (when (and nb (file-exists-p nb)
-                             (equal (image-dired-original-file-name) file)
-                             (not (file-exists-p
-                                   (dired-image-thumbnail--preview-path
-                                    nb width))))
-                    (ignore-errors
-                      (dired-image-thumbnail--make-preview
-                       nb width height))))))))))))
+while it runs.  Runs in the gallery's own thumbnail buffer."
+  (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+             (let ((scale (dired-image-thumbnail--quality-scale)))
+               (and scale (< scale 1.0))))
+    (let* ((file (image-dired-original-file-name))
+           (idx (and file
+                     (gethash file dired-image-thumbnail--image-index)))
+           (offsets (if (eq (dired-image-thumbnail--current-quality) 'draft)
+                        '(1 -1 2 -2)
+                      '(1 -1)))
+           (dims (dired-image-thumbnail--decode-dimensions))
+           (width (car dims))
+           (height (cdr dims)))
+      (when idx
+        (dolist (offset offsets)
+          (let ((nb (and (>= (+ idx offset) 0)
+                         (nth (+ idx offset)
+                              dired-image-thumbnail--current-images))))
+            (when (and nb (file-exists-p nb)
+                       (equal (image-dired-original-file-name) file)
+                       (not (file-exists-p
+                             (dired-image-thumbnail--preview-path
+                              nb width))))
+              (ignore-errors
+                (dired-image-thumbnail--make-preview
+                 nb width height)))))))))
 
 (defun dired-image-thumbnail--maybe-realign ()
   "Refresh thumbnails when the thumbnail window width has changed.
@@ -3511,7 +3849,7 @@ buffer is not itself a thumbnail buffer, so the `F' toggle applies
 to commands run from the image display buffer too."
   (if (derived-mode-p 'image-dired-thumbnail-mode)
       dired-image-thumbnail-auto-display-on-navigate
-    (let ((buf (get-buffer image-dired-thumbnail-buffer)))
+    (let ((buf (dired-image-thumbnail--associated-thumbnail-buffer)))
       (if (buffer-live-p buf)
           (buffer-local-value 'dired-image-thumbnail-auto-display-on-navigate buf)
         dired-image-thumbnail-auto-display-on-navigate))))
@@ -3598,7 +3936,8 @@ since the display buffer is not a file-visiting buffer."
   (interactive)
   (let ((current-file
          (or (buffer-file-name)
-             (when-let* ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+             (when-let* ((thumb-buf
+                          (dired-image-thumbnail--associated-thumbnail-buffer)))
                (with-current-buffer thumb-buf
                  (image-dired-original-file-name))))))
     (unless current-file
@@ -3609,7 +3948,8 @@ since the display buffer is not a file-visiting buffer."
       ;; Update internal lists and remove the thumbnail, locating it by
       ;; file name because point in the display buffer need not match
       ;; point in the thumbnail buffer.
-      (when-let* ((thumb-buf (get-buffer image-dired-thumbnail-buffer)))
+      (when-let* ((thumb-buf
+                   (dired-image-thumbnail--associated-thumbnail-buffer)))
         (with-current-buffer thumb-buf
           (dired-image-thumbnail--drop-from-state current-file)
           (let ((origin (point))
@@ -3626,32 +3966,69 @@ since the display buffer is not a file-visiting buffer."
 
 ;;; Window layout management
 
-(defun dired-image-thumbnail--apply-layout ()
-  "Set up the thumbnail and image windows.
-The arrangement follows `dired-image-thumbnail-window-layout'.  Called
-from `dired-image-thumbnail' after buffers have been created."
+(defun dired-image-thumbnail--apply-layout (&optional thumb-buf img-buf)
+  "Set up the thumbnail and image windows for one gallery.
+THUMB-BUF and IMG-BUF default to the current buffer's gallery
+buffers.  The arrangement follows
+`dired-image-thumbnail-window-layout'.  When another gallery is
+already displayed its windows are kept, so several galleries can
+be visible at once; the new gallery is then built in the current
+window instead of taking over the whole frame."
   (when-let* ((layout dired-image-thumbnail-window-layout)
-             (thumb-buf (get-buffer image-dired-thumbnail-buffer)))
-    (delete-other-windows)
-    (if (eq layout 'thumb-only)
-        (switch-to-buffer thumb-buf)
-      (let* ((ratio (or dired-image-thumbnail-window-ratio 0.4))
-             (horizontal (memq layout '(left-right right-left)))
-             (thumb-first (memq layout '(left-right top-bottom)))
-             (img-buf (get-buffer-create image-dired-display-image-buffer))
-             (first-buf (if thumb-first thumb-buf img-buf))
-             (second-buf (if thumb-first img-buf thumb-buf))
-             (size (if horizontal
-                       (round (* (frame-width) (if thumb-first ratio (- 1.0 ratio))))
-                     (round (* (frame-height) (if thumb-first ratio (- 1.0 ratio)))))))
-        (switch-to-buffer first-buf)
-        (if horizontal
-            (split-window-right size)
-          (split-window-below size))
-        (other-window 1)
-        (switch-to-buffer second-buf)
-        ;; Leave focus on the thumbnail buffer
-        (select-window (get-buffer-window thumb-buf))))))
+              (thumb-buf (or (and (buffer-live-p thumb-buf) thumb-buf)
+                             (dired-image-thumbnail--associated-thumbnail-buffer))))
+    (let* ((frame (selected-frame))
+           (other-gallery
+            (dired-image-thumbnail--other-gallery-window-p thumb-buf img-buf))
+           (thumb-win (get-buffer-window thumb-buf frame))
+           (img-win (and img-buf (get-buffer-window img-buf frame))))
+      (if (and thumb-win
+               (or (eq layout 'thumb-only) img-win))
+          ;; This gallery is already laid out; just focus it.
+          (select-window thumb-win)
+        (let ((base (or thumb-win (selected-window))))
+          (select-window base)
+          (unless other-gallery
+            (delete-other-windows))
+          (if (eq layout 'thumb-only)
+              (switch-to-buffer thumb-buf)
+            (let* ((ratio (or dired-image-thumbnail-window-ratio 0.4))
+                   (horizontal (memq layout '(left-right right-left)))
+                   (thumb-first (memq layout '(left-right top-bottom)))
+                   (img-buf (or (and (buffer-live-p img-buf) img-buf)
+                                (get-buffer-create
+                                 image-dired-display-image-buffer)))
+                   (first-buf (if thumb-first thumb-buf img-buf))
+                   (second-buf (if thumb-first img-buf thumb-buf))
+                   (size (if horizontal
+                             (round (* (frame-width)
+                                       (if thumb-first ratio (- 1.0 ratio))))
+                           (round (* (frame-height)
+                                     (if thumb-first ratio (- 1.0 ratio)))))))
+              (dired-image-thumbnail--link-gallery-buffers thumb-buf img-buf)
+              (switch-to-buffer first-buf)
+              (let ((new-win
+                     (or (ignore-errors
+                           (if horizontal
+                               (split-window-right size)
+                             (split-window-below size)))
+                         ;; The frame may be too narrow for the
+                         ;; configured ratio (for example when another
+                         ;; gallery already fills part of it); an even
+                         ;; split still gives this gallery its own image
+                         ;; window instead of stealing a neighbour's.
+                         (ignore-errors
+                           (if horizontal
+                               (split-window-right)
+                             (split-window-below))))))
+                (when new-win
+                  (select-window new-win)
+                  (switch-to-buffer second-buf)))
+              (unless (get-buffer-window thumb-buf frame)
+                (switch-to-buffer thumb-buf))
+              ;; Leave focus on the thumbnail buffer
+              (when-let* ((win (get-buffer-window thumb-buf frame)))
+                (select-window win)))))))))
 
 (defun dired-image-thumbnail-display-at-direction (buffer alist)
   "Display BUFFER in the direction specified in ALIST, reusing existing windows.
@@ -3705,7 +4082,7 @@ is idempotent and can be re-run to track changes to
            (img-size (if horizontal
                          `(window-width . ,(- 1.0 ratio))
                         `(window-height . ,(- 1.0 ratio))))
-           (thumb-entry `("\\*image-dired\\*"
+           (thumb-entry `("\\`\\*image-dired\\(?:\\*\\|: \\)"
                           display-buffer-in-direction
                           (direction . ,thumb-dir)
                           (window . root)
@@ -3713,7 +4090,7 @@ is idempotent and can be re-run to track changes to
       (push thumb-entry dired-image-thumbnail--display-buffer-entries)
       (add-to-list 'display-buffer-alist thumb-entry)
       (unless (eq layout 'thumb-only)
-        (let ((img-entry `("\\*image-dired-display-image\\*"
+        (let ((img-entry `("\\`\\*image-dired-display-image\\(?:\\*\\|: \\)"
                            (display-buffer-reuse-window
                             dired-image-thumbnail-display-at-direction)
                            (direction . ,img-dir)
@@ -3737,6 +4114,12 @@ is idempotent and can be re-run to track changes to
               #'dired-image-thumbnail--record-displayed-file)
   ;; Hook to initialize our variables when entering thumbnail mode
   (add-hook 'image-dired-thumbnail-mode-hook #'dired-image-thumbnail--initialize-buffer)
+  ;; Give each directory its own thumbnail and image display buffers, so
+  ;; opening a new gallery never replaces an existing one.
+  (advice-add 'image-dired-show-all-from-dir :around
+              #'dired-image-thumbnail--show-all-in-gallery)
+  (advice-add 'image-dired-display-thumbs :around
+              #'dired-image-thumbnail--display-thumbs-in-gallery)
   ;; Initialize after thumbnails are inserted, so starting from plain
   ;; `image-dired' also picks up the enhanced state.
   (advice-add 'image-dired-display-thumbs :after
@@ -3759,15 +4142,20 @@ is idempotent and can be re-run to track changes to
 (defun dired-image-thumbnail-unload-function ()
   "Tear down advice and hooks installed by dired-image-thumbnail.
 Called by `unload-feature'.  Returns nil so standard unloading proceeds."
-  (when dired-image-thumbnail--prefetch-timer
-    (cancel-timer dired-image-thumbnail--prefetch-timer)
-    (setq dired-image-thumbnail--prefetch-timer nil))
-  (when dired-image-thumbnail--thumb-regen-timer
-    (cancel-timer dired-image-thumbnail--thumb-regen-timer)
-    (setq dired-image-thumbnail--thumb-regen-timer nil))
-  (when dired-image-thumbnail--thumb-queue-poll-timer
-    (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer)
-    (setq dired-image-thumbnail--thumb-queue-poll-timer nil))
+  ;; Cancel the per-gallery timers, wherever they live.
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (dolist (var '(dired-image-thumbnail--prefetch-timer
+                     dired-image-thumbnail--thumb-regen-timer
+                     dired-image-thumbnail--thumb-queue-poll-timer))
+        (when (and (local-variable-p var)
+                   (timerp (symbol-value var)))
+          (cancel-timer (symbol-value var))
+          (set var nil)))))
+  (advice-remove 'image-dired-show-all-from-dir
+                 #'dired-image-thumbnail--show-all-in-gallery)
+  (advice-remove 'image-dired-display-thumbs
+                 #'dired-image-thumbnail--display-thumbs-in-gallery)
   (advice-remove 'image-dired-format-properties-string
                  #'dired-image-thumbnail--format-properties-string)
   (advice-remove 'image-dired--thumb-update-marks

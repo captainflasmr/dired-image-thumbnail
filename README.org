@@ -69,6 +69,27 @@ The simplest way to use =dired-image-thumbnail= is from a Dired buffer:
 4. Navigate with =n=/=p= to automatically view each image
 5. Use the enhanced keybindings for sorting, filtering, etc.
 
+** Multiple Galleries at Once
+
+Each directory gets its own thumbnail gallery, so opening images from another
+directory does not replace the gallery you already have open.
+
+- The thumbnail buffer is named =*image-dired: <directory>*=, e.g.
+  =*image-dired: Screenshots*=.
+- Its image display buffer is named
+  =*image-dired-display-image: <directory>*=.
+- Reopening the same directory reuses its gallery instead of creating a
+  duplicate.
+- Windows belonging to other galleries are kept when a new gallery is
+  laid out, so several galleries can be visible at the same time.  Use
+  =C-x b= to switch galleries, or select their windows directly.
+- In a split layout, =d= (=dired-image-thumbnail-goto-dired=) opens
+  Dired in the image window, leaving the thumbnail grid visible while
+  you choose another directory.
+
+Both =C-t d= (standard =image-dired=) and =C-t m=
+(=dired-image-thumbnail=) create per-directory galleries.
+
 ** Working with Subdirectories
 
 =dired-image-thumbnail= works with Dired's subdirectory insertion feature. You have several options:
