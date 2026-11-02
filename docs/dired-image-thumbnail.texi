@@ -369,6 +369,10 @@ Increase thumbnail size
 Decrease thumbnail size
 @item Q
 Select display quality with @code{completing-read} (full, high, fast, faster, draft)
+@item >
+Increase display quality one level (sharper, slower)
+@item <
+Decrease display quality one level (faster, softer)
 @end table
 
 @subheading Marking
@@ -503,8 +507,9 @@ Control the speed/fidelity trade-off when navigating with @kbd{n}/@kbd{p}:
 
 Lower quality levels use external tools (@code{djpeg}/@code{cjpeg} for
 JPEGs, @code{magick} for others) to generate small preview files, so Emacs
-decodes less data.  Press @kbd{Q} in the thumbnail buffer to cycle through
-levels interactively.
+decodes less data.  Press @kbd{Q} in the thumbnail buffer to choose a level
+with completion, or use @kbd{>} / @kbd{<} to step one level up or down without
+leaving the grid.
 
 @node Image Validation
 @section Image Validation
@@ -821,7 +826,7 @@ Manually insert specific subdirectories with @kbd{i} as needed
 @item
 Consider filtering to reduce the number of visible thumbnails
 @item
-Lower the display quality with @kbd{Q} for faster navigation
+Lower the display quality with @kbd{<} (or @kbd{Q}) for faster navigation
 @end itemize
 
 @section Layout not splitting correctly

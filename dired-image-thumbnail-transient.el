@@ -69,6 +69,8 @@
 (declare-function dired-image-thumbnail-delete-and-next "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-hard-refresh "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-select-display-quality "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-increase-display-quality "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-decrease-display-quality "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-insert-subdir-recursive "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-open-external "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-open-gthumb "dired-image-thumbnail")
@@ -128,6 +130,10 @@
   ["Size"
    ("+" "Increase size" dired-image-thumbnail-increase-size :transient t)
    ("-" "Decrease size" dired-image-thumbnail-decrease-size :transient t)]
+  ["Quality"
+   (">" "Higher quality" dired-image-thumbnail-increase-display-quality :transient t)
+   ("<" "Lower quality" dired-image-thumbnail-decrease-display-quality :transient t)
+   ("Q" "Select quality..." dired-image-thumbnail-select-display-quality :transient nil)]
   ["Toggle"
    ("#" "Square thumbnails" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
    ("F" "Follow (auto-display)" dired-image-thumbnail-toggle-auto-display :transient nil)]
@@ -156,6 +162,8 @@
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
     ("F" "Toggle follow" dired-image-thumbnail-toggle-auto-display :transient nil)
+    (">" "Higher quality" dired-image-thumbnail-increase-display-quality :transient t)
+    ("<" "Lower quality" dired-image-thumbnail-decrease-display-quality :transient t)
     ("Q" "Select quality" dired-image-thumbnail-select-display-quality :transient nil)]
    ["Delete"
     ("D" "Delete current" dired-image-thumbnail-delete :transient nil)

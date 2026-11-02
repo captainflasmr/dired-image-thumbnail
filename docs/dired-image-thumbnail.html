@@ -485,6 +485,12 @@ fit the new thumbnail window width.
 <dt><kbd class="kbd">Q</kbd></dt>
 <dd><p>Select display quality with <code class="code">completing-read</code> (full, high, fast, faster, draft)
 </p></dd>
+<dt><kbd class="kbd">&gt;</kbd></dt>
+<dd><p>Increase display quality one level (sharper, slower)
+</p></dd>
+<dt><kbd class="kbd">&lt;</kbd></dt>
+<dd><p>Decrease display quality one level (faster, softer)
+</p></dd>
 </dl>
 
 <h4 class="subheading" id="Marking"><span>Marking<a class="copiable-link" href="#Marking"> &para;</a></span></h4>
@@ -650,8 +656,9 @@ to browse them interactively.
 
 <p>Lower quality levels use external tools (<code class="code">djpeg</code>/<code class="code">cjpeg</code> for
 JPEGs, <code class="code">magick</code> for others) to generate small preview files, so Emacs
-decodes less data.  Press <kbd class="kbd">Q</kbd> in the thumbnail buffer to cycle through
-levels interactively.
+decodes less data.  Press <kbd class="kbd">Q</kbd> in the thumbnail buffer to choose a level
+with completion, or use <kbd class="kbd">&gt;</kbd> / <kbd class="kbd">&lt;</kbd> to step one level up or down without
+leaving the grid.
 </p>
 <hr>
 </div>
@@ -1009,7 +1016,7 @@ examine an image in detail.
 <li>Use <kbd class="kbd">C-t s</kbd> (insert image subdirs only) instead of <kbd class="kbd">C-t z</kbd> (insert all subdirs)
 </li><li>Manually insert specific subdirectories with <kbd class="kbd">i</kbd> as needed
 </li><li>Consider filtering to reduce the number of visible thumbnails
-</li><li>Lower the display quality with <kbd class="kbd">Q</kbd> for faster navigation
+</li><li>Lower the display quality with <kbd class="kbd">&lt;</kbd> (or <kbd class="kbd">Q</kbd>) for faster navigation
 </li></ul>
 
 </div>

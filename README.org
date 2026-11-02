@@ -196,6 +196,8 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 | =+=       | ~dired-image-thumbnail-increase-size~          | Increase thumbnail size        |
 | =-=       | ~dired-image-thumbnail-decrease-size~          | Decrease thumbnail size        |
 | =Q=       | ~dired-image-thumbnail-select-display-quality~  | Select quality via completing-read |
+| =>=       | ~dired-image-thumbnail-increase-display-quality~ | Increase preview quality (sharper, slower) |
+| =<=       | ~dired-image-thumbnail-decrease-display-quality~ | Decrease preview quality (faster, softer) |
 
 *** Marking
 
@@ -305,11 +307,12 @@ any theme.
 
 Lower quality levels use external tools (=djpeg=/=cjpeg= for JPEGs, =magick= for
 others) to generate small preview files, so Emacs decodes less data.  Press =Q=
-in the thumbnail buffer to cycle through levels interactively.
+in the thumbnail buffer to choose a level with completing-read, or use =>= / =<=
+to step one level up or down without leaving the grid.
 
 ** Per-Directory Settings
 
-The display quality (=Q=), sort criteria/order (=s=), name/size filters (=/=)
+The display quality (=Q=, or =<= / =>= to step), sort criteria/order (=s=), name/size filters (=/=)
 and thumbnail size (=+= / =-=) are remembered per directory in that directory's
 =.dir-locals.el=.  Revisiting a directory restores its choices, so folders with
 typically small images (e.g. screenshots) can keep =high= quality while large
@@ -325,8 +328,9 @@ Directories without a remembered size keep the current zoom, unless
 =dired-image-thumbnail-default-display-size= is set, in which case it provides
 the default for them.
 
-Saving is automatic and merges with any existing entries.  Use =C-u Q= for a
-session-only quality change, or disable the automatic saving entirely:
+Saving is automatic and merges with any existing entries.  Use =C-u Q= (or
+=C-u >= / =C-u <=) for a session-only quality change, or disable the automatic
+saving entirely:
 
 #+begin_src emacs-lisp
 (setq dired-image-thumbnail-save-dir-settings nil) ; keep choices session-local

@@ -63,6 +63,8 @@
 ;;   n/p, f/b - Next/previous image (with auto-display when enabled)
 ;;   C-l - Centre/top/bottom the grid around the image at point
 ;;   +/- - Increase/decrease size
+;;   Q   - Select display quality (completing-read)
+;;   >/< - Increase/decrease display quality
 ;;   m   - Mark image (uses image-dired's native marking with border)
 ;;   u   - Unmark image
 ;;   M   - Mark all
@@ -336,8 +338,11 @@ previews are kept in the image cache, so revisiting an image costs
 nothing.
 
 Interactively select the quality with
-`dired-image-thumbnail-select-display-quality' (bound to `Q'),
-which takes effect immediately.  Customising this variable takes
+`dired-image-thumbnail-select-display-quality' (bound to `Q'), or
+step one level at a time with
+`dired-image-thumbnail-increase-display-quality' (`>') and
+`dired-image-thumbnail-decrease-display-quality' (`<').
+Changes take effect immediately.  Customising this variable takes
 effect on the next n/p keypress.
 
 The choice is remembered per directory in that directory's
@@ -2823,6 +2828,8 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "F") #'dired-image-thumbnail-toggle-auto-display)
     ;; Display quality
     (define-key image-dired-thumbnail-mode-map (kbd "Q") #'dired-image-thumbnail-select-display-quality)
+    (define-key image-dired-thumbnail-mode-map (kbd ">") #'dired-image-thumbnail-increase-display-quality)
+    (define-key image-dired-thumbnail-mode-map (kbd "<") #'dired-image-thumbnail-decrease-display-quality)
     ;; External
     (define-key image-dired-thumbnail-mode-map (kbd "W") #'dired-image-thumbnail-open-external)
     (define-key image-dired-thumbnail-mode-map (kbd "J") #'dired-image-thumbnail-open-gthumb)
@@ -3798,6 +3805,43 @@ Uses fast scaled display unless quality is `full'."
 
 ;;; Enhanced navigation and deletion
 
+(defun dired-image-thumbnail--apply-display-quality (quality &optional session-only)
+  "Make QUALITY the current display quality and refresh the display.
+QUALITY is one of the symbols in
+`dired-image-thumbnail--quality-choices'.  Unless SESSION-ONLY is
+non-nil, also remember the choice in the directory's
+`.dir-locals.el' (see `dired-image-thumbnail-save-dir-settings')."
+  (setq dired-image-thumbnail--display-quality quality)
+  (unless session-only
+    (dired-image-thumbnail--save-dir-settings
+     (list (cons 'dired-image-thumbnail-display-quality quality))))
+  (message "Display quality: %s" (dired-image-thumbnail--current-quality))
+  (image-dired--update-header-line)
+  (force-mode-line-update)
+  (dired-image-thumbnail--display-this))
+
+(defun dired-image-thumbnail--change-display-quality (delta &optional session-only)
+  "Move DELTA steps through the display quality levels.
+A negative DELTA raises the quality (towards `full'), a positive
+DELTA lowers it (towards `draft').  Stop at the ends with a
+message.  Unless SESSION-ONLY is non-nil, remember a changed
+choice in the directory's `.dir-locals.el'."
+  (let* ((qualities (mapcar #'car dired-image-thumbnail--quality-choices))
+         (current (dired-image-thumbnail--current-quality))
+         (position (or (cl-position current qualities :test #'eq)
+                       (cl-position dired-image-thumbnail-display-quality
+                                    qualities :test #'eq)
+                       0))
+         (new-position (+ position delta)))
+    (cond
+     ((< new-position 0)
+      (message "Already at highest display quality: %s" current))
+     ((>= new-position (length qualities))
+      (message "Already at lowest display quality: %s" current))
+     (t
+      (dired-image-thumbnail--apply-display-quality
+       (nth new-position qualities) session-only)))))
+
 (defun dired-image-thumbnail-select-display-quality (&optional session-only)
   "Select the display quality with `completing-read'.
 Qualities are numbered from 1 (best) to 5 (fastest); see
@@ -3823,14 +3867,29 @@ directory."
          (quality (cdr (assoc input table))))
     (unless quality
       (user-error "Unknown display quality: %s" input))
-    (setq dired-image-thumbnail--display-quality quality)
-    (unless session-only
-      (dired-image-thumbnail--save-dir-settings
-       (list (cons 'dired-image-thumbnail-display-quality quality)))))
-  (message "Display quality: %s" (dired-image-thumbnail--current-quality))
-  (image-dired--update-header-line)
-  (force-mode-line-update)
-  (dired-image-thumbnail--display-this))
+    (dired-image-thumbnail--apply-display-quality quality session-only)))
+
+(defun dired-image-thumbnail-increase-display-quality (&optional session-only)
+  "Increase display quality by one level, towards `full'.
+Higher quality previews are sharper but slower.  The change takes
+effect immediately and refreshes the displayed image.  With prefix
+argument SESSION-ONLY, change the quality for this session only
+without writing it to the directory; otherwise the choice is
+remembered in the directory's `.dir-locals.el' (see
+`dired-image-thumbnail-save-dir-settings')."
+  (interactive "P")
+  (dired-image-thumbnail--change-display-quality -1 session-only))
+
+(defun dired-image-thumbnail-decrease-display-quality (&optional session-only)
+  "Decrease display quality by one level, towards `draft'.
+Lower quality previews are faster but softer.  The change takes
+effect immediately and refreshes the displayed image.  With prefix
+argument SESSION-ONLY, change the quality for this session only
+without writing it to the directory; otherwise the choice is
+remembered in the directory's `.dir-locals.el' (see
+`dired-image-thumbnail-save-dir-settings')."
+  (interactive "P")
+  (dired-image-thumbnail--change-display-quality 1 session-only))
 
 (defun dired-image-thumbnail--disable-marking-shows-next ()
   "Disable vanilla `image-dired-marking-shows-next' buffer-locally.

@@ -367,6 +367,10 @@ Display
 ‘Q’
      Select display quality with ‘completing-read’ (full, high, fast,
      faster, draft)
+‘>’
+     Increase display quality one level (sharper, slower)
+‘<’
+     Decrease display quality one level (faster, softer)
 
 Marking
 -------
@@ -504,8 +508,9 @@ Control the speed/fidelity trade-off when navigating with ‘n’/‘p’:
 
    Lower quality levels use external tools (‘djpeg’/‘cjpeg’ for JPEGs,
 ‘magick’ for others) to generate small preview files, so Emacs decodes
-less data.  Press ‘Q’ in the thumbnail buffer to cycle through levels
-interactively.
+less data.  Press ‘Q’ in the thumbnail buffer to choose a level with
+completion, or use ‘>’ / ‘<’ to step one level up or down without
+leaving the grid.
 
 
 File: dired-image-thumbnail.info,  Node: Image Validation,  Next: External Editor,  Prev: Display Quality,  Up: Customization
@@ -810,7 +815,7 @@ File: dired-image-thumbnail.info,  Node: Troubleshooting,  Next: Related Package
      all subdirs)
    • Manually insert specific subdirectories with ‘i’ as needed
    • Consider filtering to reduce the number of visible thumbnails
-   • Lower the display quality with ‘Q’ for faster navigation
+   • Lower the display quality with ‘<’ (or ‘Q’) for faster navigation
 
 15.4 Layout not splitting correctly
 ===================================
@@ -874,32 +879,32 @@ Node: Quick Deletion Workflow9651
 Node: Keybindings10199
 Node: Dired Buffer Keys10532
 Node: Thumbnail Buffer Keys11185
-Node: Image Display Buffer Keys13051
-Node: Header Line13402
-Node: Customization14437
-Node: Default Sort Settings15264
-Node: Display Options15613
-Node: Window Layout15871
-Node: Display Quality16435
-Node: Image Validation17024
-Node: External Editor17701
-Node: Navigation Behavior18161
-Node: Auto-Accepting Actions18731
-Node: Image Extensions19196
-Node: Example Configuration19543
-Node: Workflow Examples20528
-Node: Reviewing a Photo Collection21069
-Node: Finding Large Images21712
-Node: Quick Culling Workflow22406
-Node: Finding High-Resolution Images22898
-Node: Working with Subdirectories Example23362
-Node: Organizing by Date23979
-Node: Comparison with Standard image-dired24359
-Node: Transient Menu Support25500
-Node: Performance Notes26106
-Node: Troubleshooting27551
-Node: Related Packages29631
-Node: License30242
+Node: Image Display Buffer Keys13182
+Node: Header Line13533
+Node: Customization14568
+Node: Default Sort Settings15395
+Node: Display Options15744
+Node: Window Layout16002
+Node: Display Quality16566
+Node: Image Validation17231
+Node: External Editor17908
+Node: Navigation Behavior18368
+Node: Auto-Accepting Actions18938
+Node: Image Extensions19403
+Node: Example Configuration19750
+Node: Workflow Examples20735
+Node: Reviewing a Photo Collection21276
+Node: Finding Large Images21919
+Node: Quick Culling Workflow22613
+Node: Finding High-Resolution Images23105
+Node: Working with Subdirectories Example23569
+Node: Organizing by Date24186
+Node: Comparison with Standard image-dired24566
+Node: Transient Menu Support25707
+Node: Performance Notes26313
+Node: Troubleshooting27758
+Node: Related Packages29851
+Node: License30462
 
 End Tag Table
 
