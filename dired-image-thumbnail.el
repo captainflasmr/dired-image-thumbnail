@@ -59,7 +59,7 @@
 ;;
 ;;   s   - Sort (completing-read: dired/name/date/size/reverse)
 ;;   /   - Filter (completing-read: name/size/clear)
-;;   g   - Refresh display
+;;   g   - Re-scan directory and refresh display
 ;;   n/p, f/b - Next/previous image (with auto-display when enabled)
 ;;   C-l - Centre/top/bottom the grid around the image at point
 ;;   +/- - Increase/decrease size
@@ -1952,7 +1952,8 @@ after refreshing. Otherwise, try to maintain position on the current file."
 
 (defun dired-image-thumbnail-hard-refresh ()
   "Refresh thumbnails by clearing the cache and reloading.
-This deletes the contents of `image-dired-dir' and then calls
+This deletes the contents of `image-dired-dir', re-scans the
+source directory from disk and then calls
 `dired-image-thumbnail-refresh'."
   (interactive)
   (unless (file-directory-p image-dired-dir)
@@ -1971,7 +1972,9 @@ This deletes the contents of `image-dired-dir' and then calls
     ;; thumbnail creation previously failed.
     (dolist (file dired-image-thumbnail--current-images)
       (remhash file dired-image-thumbnail--thumb-attempts))
-    (dired-image-thumbnail-refresh)
+    ;; Re-scan as well: a hard refresh should also pick up files that
+    ;; were added or removed externally.
+    (dired-image-thumbnail-re-scan)
     (message "Thumbnail cache cleared and buffer refreshed.")))
 
 (defun dired-image-thumbnail-invalidate-dimensions ()
@@ -2801,7 +2804,11 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "/") #'dired-image-thumbnail-filter)
     (define-key image-dired-thumbnail-mode-map (kbd "\\") #'dired-image-thumbnail-filter)
     (define-key image-dired-thumbnail-mode-map (kbd "#") #'dired-image-thumbnail-toggle-square-thumbnails)
-    (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-refresh)
+    ;; g re-scans the directory before refreshing, like Dired's g, so
+    ;; files added or removed externally show up.  Internal refreshes
+    ;; still use `dired-image-thumbnail-refresh' and keep the cached
+    ;; file list for speed.
+    (define-key image-dired-thumbnail-mode-map (kbd "g") #'dired-image-thumbnail-re-scan)
     (define-key image-dired-thumbnail-mode-map (kbd "G") #'dired-image-thumbnail-hard-refresh)
     (define-key image-dired-thumbnail-mode-map (kbd "+") #'dired-image-thumbnail-increase-size)
     (define-key image-dired-thumbnail-mode-map (kbd "-") #'dired-image-thumbnail-decrease-size)

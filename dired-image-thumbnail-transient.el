@@ -63,7 +63,7 @@
 (declare-function dired-image-thumbnail-goto-dired "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-increase-size "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-decrease-size "dired-image-thumbnail")
-(declare-function dired-image-thumbnail-refresh "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-re-scan "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete-marked "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-delete-and-next "dired-image-thumbnail")
@@ -138,9 +138,9 @@
    ("#" "Square thumbnails" dired-image-thumbnail-toggle-square-thumbnails :transient nil)
    ("F" "Follow (auto-display)" dired-image-thumbnail-toggle-auto-display :transient nil)]
   ["Refresh"
-   ("r" "Refresh display" dired-image-thumbnail-refresh :transient nil)
-   ("g" "Refresh display" dired-image-thumbnail-refresh :transient nil)
-   ("G" "Hard refresh (clear cache)" dired-image-thumbnail-hard-refresh :transient nil)])
+   ("r" "Re-scan and refresh" dired-image-thumbnail-re-scan :transient nil)
+   ("g" "Re-scan and refresh" dired-image-thumbnail-re-scan :transient nil)
+   ("G" "Hard refresh (clear cache, re-scan)" dired-image-thumbnail-hard-refresh :transient nil)])
 
 ;;; Main transient menu
 
@@ -156,8 +156,8 @@
     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
     ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]
    ["Display"
-    ("g" "Refresh" dired-image-thumbnail-refresh :transient nil)
-    ("G" "Hard refresh (clear cache)" dired-image-thumbnail-hard-refresh :transient nil)
+    ("g" "Re-scan and refresh" dired-image-thumbnail-re-scan :transient nil)
+    ("G" "Hard refresh (clear cache, re-scan)" dired-image-thumbnail-hard-refresh :transient nil)
     ("+" "Larger thumbnails" dired-image-thumbnail-increase-size :transient t)
     ("-" "Smaller thumbnails" dired-image-thumbnail-decrease-size :transient t)
     ("#" "Toggle square" dired-image-thumbnail-toggle-square-thumbnails :transient nil)

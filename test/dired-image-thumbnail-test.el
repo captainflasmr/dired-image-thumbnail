@@ -692,6 +692,30 @@ them (including `mode-line-inactive' in unselected windows)."
         (dired-image-thumbnail--regenerate-thumbs))
       (should (= requeued 1)))))
 
+(ert-deftest dit-re-scan-picks-up-new-files ()
+  "Re-scanning rebuilds the cached image list from disk."
+  (dit--with-temp-dir dir
+    (let* ((old (expand-file-name "old.jpg" dir))
+           (new (expand-file-name "new.jpg" dir))
+           (dired-image-thumbnail-minimum-file-size 0)
+           (dired-image-thumbnail-validate-headers nil)
+           (refreshed 0))
+      (write-region "old" nil old nil 'silent)
+      (with-temp-buffer
+        (image-dired-thumbnail-mode)
+        (setq dired-image-thumbnail--source-dir dir
+              dired-image-thumbnail--recursive nil
+              dired-image-thumbnail--all-images (list old))
+        (write-region "new" nil new nil 'silent)
+        (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
+                   (lambda (&optional _preferred-target)
+                     (setq refreshed (1+ refreshed)))))
+          (dired-image-thumbnail-re-scan))
+        (should (equal (sort (copy-sequence dired-image-thumbnail--all-images)
+                             #'string<)
+                       (sort (list old new) #'string<)))
+        (should (= refreshed 1))))))
+
 ;;; Cropping
 
 (ert-deftest dit-fit-image-spec-preserve-resolution ()
