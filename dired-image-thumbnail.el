@@ -58,7 +58,7 @@
 ;; Key bindings in thumbnail buffer:
 ;;
 ;;   s   - Sort (completing-read: dired/name/date/size/reverse)
-;;   /   - Filter (completing-read: name/size/clear)
+;;   /   - Clear active filters, or open the filter menu (name/tags/size)
 ;;   g   - Re-scan directory and refresh display
 ;;   n/p, f/b - Next/previous image (with auto-display when enabled)
 ;;   C-l - Centre/top/bottom the grid around the image at point
@@ -70,6 +70,7 @@
 ;;   M   - Mark all
 ;;   U   - Unmark all
 ;;   t   - Toggle all marks
+;;   T   - Add tags to marked images (C-u to remove a tag)
 ;;   d   - Go to Dired buffer
 ;;   W   - Open image at point externally
 ;;   J   - Open marked images in gthumb (fallback: externally)
@@ -90,6 +91,7 @@
 (require 'cl-lib)
 (require 'subr-x)                       ; string-empty-p, string-trim
 (require 'text-property-search)         ; text-property-search-forward
+(require 'crm)                          ; completing-read-multiple
 
 (declare-function image-size "image.c" (spec &optional pixels frame))
 (declare-function w32-shell-execute "w32fns.c"
@@ -100,6 +102,11 @@
 (declare-function image-crop--crop-image-update "image-crop"
                   (area data size type cut text))
 (declare-function image--get-image "image.el" (&optional position))
+(declare-function image-dired-list-tags "image-dired-tags" (file))
+(declare-function image-dired-write-tags "image-dired-tags" (file-tags))
+(declare-function image-dired-remove-tag "image-dired-tags" (files tag))
+(defvar image-dired-tags-db-file)
+(defvar image-dired-tag-history)
 
 ;; This package builds on a number of internal (double-dash) `image-dired'
 ;; functions introduced with the image-dired rewrite in Emacs 29.1.  They
@@ -384,28 +391,37 @@ working.  Used by `dired-image-thumbnail-select-display-quality'.")
 
 (defun dired-image-thumbnail--filter-plist-p (value)
   "Return non-nil if VALUE is nil or a valid filter plist.
-A valid plist has the form (:name REGEXP :size-min BYTES
-:size-max BYTES), where each value may be nil."
+A valid plist has the form (:name REGEXP :tags TAGS :size-min BYTES
+:size-max BYTES), where each value may be nil.  TAGS, when non-nil,
+is a list of non-empty strings."
   (or (null value)
       (and (listp value)
            (zerop (mod (length value) 2))
            (let ((name (plist-get value :name))
+                 (tags (plist-get value :tags))
                  (size-min (plist-get value :size-min))
                  (size-max (plist-get value :size-max)))
              (and (or (null name) (stringp name))
+                  (or (null tags)
+                      (and (listp tags)
+                           (seq-every-p (lambda (tag)
+                                          (and (stringp tag)
+                                               (not (string-empty-p tag))))
+                                        tags)))
                   (or (null size-min) (natnump size-min))
                   (or (null size-max) (natnump size-max)))))))
 
 (defcustom dired-image-thumbnail-default-filter nil
-  "Default name/size filter, as a plist or nil for no filter.
-The plist has the form (:name REGEXP :size-min BYTES :size-max
-BYTES), where each value may be nil.  This is normally managed
-automatically: changing the filter in a thumbnail buffer stores
-the value in that directory's `.dir-locals.el' (see
+  "Default name/tag/size filter, as a plist or nil for no filter.
+The plist has the form (:name REGEXP :tags TAGS :size-min BYTES
+:size-max BYTES), where each value may be nil.  TAGS is a list of
+tag strings that an image must all carry.  This is normally managed
+automatically: changing the filter in a thumbnail buffer stores the
+value in that directory's `.dir-locals.el' (see
 `dired-image-thumbnail-save-dir-settings'), and opening the
 directory restores it."
   :type '(choice (const :tag "No filter" nil)
-                 (sexp :tag "Filter plist (:name REGEXP :size-min BYTES :size-max BYTES)"))
+                 (sexp :tag "Filter plist (:name REGEXP :tags TAGS :size-min BYTES :size-max BYTES)"))
   :safe #'dired-image-thumbnail--filter-plist-p
   :group 'dired-image-thumbnail)
 
@@ -494,6 +510,11 @@ per-directory settings in `.dir-locals.el' (see
 
 (defvar-local dired-image-thumbnail--filter-size-max nil
   "Maximum size filter in bytes.")
+
+(defvar-local dired-image-thumbnail--filter-tags nil
+  "List of tags that images must all carry, or nil.
+Tags come from image-dired's tag database (see
+`image-dired-tags-db-file').  Multiple tags use AND semantics.")
 
 (defvar-local dired-image-thumbnail--display-size nil
   "Current display size for thumbnails (for zoom).
@@ -1048,9 +1069,11 @@ queue a query in the current buffer and never returns (0 . 0):
 dimensions already queried for the thumbnail header line (see
 `dired-image-thumbnail--dimension-cache') are preferred, since that
 cache is filled asynchronously and shared with the display header
-line; otherwise the image header is read directly with `image-size',
-which is fast (it does not decode the image pixels).  Returns nil
-when neither source can provide the dimensions."
+line; otherwise the image header is read with ImageMagick
+`identify' (or, if that is unavailable, a temporary image spec that
+is flushed immediately), without keeping the decoded image in the
+image cache.  Returns nil when neither source can provide the
+dimensions."
   (let ((file (expand-file-name file)))
     (or (let ((thumb-buf (dired-image-thumbnail--associated-thumbnail-buffer)))
           (when (buffer-live-p thumb-buf)
@@ -1061,7 +1084,8 @@ when neither source can provide the dimensions."
                      (> (car dims) 0) (> (cdr dims) 0)
                      dims)))))
         (ignore-errors
-          (let ((dims (image-size file t)))
+          (let ((dims (or (dired-image-thumbnail--identify-size file)
+                          (dired-image-thumbnail--image-file-size file))))
             (and (consp dims)
                  (numberp (car dims)) (numberp (cdr dims))
                  (> (car dims) 0) (> (cdr dims) 0)
@@ -1135,6 +1159,25 @@ the `[N marked]' segment reflects the change immediately."
 
 ;;; Filtering functions
 
+(defun dired-image-thumbnail--file-tags (file &optional cache)
+  "Return the list of tags recorded for FILE, or nil.
+When CACHE is a hash table, use and fill it so a filter pass reads the
+tag database only once per file."
+  (if cache
+      (or (gethash file cache)
+          (puthash file (ignore-errors (image-dired-list-tags file)) cache))
+    (ignore-errors (image-dired-list-tags file))))
+
+(defun dired-image-thumbnail--file-has-tags-p (file tags cache)
+  "Return non-nil if FILE carries every tag in TAGS.
+CACHE is the per-filter-pass tag cache (see
+`dired-image-thumbnail--file-tags')."
+  (let ((file-tags (dired-image-thumbnail--file-tags file cache)))
+    (seq-every-p
+     (lambda (wanted)
+       (seq-some (lambda (tag) (string-equal tag wanted)) file-tags))
+     tags)))
+
 (defun dired-image-thumbnail--filter-images (images)
   "Filter IMAGES according to current filter settings."
   (let ((result images))
@@ -1146,6 +1189,15 @@ the `[N marked]' segment reflects the change immediately."
                (string-match-p dired-image-thumbnail--filter-name
                                (file-name-nondirectory file)))
              result)))
+    ;; Filter by tags (all requested tags must be present)
+    (when dired-image-thumbnail--filter-tags
+      (let ((cache (make-hash-table :test 'equal)))
+        (setq result
+              (seq-filter
+               (lambda (file)
+                 (dired-image-thumbnail--file-has-tags-p
+                  file dired-image-thumbnail--filter-tags cache))
+               result))))
     ;; Filter by size
     (when (or dired-image-thumbnail--filter-size-min
               dired-image-thumbnail--filter-size-max)
@@ -1166,6 +1218,10 @@ the `[N marked]' segment reflects the change immediately."
   (let ((filters nil))
     (when dired-image-thumbnail--filter-name
       (push (format "name:/%s/" dired-image-thumbnail--filter-name) filters))
+    (when dired-image-thumbnail--filter-tags
+      (push (format "tags:%s"
+                    (string-join dired-image-thumbnail--filter-tags "+"))
+            filters))
     (when (or dired-image-thumbnail--filter-size-min
               dired-image-thumbnail--filter-size-max)
       (push (format "size:%s-%s"
@@ -1336,6 +1392,13 @@ photo collections use a faster mode."
       (setq dired-image-thumbnail--filter-name
             (let ((name (plist-get filter :name)))
               (and (stringp name) (not (string-empty-p name)) name)))
+      (setq dired-image-thumbnail--filter-tags
+            (let ((tags (plist-get filter :tags)))
+              (when (and (listp tags)
+                         (seq-every-p #'stringp tags)
+                         (seq-some (lambda (tag) (not (string-empty-p tag)))
+                                   tags))
+                (seq-filter (lambda (tag) (not (string-empty-p tag))) tags))))
       (setq dired-image-thumbnail--filter-size-min
             (let ((v (plist-get filter :size-min)))
               (and (natnump v) v)))
@@ -1344,13 +1407,15 @@ photo collections use a faster mode."
               (and (natnump v) v))))))
 
 (defun dired-image-thumbnail--save-current-filter ()
-  "Persist the current name/size filter to the source directory."
+  "Persist the current name/tag/size filter to the source directory."
   (dired-image-thumbnail--save-dir-settings
    (list (cons 'dired-image-thumbnail-default-filter
                (if (or dired-image-thumbnail--filter-name
+                       dired-image-thumbnail--filter-tags
                        dired-image-thumbnail--filter-size-min
                        dired-image-thumbnail--filter-size-max)
                    (list :name dired-image-thumbnail--filter-name
+                         :tags dired-image-thumbnail--filter-tags
                          :size-min dired-image-thumbnail--filter-size-min
                          :size-max dired-image-thumbnail--filter-size-max)
                  nil)))))
@@ -1546,6 +1611,13 @@ when neither is available."
        dired-image-thumbnail--source-dir
        "")))
 
+(defun dired-image-thumbnail--tags-string (file)
+  "Return a header-line string for FILE's tags, or nil when it has none."
+  (let ((tags (seq-filter (lambda (tag) (not (string-empty-p tag)))
+                          (ignore-errors (image-dired-list-tags file)))))
+    (when tags
+      (format "[%s]" (string-join tags ", ")))))
+
 (defun dired-image-thumbnail--format-properties-string (orig-fun buf file image-count props comment)
   "Advice around `image-dired-format-properties-string' for the header line.
 ORIG-FUN is the original function.  BUF, FILE, IMAGE-COUNT, PROPS, and
@@ -1573,7 +1645,8 @@ line.  Otherwise, fall back to the original function."
              (rel-name (dired-image-thumbnail--relative-name file))
              (dir (dired-image-thumbnail--format-directory file))
              (size (dired-image-thumbnail--format-file-size file))
-             (dimensions (dired-image-thumbnail--format-image-dimensions file)))
+             (dimensions (dired-image-thumbnail--format-image-dimensions file))
+             (tags (dired-image-thumbnail--tags-string file)))
         (concat
          " "
          (propertize image-count-info 'face 'dired-image-thumbnail-header-info)
@@ -1589,6 +1662,9 @@ line.  Otherwise, fall back to the original function."
          (propertize size 'face 'dired-image-thumbnail-header-info)
          " "
          (propertize dimensions 'face 'dired-image-thumbnail-header-info)
+         (if tags
+             (concat " " (propertize tags 'face 'dired-image-thumbnail-header-info))
+           "")
          " "
          (propertize sort-info 'face 'dired-image-thumbnail-header-info)
          (if (string-empty-p filter-info)
@@ -1667,7 +1743,7 @@ unavailable, do nothing."
                       (and (numberp image-dired-thumb-size)
                            image-dired-thumb-size)
                       128))
-          (size (ignore-errors (image-size thumb-file t))))
+          (size (ignore-errors (dired-image-thumbnail--image-file-size thumb-file))))
       (when (and size (> (car size) 0) (> (cdr size) 0)
                  (not (and (= (car size) target)
                            (= (cdr size) target))))
@@ -2222,6 +2298,41 @@ Enter size in human-readable format (e.g., 100k, 1M)."
                (file-size-human-readable dired-image-thumbnail--filter-size-max)
              "none")))
 
+(defun dired-image-thumbnail--known-tags ()
+  "Return a sorted list of tags used by images in this gallery.
+Uses the whole directory's image list, not just the currently
+filtered set, so tags remain offered after a filter narrows the view."
+  (let ((tags (make-hash-table :test 'equal)))
+    (dolist (file (or dired-image-thumbnail--all-images
+                      dired-image-thumbnail--current-images))
+      (dolist (tag (ignore-errors (image-dired-list-tags file)))
+        (when (and (stringp tag) (not (string-empty-p tag)))
+          (puthash tag t tags))))
+    (sort (hash-table-keys tags) #'string<)))
+
+(defun dired-image-thumbnail-filter-by-tags (tags)
+  "Filter thumbnails to images carrying all TAGS.
+TAGS is a list of tag strings.  Interactively, read a comma-separated
+list, completing from the tags already present in image-dired's tag
+database.  An empty input clears the tag filter."
+  (interactive
+   (list (let ((entered (completing-read-multiple
+                         "Tags (comma-separated, all must match): "
+                         (dired-image-thumbnail--known-tags)
+                         nil nil nil 'image-dired-tag-history)))
+           (seq-filter (lambda (tag) (not (string-empty-p tag)))
+                       (mapcar #'string-trim entered)))))
+  (setq dired-image-thumbnail--filter-tags
+        (or (delete-dups
+             (seq-filter (lambda (tag) (not (string-empty-p tag)))
+                         (mapcar #'string-trim tags)))
+            nil))
+  (dired-image-thumbnail--apply-filter)
+  (message "Tag filter: %s"
+           (if dired-image-thumbnail--filter-tags
+               (string-join dired-image-thumbnail--filter-tags ", ")
+             "none")))
+
 (defun dired-image-thumbnail--parse-size (str)
   "Parse human-readable size STR to bytes."
   (let ((str (downcase (string-trim str))))
@@ -2238,22 +2349,38 @@ Enter size in human-readable format (e.g., 100k, 1M)."
   "Clear all filters."
   (interactive)
   (setq dired-image-thumbnail--filter-name nil)
+  (setq dired-image-thumbnail--filter-tags nil)
   (setq dired-image-thumbnail--filter-size-min nil)
   (setq dired-image-thumbnail--filter-size-max nil)
   (dired-image-thumbnail--apply-filter)
   (message "Filters cleared"))
 
+(defun dired-image-thumbnail--filters-active-p ()
+  "Return non-nil if a name, tag or size filter is active."
+  (or dired-image-thumbnail--filter-name
+      dired-image-thumbnail--filter-tags
+      dired-image-thumbnail--filter-size-min
+      dired-image-thumbnail--filter-size-max))
+
 (defun dired-image-thumbnail-filter ()
-  "Select filter criteria with `completing-read'.
-Choose filtering by name or size range, or clear all filters."
+  "Clear active filters, or open the filter menu when none are active.
+With a filter active, the filter key clears all filters at once so
+the full set is visible again; press it again to choose a new filter
+\(by name, tags or size).  This makes a double press of the filter key
+a quick way to get back to everything."
   (interactive)
-  (let ((choice (completing-read "Filter by: "
-                                 '("name" "size" "clear")
-                                 nil t)))
-    (pcase choice
-      ("name" (call-interactively #'dired-image-thumbnail-filter-by-name))
-      ("size" (call-interactively #'dired-image-thumbnail-filter-by-size))
-      ("clear" (dired-image-thumbnail-filter-clear)))))
+  (if (dired-image-thumbnail--filters-active-p)
+      (progn
+        (dired-image-thumbnail-filter-clear)
+        (message "Filters cleared (press the filter key again to filter)"))
+    (let ((choice (completing-read "Filter by: "
+                                   '("name" "tags" "size" "clear")
+                                   nil t)))
+      (pcase choice
+        ("name" (call-interactively #'dired-image-thumbnail-filter-by-name))
+        ("tags" (call-interactively #'dired-image-thumbnail-filter-by-tags))
+        ("size" (call-interactively #'dired-image-thumbnail-filter-by-size))
+        ("clear" (dired-image-thumbnail-filter-clear))))))
 
 (defun dired-image-thumbnail--base-thumb-size ()
   "Return image-dired's own thumbnail size."
@@ -2405,6 +2532,75 @@ update the count cache relies on."
   ;; Update all thumbnail marks using image-dired's function
   (image-dired--thumb-update-marks)
   (message "%d images now marked" (dired-image-thumbnail--count-marked)))
+
+;;; Tags
+
+(defun dired-image-thumbnail--tag-target-files ()
+  "Return the files a tag command should operate on.
+All marked files in the associated Dired buffer, or the image at
+point when none are marked."
+  (let ((marked (dired-image-thumbnail--get-dired-marked-set))
+        (files nil))
+    (maphash (lambda (file _) (push file files)) marked)
+    (setq files (nreverse files))
+    (or files
+        (when-let* ((file (image-dired-original-file-name)))
+          (list file)))))
+
+(defun dired-image-thumbnail-tag (&optional remove)
+  "Add tags to the marked images, or remove a tag with prefix REMOVE.
+Targets every marked image in the associated Dired buffer; when none
+are marked, targets the image at point.
+
+Adding prompts for one or more tags, comma separated, completing from
+the tags already in the database.  Removing prompts for a single tag.
+Tags are stored in image-dired's tag database (shared with Dired and
+`image-dired-tag-files'), the header line is updated, and an active
+tag filter is re-applied so the visible set reflects the change."
+  (interactive "P")
+  (let ((files (dired-image-thumbnail--tag-target-files)))
+    (unless files
+      (user-error "No image at point and none marked"))
+    (if remove
+        (let ((tag (string-trim
+                    (completing-read "Tag to remove: "
+                                     (dired-image-thumbnail--known-tags)
+                                     nil nil nil 'image-dired-tag-history))))
+          (when (string-empty-p tag)
+            (user-error "No tag given"))
+          (image-dired-remove-tag files tag)
+          (message "Removed tag %s from %d image%s"
+                   tag (length files) (if (= (length files) 1) "" "s")))
+      (let* ((entered (completing-read-multiple
+                       "Tags to add (comma separated): "
+                       (dired-image-thumbnail--known-tags)
+                       nil nil nil 'image-dired-tag-history))
+             (tags (seq-filter (lambda (tag) (not (string-empty-p tag)))
+                               (mapcar #'string-trim entered))))
+        (unless tags
+          (user-error "No tags given"))
+        (image-dired-write-tags
+         (mapcar (lambda (file) (cons file (string-join tags ";"))) files))
+        (message "Added tag%s %s to %d image%s"
+                 (if (= (length tags) 1) "" "s")
+                 (string-join tags ", ")
+                 (length files) (if (= (length files) 1) "" "s"))))
+    (when (derived-mode-p 'image-dired-thumbnail-mode)
+      (if dired-image-thumbnail--filter-tags
+          (dired-image-thumbnail-refresh)
+        (image-dired--update-header-line)))))
+
+(defun dired-image-thumbnail-add-tags ()
+  "Add tags to the marked images (or the image at point).
+See `dired-image-thumbnail-tag'."
+  (interactive)
+  (dired-image-thumbnail-tag nil))
+
+(defun dired-image-thumbnail-remove-tags ()
+  "Remove a tag from the marked images (or the image at point).
+See `dired-image-thumbnail-tag'."
+  (interactive)
+  (dired-image-thumbnail-tag t))
 
 ;;; File operations
 
@@ -2885,6 +3081,7 @@ keybindings will not be installed.  This can happen when `image-dired'\
     (define-key image-dired-thumbnail-mode-map (kbd "u") #'dired-image-thumbnail-unmark)
     (define-key image-dired-thumbnail-mode-map (kbd "M") #'dired-image-thumbnail-mark-all)
     (define-key image-dired-thumbnail-mode-map (kbd "t") #'dired-image-thumbnail-toggle-all-marks)
+    (define-key image-dired-thumbnail-mode-map (kbd "T") #'dired-image-thumbnail-tag)
     ;; File operations
     (define-key image-dired-thumbnail-mode-map (kbd "v") #'dired-image-thumbnail-move)
     (define-key image-dired-thumbnail-mode-map (kbd "d") #'dired-image-thumbnail-goto-dired)
@@ -3193,6 +3390,18 @@ are smaller and quicker to load and decode."
   "Return non-nil if process STATUS indicates success."
   (and (integerp status) (zerop status)))
 
+(defun dired-image-thumbnail--image-file-size (file)
+  "Return FILE's pixel size as (WIDTH . HEIGHT), or nil.
+Uses `image-size' on a temporary image spec and flushes that spec
+afterwards, so the decoded image does not stay in the image cache.
+Intended for small files (thumbnails and previews); use
+`dired-image-thumbnail--identify-size' for full-resolution originals,
+which must be measured without decoding."
+  (let ((image (ignore-errors (create-image file))))
+    (prog1 (and image (ignore-errors (image-size image t)))
+      (when image
+        (ignore-errors (image-flush image))))))
+
 (defun dired-image-thumbnail--make-preview (file width height)
   "Create a preview of FILE at WIDTH x HEIGHT pixels.
 Returns the path to the preview file.
@@ -3267,8 +3476,7 @@ or partial preview is never cached."
                                          out-temp))))))
               (when (and ok
                          (file-exists-p out-temp)
-                         (ignore-errors
-                           (image-size out-temp t)))
+                         (dired-image-thumbnail--image-file-size out-temp))
                 (rename-file out-temp preview-path t)))
           (when (file-exists-p out-temp)
             (delete-file out-temp)))))
@@ -3335,7 +3543,8 @@ orientation into the pixels and pass no rotation."
     (if rot
         (create-image display-file nil nil
                       :max-width fit-w :max-height fit-h :rotation rot)
-      (let ((native (ignore-errors (image-size display-file t))))
+      (let ((native (unless preserve-resolution
+                      (dired-image-thumbnail--image-file-size display-file))))
         (if (and native
                  (consp native)
                  (numberp (car native)) (numberp (cdr native))
@@ -3794,44 +4003,11 @@ the grid and point stay valid instead of showing a blank buffer."
         (insert "};\n")))
     file))
 
-(defun dired-image-thumbnail--thumb-size-matches-p (file target)
-  "Return non-nil if FILE's cached thumbnail is already at TARGET size.
-The expected largest side is TARGET, or the original image's largest
-side when that is smaller (image-dired only ever shrinks), so images
-smaller than the thumbnail size are not needlessly regenerated.
-A missing thumbnail never matches.  When the dimensions cannot be
-determined -- for example in a batch or terminal Emacs where
-`image-size' returns nil -- the thumbnail is treated as stale: this
-function is only consulted when the recorded cache size differs from
-the requested size, so regenerating is the only way to honour the
-request and a silent no-op is worse than one rebuild."
-  (let* ((thumb (image-dired-thumb-name file))
-         (thumb-dims (and (file-exists-p thumb)
-                          (ignore-errors (image-size thumb t)))))
-    (cond
-     ((not (file-exists-p thumb)) nil)
-     ((not (and (consp thumb-dims)
-                (> (car thumb-dims) 0) (> (cdr thumb-dims) 0)))
-      ;; Unknown size: rebuild, since the caller has asked for a size
-      ;; different from the one the cache was recorded at.
-      nil)
-     ((= (max (car thumb-dims) (cdr thumb-dims)) target) t)
-     (t
-      ;; Only read the original's header when the thumbnail is
-      ;; smaller than the target, to tell a small original that
-      ;; cannot be enlarged from a thumbnail made at a smaller
-      ;; size.
-      (let ((orig-dims (ignore-errors (image-size file t))))
-        (and (consp orig-dims)
-             (> (car orig-dims) 0) (> (cdr orig-dims) 0)
-             (= (max (car thumb-dims) (cdr thumb-dims))
-                (min target (max (car orig-dims) (cdr orig-dims))))))))))
-
 (defun dired-image-thumbnail--identify-size (file)
   "Return FILE's pixel size as (WIDTH . HEIGHT) using ImageMagick, or nil.
-A synchronous fallback for `image-size', which returns nil in batch
-and terminal Emacs.  Used only once per gallery to seed the cached
-thumbnail size, so the one process it may start is negligible."
+Reads only the image header, without decoding the pixels or adding
+the image to the Emacs image cache.  Used for full-resolution
+originals, which must never be decoded just to learn their size."
   (when-let* ((cmd (dired-image-thumbnail--identify-command)))
     (with-temp-buffer
       (when (dired-image-thumbnail--process-succeeded-p
@@ -3852,16 +4028,16 @@ thumbnail size, so the one process it may start is negligible."
   "Return the largest dimension of the first cached thumbnail, or nil.
 Used to seed `dired-image-thumbnail--thumbs-generated-at' when a
 gallery is (re)built, so opening a directory whose cache is already
-at the remembered size does not regenerate it.  Falls back to
-`identify' when `image-size' cannot determine the size (batch and
-terminal Emacs).  Returns nil when no thumbnail exists or its size
-cannot be determined."
+at the remembered size does not regenerate it.  The size is read
+with ImageMagick `identify' (header only), falling back to a
+temporary image spec that is flushed immediately.  Returns nil when
+no thumbnail exists or its size cannot be determined."
   (when-let* ((file (seq-find (lambda (f)
                                 (file-exists-p (image-dired-thumb-name f)))
                               dired-image-thumbnail--current-images))
               (thumb (image-dired-thumb-name file))
-              (dims (or (ignore-errors (image-size thumb t))
-                        (dired-image-thumbnail--identify-size thumb))))
+              (dims (or (dired-image-thumbnail--identify-size thumb)
+                        (dired-image-thumbnail--image-file-size thumb))))
     (and (consp dims)
          (> (car dims) 0) (> (cdr dims) 0)
          (max (car dims) (cdr dims)))))
@@ -3902,13 +4078,14 @@ CPU until it is killed."
                        (dired-image-thumbnail--regenerate-thumbs))))))))
 
 (defun dired-image-thumbnail--regenerate-thumbs ()
-  "Regenerate cached thumbnails not at `dired-image-thumbnail--display-size'.
+  "Regenerate cached thumbnails at `dired-image-thumbnail--display-size'.
 The stale-sized cached files are replaced in the background; the
 buffer keeps showing the current thumbnails until the new ones are
-ready, so no placeholder thumbnails flash up during a resize.  Only
-thumbnails whose size actually differs are regenerated, so opening
-a directory whose cache is already at the stored size costs nothing.
-Runs in the gallery's own thumbnail buffer."
+ready, so no placeholder thumbnails flash up during a resize.
+Regeneration is only scheduled when the recorded cache size differs
+from the requested size (see `dired-image-thumbnail--cached-thumb-size'),
+so opening a directory whose cache is already at the stored size
+costs nothing.  Runs in the gallery's own thumbnail buffer."
   (setq dired-image-thumbnail--thumb-regen-timer nil)
   (when (and (derived-mode-p 'image-dired-thumbnail-mode)
              (numberp dired-image-thumbnail--display-size)
@@ -3928,14 +4105,14 @@ Runs in the gallery's own thumbnail buffer."
           (dired-image-thumbnail--queue-thumb-regeneration))
       ;; Generate at the new size.  The old (already decoded)
       ;; thumbnails stay on screen until the queue drains, at which
-      ;; point the poll refresh swaps them for the new size.
+      ;; point the poll refresh swaps them for the new size.  The
+      ;; recorded size is authoritative: if it differs from the
+      ;; requested size the whole cache was made at another size, so
+      ;; every thumbnail is rebuilt.  This avoids measuring hundreds of
+      ;; originals just to start a resize.
       (setq-local image-dired-thumb-size
                   dired-image-thumbnail--display-size)
-      (let ((stale nil))
-        (dolist (file dired-image-thumbnail--current-images)
-          (unless (dired-image-thumbnail--thumb-size-matches-p
-                   file dired-image-thumbnail--display-size)
-            (push file stale)))
+      (let ((stale dired-image-thumbnail--current-images))
         (dolist (file stale)
           (let ((thumb-file (image-dired-thumb-name file)))
             (when (file-exists-p thumb-file)
@@ -3946,8 +4123,8 @@ Runs in the gallery's own thumbnail buffer."
         (setq-local dired-image-thumbnail--thumbs-generated-at
                     dired-image-thumbnail--display-size)
         (if (null stale)
-            ;; Everything is already the right size; just make sure any
-            ;; square variants are derived and the display is current.
+            ;; No images in the current set; just make sure any square
+            ;; variants are derived and the display is current.
             (when dired-image-thumbnail-square-thumbnails
               (dired-image-thumbnail-refresh))
           (setq-local dired-image-thumbnail--resize-pending t)

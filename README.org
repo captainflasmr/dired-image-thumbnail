@@ -9,7 +9,8 @@
 * Features
 
 - *Sorting* - Sort thumbnails by name, date, or size
-- *Filtering* - Filter by name regexp or file size range
+- *Filtering* - Filter by name regexp, tags, or file size range
+- *Tagging* - Add/remove image-dired tags from the thumbnail buffer, with tag filtering and tags in the header line
 - *Subdirectory support* - Works seamlessly with Dired's inserted subdirectories
 - *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
@@ -146,6 +147,27 @@ fast as possible.  Set =dired-image-thumbnail-auto-display-on-mark= to
 non-nil if you want marking to update the image display too; navigation
 with =n=/=p= is unaffected by that variable.
 
+** Tagging and Tag Filtering
+
+Tags are shared with =image-dired= and Dired (they live in
+=image-dired-tags-db-file=, usually =~/.emacs.d/image-dired/.image-dired_db=),
+so tags added in either place are visible everywhere.
+
+- =T= adds one or more comma-separated tags to the marked images.  With no
+  marks, it tags the image at point.  Completion offers tags already in the
+  database, and new tags can be typed freely.
+- =C-u T= removes a single tag from the marked images (or the image at point).
+- =/= then =tags= filters the gallery to images carrying **all** the tags you
+  enter (comma separated, with completion).  The filter is combined with the
+  name and size filters, remembered per directory, and shown in the header
+  line as e.g. =tags:keep+vacation=.  While any filter is active, one press
+  of =/= clears it; press =/= again to choose a new filter.
+- The current image's tags are shown in the header line, e.g.
+  =[keep, vacation]=, next to its size and dimensions.
+
+A typical culling pass: select the keepers with =m=, press =T= and tag them
+=keep=; later filter by =keep= to see only those images.
+
 ** Quick Deletion Workflow
 
 Press =C-d= in either the thumbnail or image display buffer to:
@@ -192,7 +214,18 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 | Key   | Command                                    | Description                |
 |-------+--------------------------------------------+----------------------------|
-| =/=, =\= | ~dired-image-thumbnail-filter~               | Filter via completing-read |
+| =/=, =\= | ~dired-image-thumbnail-filter~               | Clear active filters, or choose a name/tags/size filter |
+
+Press the filter key once while a filter is active to clear it
+immediately; press it again to open the filter menu and choose a new
+one.  With no filter active, the key opens the menu directly.
+
+*** Tagging
+
+| Key   | Command                                    | Description                |
+|-------+--------------------------------------------+----------------------------|
+| =T=   | ~dired-image-thumbnail-tag~                  | Add tags to marked images (or the image at point) |
+| =C-u T= | ~dired-image-thumbnail-tag~                | Remove a tag from the target images |
 
 *** Display
 
@@ -210,10 +243,11 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 | Key | Command                                 | Description                                |
 |-----+-----------------------------------------+--------------------------------------------|
-| =m= | ~dired-image-thumbnail-mark~              | Mark image and follow to the next          |
-| =u= | ~dired-image-thumbnail-unmark~            | Unmark image and follow to the next        |
+| =m= | ~dired-image-thumbnail-mark~              | Mark image and advance (no display by default) |
+| =u= | ~dired-image-thumbnail-unmark~            | Unmark image and advance                   |
 | =M= | ~dired-image-thumbnail-mark-all~          | Mark all images                            |
 | =t= | ~dired-image-thumbnail-toggle-all-marks~  | Toggle all marks                           |
+| =T= | ~dired-image-thumbnail-tag~               | Add tags to marked images (=C-u T= removes a tag) |
 
 *** File Operations
 
@@ -266,6 +300,7 @@ The enhanced header line displays:
 - *Filename* - Relative to source directory when subdirectories are inserted
 - *Directory* - Location of the current image, abbreviated (e.g., =~/Photos/=); falls back to the source directory
 - *Dimensions* - Width × Height in pixels (e.g., =1920x1080=)
+- *Tags* - The current image's tags (e.g., =[keep, vacation]=), when any
 - *File size* - Human-readable size (e.g., =2.4M=)
 - *Sort indicator* - Current sort field and direction (e.g., =[name ↑]=)
 - *Active filters* - Description of any active filters

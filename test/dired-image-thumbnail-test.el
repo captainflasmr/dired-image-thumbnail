@@ -75,17 +75,81 @@
 
 (ert-deftest dit-filter-by-name ()
   (let ((dired-image-thumbnail--filter-name "foo")
+        (dired-image-thumbnail--filter-tags nil)
         (dired-image-thumbnail--filter-size-min nil)
         (dired-image-thumbnail--filter-size-max nil))
     (should (equal (dired-image-thumbnail--filter-images
                     '("/tmp/foo.jpg" "/tmp/bar.jpg"))
                    '("/tmp/foo.jpg")))))
 
+(ert-deftest dit-filter-by-tags ()
+  (let ((dired-image-thumbnail--filter-name nil)
+        (dired-image-thumbnail--filter-tags '("keep" "vacation"))
+        (dired-image-thumbnail--filter-size-min nil)
+        (dired-image-thumbnail--filter-size-max nil))
+    (cl-letf (((symbol-function 'image-dired-list-tags)
+               (lambda (file)
+                 (pcase (file-name-nondirectory file)
+                   ("a.jpg" '("keep" "vacation" "sunset"))
+                   ("b.jpg" '("keep"))
+                   (_ nil)))))
+      (should (equal (dired-image-thumbnail--filter-images
+                      '("/tmp/a.jpg" "/tmp/b.jpg" "/tmp/c.jpg"))
+                     '("/tmp/a.jpg"))))))
+
+(ert-deftest dit-filter-tags-description ()
+  (let ((dired-image-thumbnail--filter-name nil)
+        (dired-image-thumbnail--filter-tags '("keep" "vacation"))
+        (dired-image-thumbnail--filter-size-min nil)
+        (dired-image-thumbnail--filter-size-max nil))
+    (should (equal (dired-image-thumbnail--format-active-filters)
+                   "tags:keep+vacation"))))
+
+(ert-deftest dit-filters-active-p ()
+  (with-temp-buffer
+    (setq dired-image-thumbnail--filter-name nil
+          dired-image-thumbnail--filter-tags nil
+          dired-image-thumbnail--filter-size-min nil
+          dired-image-thumbnail--filter-size-max nil)
+    (should-not (dired-image-thumbnail--filters-active-p))
+    (setq dired-image-thumbnail--filter-tags '("keep"))
+    (should (dired-image-thumbnail--filters-active-p))))
+
+(ert-deftest dit-filter-key-clears-when-active ()
+  "With a filter active the filter key clears instead of opening the menu."
+  (with-temp-buffer
+    (setq dired-image-thumbnail--filter-name "foo")
+    (let ((cleared 0)
+          (menu-opened 0))
+      (cl-letf (((symbol-function 'dired-image-thumbnail-filter-clear)
+                 (lambda () (setq cleared (1+ cleared))))
+                ((symbol-function 'completing-read)
+                 (lambda (&rest _) (setq menu-opened (1+ menu-opened)) "name")))
+        (dired-image-thumbnail-filter))
+      (should (= cleared 1))
+      (should (= menu-opened 0)))))
+
+(ert-deftest dit-filter-key-opens-menu-when-inactive ()
+  "With no filter active the filter key opens the menu."
+  (with-temp-buffer
+    (setq dired-image-thumbnail--filter-name nil
+          dired-image-thumbnail--filter-tags nil
+          dired-image-thumbnail--filter-size-min nil
+          dired-image-thumbnail--filter-size-max nil)
+    (let ((tags-called 0))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (&rest _) "tags"))
+                ((symbol-function 'dired-image-thumbnail-filter-by-tags)
+                 (lambda () (interactive) (setq tags-called (1+ tags-called)))))
+        (dired-image-thumbnail-filter))
+      (should (= tags-called 1)))))
+
 (ert-deftest dit-filter-by-size ()
   (dit--with-temp-dir dir
     (let ((small (expand-file-name "s.jpg" dir))
           (big (expand-file-name "b.jpg" dir))
           (dired-image-thumbnail--filter-name nil)
+          (dired-image-thumbnail--filter-tags nil)
           (dired-image-thumbnail--filter-size-min 50)
           (dired-image-thumbnail--filter-size-max nil))
       (write-region "aaaa" nil small nil 'silent)
@@ -95,6 +159,7 @@
 
 (ert-deftest dit-filter-drops-vanished-files ()
   (let ((dired-image-thumbnail--filter-name nil)
+        (dired-image-thumbnail--filter-tags nil)
         (dired-image-thumbnail--filter-size-min 1)
         (dired-image-thumbnail--filter-size-max 1000))
     (should (null (dired-image-thumbnail--filter-images
@@ -263,8 +328,12 @@ them (including `mode-line-inactive' in unselected windows)."
   (should (dired-image-thumbnail--filter-plist-p '(:name "x")))
   (should (dired-image-thumbnail--filter-plist-p
            '(:name "x" :size-min 1 :size-max 100)))
+  (should (dired-image-thumbnail--filter-plist-p '(:tags ("keep" "vacation"))))
   (should (not (dired-image-thumbnail--filter-plist-p '(:name 42))))
-  (should (not (dired-image-thumbnail--filter-plist-p '(:name)))))
+  (should (not (dired-image-thumbnail--filter-plist-p '(:name))))
+  (should (not (dired-image-thumbnail--filter-plist-p '(:tags "keep"))))
+  (should (not (dired-image-thumbnail--filter-plist-p '(:tags ("keep" 42)))))
+  (should (not (dired-image-thumbnail--filter-plist-p '(:tags (""))))))
 
 (ert-deftest dit-valid-dir-setting-p ()
   (should (dired-image-thumbnail--valid-dir-setting-p
@@ -275,6 +344,10 @@ them (including `mode-line-inactive' in unselected windows)."
                 'dired-image-thumbnail-display-quality 'bogus)))
   (should (dired-image-thumbnail--valid-dir-setting-p
            'dired-image-thumbnail-default-filter '(:name "foo" :size-min 1)))
+  (should (dired-image-thumbnail--valid-dir-setting-p
+           'dired-image-thumbnail-default-filter '(:tags ("keep" "vacation"))))
+  (should (not (dired-image-thumbnail--valid-dir-setting-p
+                'dired-image-thumbnail-default-filter '(:tags "keep"))))
   (should (dired-image-thumbnail--valid-dir-setting-p
            'dired-image-thumbnail-default-display-size 160))
   (should (dired-image-thumbnail--valid-dir-setting-p
@@ -720,33 +793,20 @@ them (including `mode-line-inactive' in unselected windows)."
         (dired-image-thumbnail--regenerate-thumbs))
       (should (= requeued 1)))))
 
-(ert-deftest dit-thumb-size-matches-p ()
-  "Size checks only flag real mismatches, never unknown or missing sizes."
-  (dit--with-temp-dir dir
-    (let* ((image-dired-dir (expand-file-name "thumbs" dir))
-           (file (expand-file-name "img.jpg" dir))
-           (thumb (image-dired-thumb-name file)))
-      (make-directory image-dired-dir t)
-      ;; A missing thumbnail is always stale.
-      (should-not (dired-image-thumbnail--thumb-size-matches-p file 96))
-      (write-region "x" nil thumb nil 'silent)
-      ;; Unknown dimensions are treated as stale when a resize has been
-      ;; requested, so the requested size is actually honoured.
-      (cl-letf (((symbol-function 'create-image) #'identity)
-                ((symbol-function 'image-size) (lambda (_f &optional _p) nil)))
-        (should-not (dired-image-thumbnail--thumb-size-matches-p file 96)))
-      ;; A thumbnail at the target size matches.
-      (cl-letf (((symbol-function 'create-image) #'identity)
-                ((symbol-function 'image-size)
-                 (lambda (f &optional _p)
-                   (if (equal f thumb) '(96 . 72) '(1000 . 2000)))))
-        (should (dired-image-thumbnail--thumb-size-matches-p file 96))
-        (should-not (dired-image-thumbnail--thumb-size-matches-p file 128)))
-      ;; An original smaller than the target cannot be enlarged.
-      (cl-letf (((symbol-function 'create-image) #'identity)
-                ((symbol-function 'image-size)
-                 (lambda (_f &optional _p) '(72 . 96))))
-        (should (dired-image-thumbnail--thumb-size-matches-p file 128))))))
+(ert-deftest dit-image-file-size ()
+  "Measuring a small file creates a spec, reads it, and flushes it."
+  (let ((file "/tmp/dit-size-test.jpg")
+        (flushed 0))
+    (cl-letf (((symbol-function 'create-image)
+               (lambda (f &rest _) (list 'image :file f)))
+              ((symbol-function 'image-size)
+               (lambda (_spec &optional _p) '(96 . 72)))
+              ((symbol-function 'image-flush)
+               (lambda (&rest _) (setq flushed (1+ flushed)))))
+      (should (equal (dired-image-thumbnail--image-file-size file) '(96 . 72)))
+      (should (= flushed 1)))
+    (cl-letf (((symbol-function 'create-image) (lambda (&rest _) nil)))
+      (should-not (dired-image-thumbnail--image-file-size file)))))
 
 (ert-deftest dit-mark-follow-display-setting ()
   "Marking follows `auto-display-on-mark', not navigation follow."
@@ -771,6 +831,56 @@ them (including `mode-line-inactive' in unselected windows)."
         (dired-image-thumbnail--mark-follow)
         (should (= displayed 1))))))
 
+(ert-deftest dit-tag-target-files ()
+  "Marked files win; otherwise the image at point is used."
+  (with-temp-buffer
+    (cl-letf (((symbol-function 'dired-image-thumbnail--get-dired-marked-set)
+               (lambda () (make-hash-table :test 'equal)))
+              ((symbol-function 'image-dired-original-file-name)
+               (lambda () "/tmp/dit-current.jpg")))
+      (should (equal (dired-image-thumbnail--tag-target-files)
+                     '("/tmp/dit-current.jpg")))
+      (cl-letf (((symbol-function 'dired-image-thumbnail--get-dired-marked-set)
+                 (lambda ()
+                   (let ((h (make-hash-table :test 'equal)))
+                     (puthash "/tmp/a.jpg" t h)
+                     (puthash "/tmp/b.jpg" t h)
+                     h))))
+        (should (equal (sort (dired-image-thumbnail--tag-target-files) #'string<)
+                       '("/tmp/a.jpg" "/tmp/b.jpg")))))))
+
+(ert-deftest dit-tag-command-writes-and-removes ()
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (let ((written nil)
+          (removed nil)
+          (dired-image-thumbnail--filter-tags nil))
+      (cl-letf (((symbol-function 'dired-image-thumbnail--get-dired-marked-set)
+                 (lambda ()
+                   (let ((h (make-hash-table :test 'equal)))
+                     (puthash "/tmp/a.jpg" t h)
+                     (puthash "/tmp/b.jpg" t h)
+                     h)))
+                ((symbol-function 'image-dired-write-tags)
+                 (lambda (alist) (setq written alist)))
+                ((symbol-function 'image-dired-remove-tag)
+                 (lambda (files tag) (setq removed (list files tag))))
+                ((symbol-function 'completing-read-multiple)
+                 (lambda (&rest _) '("keep" "vacation")))
+                ((symbol-function 'completing-read)
+                 (lambda (&rest _) "keep"))
+                ((symbol-function 'image-dired--update-header-line) #'ignore))
+        (dired-image-thumbnail-tag nil)
+        (should (= (length written) 2))
+        (should (equal (mapcar #'cdr written)
+                       '("keep;vacation" "keep;vacation")))
+        (should (equal (sort (mapcar #'car written) #'string<)
+                       '("/tmp/a.jpg" "/tmp/b.jpg")))
+        (dired-image-thumbnail-tag t)
+        (should (equal (cadr removed) "keep"))
+        (should (equal (sort (car removed) #'string<)
+                       '("/tmp/a.jpg" "/tmp/b.jpg")))))))
+
 (ert-deftest dit-cached-thumb-size ()
   "The cache probe returns the real size of an existing thumbnail."
   (dit--with-temp-dir dir
@@ -782,14 +892,14 @@ them (including `mode-line-inactive' in unselected windows)."
         (setq dired-image-thumbnail--current-images (list file))
         (should-not (dired-image-thumbnail--cached-thumb-size))
         (write-region "x" nil thumb nil 'silent)
-        (cl-letf (((symbol-function 'create-image) #'identity)
-                  ((symbol-function 'image-size)
-                   (lambda (_f &optional _p) '(96 . 72))))
+        ;; Preferred path: identify reads only the header.
+        (cl-letf (((symbol-function 'dired-image-thumbnail--identify-size)
+                   (lambda (_f) '(96 . 72))))
           (should (= (dired-image-thumbnail--cached-thumb-size) 96)))
-        ;; Falls back to identify when image-size cannot read the file.
-        (cl-letf (((symbol-function 'create-image) #'identity)
-                  ((symbol-function 'image-size) (lambda (_f &optional _p) nil))
-                  ((symbol-function 'dired-image-thumbnail--identify-size)
+        ;; Fallback: a temporary image spec, flushed afterwards.
+        (cl-letf (((symbol-function 'dired-image-thumbnail--identify-size)
+                   (lambda (_f) nil))
+                  ((symbol-function 'dired-image-thumbnail--image-file-size)
                    (lambda (_f) '(96 . 72))))
           (should (= (dired-image-thumbnail--cached-thumb-size) 96)))))))
 

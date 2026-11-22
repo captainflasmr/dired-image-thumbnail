@@ -59,6 +59,8 @@
 (declare-function dired-image-thumbnail-mark-all "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-mark "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-unmark "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-add-tags "dired-image-thumbnail")
+(declare-function dired-image-thumbnail-remove-tags "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-toggle-all-marks "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-goto-dired "dired-image-thumbnail")
 (declare-function dired-image-thumbnail-increase-size "dired-image-thumbnail")
@@ -154,7 +156,9 @@
     ("u" "Unmark current" dired-image-thumbnail-unmark :transient nil)
     ("M" "Mark all" dired-image-thumbnail-mark-all :transient nil)
     ("U" "Unmark all" image-dired-unmark-all-marks :transient nil)
-    ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)]
+    ("t" "Toggle all marks" dired-image-thumbnail-toggle-all-marks :transient nil)
+    ("T" "Add tags..." dired-image-thumbnail-add-tags :transient nil)
+    ("R" "Remove tag..." dired-image-thumbnail-remove-tags :transient nil)]
    ["Display"
     ("g" "Re-scan and refresh" dired-image-thumbnail-re-scan :transient nil)
     ("G" "Hard refresh (clear cache, re-scan)" dired-image-thumbnail-hard-refresh :transient nil)
@@ -171,7 +175,7 @@
     ("x" "Delete marked" dired-image-thumbnail-delete-marked :transient nil)]
    ["Other"
     ("s" "Sort..." dired-image-thumbnail-sort :transient nil)
-    ("/" "Filter..." dired-image-thumbnail-filter :transient nil)
+    ("/" "Filter or clear..." dired-image-thumbnail-filter :transient nil)
     ("z" "Insert subdirs (recursive)" dired-image-thumbnail-insert-subdir-recursive :transient nil)
     ("v" "Move to directory" dired-image-thumbnail-move :transient nil)
     ("d" "Go to dired" dired-image-thumbnail-goto-dired :transient nil)
