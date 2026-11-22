@@ -139,6 +139,13 @@ With =dired-image-thumbnail-auto-display-on-navigate= enabled (default):
 - No need to press =RET= or =C-<return>= for each image
 - Smooth, fluid browsing experience
 
+Marking is separate.  By default =m=/=u= mark (or unmark) the current
+thumbnail and advance to the next one **without** loading or displaying
+the next image, so a run of =m= keypresses selects consecutive files as
+fast as possible.  Set =dired-image-thumbnail-auto-display-on-mark= to
+non-nil if you want marking to update the image display too; navigation
+with =n=/=p= is unaffected by that variable.
+
 ** Quick Deletion Workflow
 
 Press =C-d= in either the thumbnail or image display buffer to:
@@ -359,9 +366,12 @@ Control whether navigating with =n=/=p= automatically displays full-size images:
 
 #+begin_src emacs-lisp
 (setq dired-image-thumbnail-auto-display-on-navigate t)  ; Auto-display on n/p
+(setq dired-image-thumbnail-auto-display-on-mark nil)    ; Mark without displaying
 #+end_src
 
-When enabled (default), pressing =n= or =p= in the thumbnail buffer automatically updates the image display buffer. When disabled, you must press =RET= or =C-<return>= to view full-size images.
+When navigation auto-display is enabled (default), pressing =n= or =p= in the thumbnail buffer automatically updates the image display buffer. When disabled, you must press =RET= or =C-<return>= to view full-size images.
+
+Marking is controlled independently by =dired-image-thumbnail-auto-display-on-mark= (default =nil=): =m= and =u= mark and advance without loading the next image, so marking many files stays fast.
 
 ** Auto-Accepting Actions
 

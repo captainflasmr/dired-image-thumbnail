@@ -260,12 +260,25 @@ The image buffer gets the remainder.  Only used when
 (defcustom dired-image-thumbnail-auto-display-on-navigate t
   "Whether to automatically display full-size image when navigating thumbnails.
 When non-nil, pressing `n` or `p` in the thumbnail buffer automatically
-updates the image display buffer, and marking a file advances to the
-next thumbnail and displays it.  When nil, navigation and marking only
-move point, avoiding the cost of decoding each image -- useful when
-marking many files for a batch operation such as rotation.  Press RET
-or C-<return> to view the full-size image.
+updates the image display buffer.  When nil, navigation only moves
+point, avoiding the cost of decoding each image -- useful when
+stepping through many thumbnails to inspect them.  Press RET or
+C-<return> to view the full-size image.
+Marking is controlled separately by
+`dired-image-thumbnail-auto-display-on-mark'.
 Toggle interactively with `dired-image-thumbnail-toggle-auto-display'."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'dired-image-thumbnail)
+
+(defcustom dired-image-thumbnail-auto-display-on-mark nil
+  "Whether marking or unmarking also displays the newly current image.
+When nil (the default), `m' and `u' update the mark and advance to
+the next thumbnail without loading or displaying it, so many files
+can be marked quickly for a batch action.  The header line and mark
+border still update immediately.  Set this to non-nil to have marking
+update the image display as well; navigation with `n' and `p' still
+follows `dired-image-thumbnail-auto-display-on-navigate'."
   :type 'boolean
   :safe #'booleanp
   :group 'dired-image-thumbnail)
@@ -2307,33 +2320,40 @@ the original files for crisp display (slower but higher quality)."
     set))
 
 (defun dired-image-thumbnail-mark ()
-  "Mark the current thumbnail and, with follow on, show the next one.
-The follow display goes through the fast preview pipeline.  Vanilla
-`image-dired-marking-shows-next' is disabled because its own
-advance display decodes the full original image, which made
-marking feel slow."
+  "Mark the current thumbnail and advance to the next one.
+By default the next image is not loaded, so repeated `m' presses mark
+consecutive files quickly; set
+`dired-image-thumbnail-auto-display-on-mark' to display it (through
+the fast preview pipeline) instead.  Vanilla
+`image-dired-marking-shows-next' is disabled because its own advance
+display decodes the full original image, which made marking feel
+slow."
   (interactive)
   (image-dired-mark-thumb-original-file)
   (dired-image-thumbnail--mark-follow))
 
 (defun dired-image-thumbnail-unmark ()
-  "Unmark the current thumbnail and, with follow on, show the next one.
-See `dired-image-thumbnail-mark'."
+  "Unmark the current thumbnail and advance to the next one.
+The next image is displayed only when
+`dired-image-thumbnail-auto-display-on-mark' is non-nil.  See
+`dired-image-thumbnail-mark'."
   (interactive)
   (image-dired-unmark-thumb-original-file)
   (dired-image-thumbnail--mark-follow))
 
 (defun dired-image-thumbnail--mark-follow ()
-  "Repaint the mark immediately, then follow.
-Vanilla marking always advances to the next image; when
-`dired-image-thumbnail-auto-display-on-navigate' is non-nil the
-newly-current image is displayed through the fast preview
-pipeline.  The cached marked count is invalidated and the header
-line refreshed, since vanilla marking updates marks at point
-without running the bulk update the count cache relies on."
+  "Repaint the mark immediately, then optionally follow.
+Vanilla marking always advances to the next image.  By default
+\(`dired-image-thumbnail-auto-display-on-mark' is nil) the newly
+current image is not loaded or displayed, so a run of `m' keypresses
+marks consecutive files as fast as possible.  Set that option to
+non-nil to display the new image through the fast preview pipeline.
+The cached marked count is invalidated and the header line refreshed,
+since vanilla marking updates marks at point without running the bulk
+update the count cache relies on."
   (setq dired-image-thumbnail--marked-count nil)
   (sit-for 0)
-  (when (dired-image-thumbnail--auto-display-p)
+  (when (dired-image-thumbnail--mark-display-p)
     (dired-image-thumbnail--display-this))
   (image-dired--update-header-line))
 
@@ -4124,14 +4144,27 @@ to commands run from the image display buffer too."
           (buffer-local-value 'dired-image-thumbnail-auto-display-on-navigate buf)
         dired-image-thumbnail-auto-display-on-navigate))))
 
+(defun dired-image-thumbnail--mark-display-p ()
+  "Return the effective auto-display-on-mark setting.
+Uses the thumbnail buffer's buffer-local value when the current
+buffer is not itself a thumbnail buffer, so a buffer-local setting
+applies to commands run from the image display buffer too."
+  (if (derived-mode-p 'image-dired-thumbnail-mode)
+      dired-image-thumbnail-auto-display-on-mark
+    (let ((buf (dired-image-thumbnail--associated-thumbnail-buffer)))
+      (if (buffer-live-p buf)
+          (buffer-local-value 'dired-image-thumbnail-auto-display-on-mark buf)
+        dired-image-thumbnail-auto-display-on-mark))))
+
 (defun dired-image-thumbnail-toggle-auto-display ()
   "Toggle automatic display of the full-size image while navigating.
 When enabled, moving to the next/previous thumbnail updates the image
-display buffer automatically.  When disabled, navigation and marking
-only move point, so you can step through, mark or delete many
-thumbnails without paying the cost of decoding each image.
-The setting is buffer-local, so it does not change the global
-default for other thumbnail buffers."
+display buffer automatically.  When disabled, navigation only moves
+point, so you can step through many thumbnails without paying the
+cost of decoding each image.  Marking is not affected: it follows
+`dired-image-thumbnail-auto-display-on-mark', which is nil by
+default.  The setting is buffer-local, so it does not change the
+global default for other thumbnail buffers."
   (interactive)
   (unless dired-image-thumbnail--all-images
     (dired-image-thumbnail--initialize-buffer))

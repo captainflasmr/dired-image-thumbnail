@@ -748,6 +748,29 @@ them (including `mode-line-inactive' in unselected windows)."
                  (lambda (_f &optional _p) '(72 . 96))))
         (should (dired-image-thumbnail--thumb-size-matches-p file 128))))))
 
+(ert-deftest dit-mark-follow-display-setting ()
+  "Marking follows `auto-display-on-mark', not navigation follow."
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (let ((dired-image-thumbnail-auto-display-on-navigate t)
+          (dired-image-thumbnail-auto-display-on-mark nil)
+          (displayed 0))
+      (cl-letf (((symbol-function 'dired-image-thumbnail--display-this)
+                 (lambda () (setq displayed (1+ displayed))))
+                ((symbol-function 'image-dired--update-header-line) #'ignore))
+        ;; Default: marking does not display even though navigation follow is on.
+        (dired-image-thumbnail--mark-follow)
+        (should (= displayed 0))
+        ;; Opt in: marking displays.
+        (setq dired-image-thumbnail-auto-display-on-mark t)
+        (dired-image-thumbnail--mark-follow)
+        (should (= displayed 1))
+        ;; Navigation follow being off does not force marking off.
+        (setq dired-image-thumbnail-auto-display-on-navigate nil
+              dired-image-thumbnail-auto-display-on-mark nil)
+        (dired-image-thumbnail--mark-follow)
+        (should (= displayed 1))))))
+
 (ert-deftest dit-cached-thumb-size ()
   "The cache probe returns the real size of an existing thumbnail."
   (dit--with-temp-dir dir
