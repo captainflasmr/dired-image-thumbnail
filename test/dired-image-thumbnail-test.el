@@ -602,9 +602,9 @@ them (including `mode-line-inactive' in unselected windows)."
         (setq dired-image-thumbnail--current-images (list file))
         (clrhash dired-image-thumbnail--thumb-queued)
         (puthash file t dired-image-thumbnail--thumb-queued)
-        (should (not (dired-image-thumbnail--thumb-queued-appeared-p)))
+        (should (zerop (dired-image-thumbnail--thumb-queued-appeared-count)))
         (write-region "x" nil (image-dired-thumb-name file) nil 'silent)
-        (should (dired-image-thumbnail--thumb-queued-appeared-p))
+        (should (= (dired-image-thumbnail--thumb-queued-appeared-count) 1))
         (dired-image-thumbnail--prune-thumb-queued)
         (should (zerop (hash-table-count dired-image-thumbnail--thumb-queued)))))))
 
@@ -632,7 +632,22 @@ them (including `mode-line-inactive' in unselected windows)."
       (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
                  (lambda () (setq refreshed (1+ refreshed)))))
         (dired-image-thumbnail--resize-display))
-      (should (= refreshed 1)))))
+      (should (= refreshed 1))))
+  ;; An unknown generated-at must not make a resize a silent no-op.
+  (with-temp-buffer
+    (setq dired-image-thumbnail--all-images '("/tmp/a.jpg")
+          dired-image-thumbnail--current-images '("/tmp/a.jpg")
+          dired-image-thumbnail--thumbs-generated-at nil
+          dired-image-thumbnail--display-size 160)
+    (let ((refreshed 0)
+          (queued 0))
+      (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
+                 (lambda () (setq refreshed (1+ refreshed))))
+                ((symbol-function 'dired-image-thumbnail--queue-thumb-regeneration)
+                 (lambda () (setq queued (1+ queued)))))
+        (dired-image-thumbnail--resize-display))
+      (should (= refreshed 0))
+      (should (= queued 1)))))
 
 (ert-deftest dit-poll-refreshes-progressively-but-not-during-resize ()
   (with-temp-buffer
@@ -645,37 +660,50 @@ them (including `mode-line-inactive' in unselected windows)."
           (image-dired-queue-active-jobs 1))
       (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
                  (lambda () (setq refreshed (1+ refreshed))))
-                ((symbol-function 'dired-image-thumbnail--thumb-queued-appeared-p)
-                 (lambda () t)))
+                ((symbol-function 'dired-image-thumbnail--thumb-queued-appeared-count)
+                 (lambda () 1)))
         ;; resize pending: no progressive refresh
-        (setq dired-image-thumbnail--resize-pending t)
+        (setq dired-image-thumbnail--resize-pending t
+              dired-image-thumbnail--last-thumb-queue-refresh nil)
         (dired-image-thumbnail--poll-thumb-queue)
         (should (= refreshed 0))
         ;; not pending and a thumb appeared: progressive refresh
         (setq dired-image-thumbnail--resize-pending nil)
         (dired-image-thumbnail--poll-thumb-queue)
-        (should (= refreshed 1))))))
+        (should (= refreshed 1))
+        ;; a second poll within the throttle interval does not refresh
+        (dired-image-thumbnail--poll-thumb-queue)
+        (should (= refreshed 1))
+        ;; an old timestamp lets the next poll refresh again
+        (setq dired-image-thumbnail--last-thumb-queue-refresh
+              (- (float-time)
+                 (* 2 dired-image-thumbnail--thumb-queue-refresh-interval)))
+        (dired-image-thumbnail--poll-thumb-queue)
+        (should (= refreshed 2))))))
 
 (ert-deftest dit-regenerate-thumbs-defers-until-ready ()
-  (with-temp-buffer
-    (image-dired-thumbnail-mode)
-    (setq dired-image-thumbnail--current-images '("/tmp/dit-reg-a.jpg")
-          dired-image-thumbnail--display-size 160
-          dired-image-thumbnail--thumbs-generated-at 128)
-    (let ((image-dired-thumbnail-buffer (buffer-name))
-          (created 0)
-          (refreshed 0))
-      (cl-letf (((symbol-function 'dired-image-thumbnail--thumbnails-busy-p)
-                 (lambda () nil))
-                ((symbol-function 'image-dired-create-thumb)
-                 (lambda (_o _t) (setq created (1+ created))))
-                ((symbol-function 'dired-image-thumbnail-refresh)
-                 (lambda () (setq refreshed (1+ refreshed)))))
-        (dired-image-thumbnail--regenerate-thumbs))
-      (should (= created 1))
-      (should (= refreshed 0))
-      (should dired-image-thumbnail--resize-pending)
-      (should (= dired-image-thumbnail--thumbs-generated-at 160)))))
+  (dit--with-temp-dir dir
+    (let ((image-dired-dir (expand-file-name "thumbs" dir)))
+      (make-directory image-dired-dir t)
+      (with-temp-buffer
+        (image-dired-thumbnail-mode)
+        (setq dired-image-thumbnail--current-images '("/tmp/dit-reg-a.jpg")
+              dired-image-thumbnail--display-size 160
+              dired-image-thumbnail--thumbs-generated-at 128)
+        (let ((image-dired-thumbnail-buffer (buffer-name))
+              (created 0)
+              (refreshed 0))
+          (cl-letf (((symbol-function 'dired-image-thumbnail--thumbnails-busy-p)
+                     (lambda () nil))
+                    ((symbol-function 'image-dired-create-thumb)
+                     (lambda (_o _t) (setq created (1+ created))))
+                    ((symbol-function 'dired-image-thumbnail-refresh)
+                     (lambda () (setq refreshed (1+ refreshed)))))
+            (dired-image-thumbnail--regenerate-thumbs))
+          (should (= created 1))
+          (should (= refreshed 0))
+          (should dired-image-thumbnail--resize-pending)
+          (should (= dired-image-thumbnail--thumbs-generated-at 160)))))))
 
 (ert-deftest dit-regenerate-thumbs-busy-requeues ()
   (with-temp-buffer
@@ -691,6 +719,104 @@ them (including `mode-line-inactive' in unselected windows)."
                  (lambda () (setq requeued (1+ requeued)))))
         (dired-image-thumbnail--regenerate-thumbs))
       (should (= requeued 1)))))
+
+(ert-deftest dit-thumb-size-matches-p ()
+  "Size checks only flag real mismatches, never unknown or missing sizes."
+  (dit--with-temp-dir dir
+    (let* ((image-dired-dir (expand-file-name "thumbs" dir))
+           (file (expand-file-name "img.jpg" dir))
+           (thumb (image-dired-thumb-name file)))
+      (make-directory image-dired-dir t)
+      ;; A missing thumbnail is always stale.
+      (should-not (dired-image-thumbnail--thumb-size-matches-p file 96))
+      (write-region "x" nil thumb nil 'silent)
+      ;; Unknown dimensions are treated as stale when a resize has been
+      ;; requested, so the requested size is actually honoured.
+      (cl-letf (((symbol-function 'create-image) #'identity)
+                ((symbol-function 'image-size) (lambda (_f &optional _p) nil)))
+        (should-not (dired-image-thumbnail--thumb-size-matches-p file 96)))
+      ;; A thumbnail at the target size matches.
+      (cl-letf (((symbol-function 'create-image) #'identity)
+                ((symbol-function 'image-size)
+                 (lambda (f &optional _p)
+                   (if (equal f thumb) '(96 . 72) '(1000 . 2000)))))
+        (should (dired-image-thumbnail--thumb-size-matches-p file 96))
+        (should-not (dired-image-thumbnail--thumb-size-matches-p file 128)))
+      ;; An original smaller than the target cannot be enlarged.
+      (cl-letf (((symbol-function 'create-image) #'identity)
+                ((symbol-function 'image-size)
+                 (lambda (_f &optional _p) '(72 . 96))))
+        (should (dired-image-thumbnail--thumb-size-matches-p file 128))))))
+
+(ert-deftest dit-cached-thumb-size ()
+  "The cache probe returns the real size of an existing thumbnail."
+  (dit--with-temp-dir dir
+    (let* ((image-dired-dir (expand-file-name "thumbs" dir))
+           (file (expand-file-name "img.jpg" dir))
+           (thumb (image-dired-thumb-name file)))
+      (make-directory image-dired-dir t)
+      (with-temp-buffer
+        (setq dired-image-thumbnail--current-images (list file))
+        (should-not (dired-image-thumbnail--cached-thumb-size))
+        (write-region "x" nil thumb nil 'silent)
+        (cl-letf (((symbol-function 'create-image) #'identity)
+                  ((symbol-function 'image-size)
+                   (lambda (_f &optional _p) '(96 . 72))))
+          (should (= (dired-image-thumbnail--cached-thumb-size) 96)))
+        ;; Falls back to identify when image-size cannot read the file.
+        (cl-letf (((symbol-function 'create-image) #'identity)
+                  ((symbol-function 'image-size) (lambda (_f &optional _p) nil))
+                  ((symbol-function 'dired-image-thumbnail--identify-size)
+                   (lambda (_f) '(96 . 72))))
+          (should (= (dired-image-thumbnail--cached-thumb-size) 96)))))))
+
+(ert-deftest dit-regenerate-thumbs-unknown-generated-at ()
+  "Regeneration proceeds when the cache's recorded size is unknown."
+  (dit--with-temp-dir dir
+    (let ((image-dired-dir (expand-file-name "thumbs" dir)))
+      (make-directory image-dired-dir t)
+      (with-temp-buffer
+        (image-dired-thumbnail-mode)
+        (setq dired-image-thumbnail--current-images '("/tmp/dit-reg-b.jpg")
+              dired-image-thumbnail--display-size 160
+              dired-image-thumbnail--thumbs-generated-at nil)
+        (let ((created 0))
+          (cl-letf (((symbol-function 'dired-image-thumbnail--thumbnails-busy-p)
+                     (lambda () nil))
+                    ((symbol-function 'image-dired-create-thumb)
+                     (lambda (_o _t) (setq created (1+ created)))))
+            (dired-image-thumbnail--regenerate-thumbs))
+          (should (= created 1))
+          (should (= dired-image-thumbnail--thumbs-generated-at 160)))))))
+
+(ert-deftest dit-thumb-regeneration-uses-normal-timer ()
+  "Regeneration must not use an idle timer that can re-fire immediately."
+  (with-temp-buffer
+    (image-dired-thumbnail-mode)
+    (setq-local dired-image-thumbnail--thumb-regen-timer nil)
+    (unwind-protect
+        (progn
+          (dired-image-thumbnail--queue-thumb-regeneration)
+          (should (timerp dired-image-thumbnail--thumb-regen-timer))
+          (should-not (timer--idle-delay
+                       dired-image-thumbnail--thumb-regen-timer)))
+      (when (timerp dired-image-thumbnail--thumb-regen-timer)
+        (cancel-timer dired-image-thumbnail--thumb-regen-timer)))))
+
+(ert-deftest dit-write-dir-locals-comment-only-file ()
+  "Merging into a comment-only .dir-locals.el must terminate."
+  (dit--with-temp-dir dir
+    (let ((file (expand-file-name dir-locals-file dir)))
+      (with-temp-file file
+        (insert ";; only comments\n\n; and more comments\n"))
+      (dired-image-thumbnail--write-dir-locals
+       dir '((dired-image-thumbnail-sort-order . descending)))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (let ((all (read (current-buffer))))
+          (should (equal (alist-get 'dired-image-thumbnail-sort-order
+                                    (alist-get nil all))
+                         'descending)))))))
 
 (ert-deftest dit-re-scan-picks-up-new-files ()
   "Re-scanning rebuilds the cached image list from disk."

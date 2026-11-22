@@ -517,6 +517,15 @@ Kept in sync by `dired-image-thumbnail--rebuild-image-index'.")
 Caps retries so a permanently failing image cannot cause an endless
 queue-and-refresh cycle.")
 
+(defvar dired-image-thumbnail--thumb-job-sizes (make-hash-table :test 'equal)
+  "Thumbnail size to use for each queued thumbnail generation job.
+`image-dired-create-thumb' reads `image-dired-thumb-size' when the
+job actually starts, and the timer that starts it may run in an
+unrelated buffer, where the buffer-local size set for a gallery is
+not visible.  Recording the intended size here and binding it around
+`image-dired-create-thumb-1' makes generation use the gallery's size
+instead of the global default.")
+
 (defvar-local dired-image-thumbnail--thumb-queued (make-hash-table :test 'equal)
   "Files queued for thumbnail generation in the current cycle.
 Prevents the same file being queued more than once while thumbnails
@@ -1039,7 +1048,7 @@ when neither source can provide the dimensions."
                      (> (car dims) 0) (> (cdr dims) 0)
                      dims)))))
         (ignore-errors
-          (let ((dims (image-size (create-image file) t)))
+          (let ((dims (image-size file t)))
             (and (consp dims)
                  (numberp (car dims)) (numberp (cdr dims))
                  (> (car dims) 0) (> (cdr dims) 0)
@@ -1230,7 +1239,8 @@ short header comment is added when the file is created."
                        (with-temp-buffer
                          (insert-file-contents file)
                          (goto-char (point-min))
-                         (while (looking-at-p "[ \t]*\\(;\\|$\\)")
+                         (while (and (not (eobp))
+                                     (looking-at-p "[ \t]*\\(;\\|$\\)"))
                            (forward-line 1))
                          (let ((s (buffer-substring-no-properties (point-min) (point))))
                            (if (string-empty-p s)
@@ -1370,12 +1380,13 @@ and by `dired-image-thumbnail--display-thumbs-advice' after
   (dired-image-thumbnail--setup-cursor)
   ;; Show the display quality in the mode line.
   (dired-image-thumbnail--setup-mode-line)
-  ;; Any pre-existing thumbnail cache was generated at image-dired's
-  ;; own thumb size, so record it as the baseline for resize
-  ;; regeneration.
-  (when (and (null dired-image-thumbnail--thumbs-generated-at)
-             (numberp image-dired-thumb-size))
-    (setq dired-image-thumbnail--thumbs-generated-at image-dired-thumb-size))
+  ;; `dired-image-thumbnail--thumbs-generated-at' is seeded in
+  ;; `dired-image-thumbnail-refresh', once the image list is known, from
+  ;; the first cached thumbnail's real size (falling back to the
+  ;; directory's display size).  Seeding it here from the global
+  ;; `image-dired-thumb-size' would mark a cache as 128px before the
+  ;; directory's remembered size is even read, causing a pointless
+  ;; regeneration on every visit.
   ;; Keep image-dired's mark-and-advance display in step with auto-display.
   (dired-image-thumbnail--disable-marking-shows-next)
   ;; Find the Dired buffer associated with the thumbnails currently in
@@ -1643,7 +1654,7 @@ unavailable, do nothing."
                       (and (numberp image-dired-thumb-size)
                            image-dired-thumb-size)
                       128))
-          (size (ignore-errors (image-size (create-image thumb-file) t))))
+          (size (ignore-errors (image-size thumb-file t))))
       (when (and size (> (car size) 0) (> (cdr size) 0)
                  (not (and (= (car size) target)
                            (= (cdr size) target))))
@@ -1796,6 +1807,16 @@ created only when there is actual work."
                      (if (= needed 1) "" "s"))
              0 needed)))))
 
+(defun dired-image-thumbnail--create-thumb-with-recorded-size (orig-fun file thumb-file)
+  "Call ORIG-FUN for FILE with its recorded thumbnail size installed.
+ORIG-FUN is `image-dired-create-thumb-1' and THUMB-FILE is the
+thumbnail to write.  See `dired-image-thumbnail--thumb-job-sizes'."
+  (let ((size (gethash file dired-image-thumbnail--thumb-job-sizes)))
+    (if (numberp size)
+        (let ((image-dired-thumb-size size))
+          (funcall orig-fun file thumb-file))
+      (funcall orig-fun file thumb-file))))
+
 (defun dired-image-thumbnail--queue-missing-thumbnails (state)
   "Queue generation of missing natural thumbnails, reporting work in STATE.
 Files whose creation failed repeatedly are skipped so a permanently
@@ -1811,6 +1832,8 @@ duplicate queued jobs."
           (remhash file dired-image-thumbnail--thumb-attempts)
         (when (and (< (gethash file dired-image-thumbnail--thumb-attempts 0) 3)
                    (not (gethash file dired-image-thumbnail--thumb-queued)))
+          (puthash file image-dired-thumb-size
+                   dired-image-thumbnail--thumb-job-sizes)
           (image-dired-create-thumb file thumb-file)
           (puthash file t dired-image-thumbnail--thumb-queued)
           (puthash file
@@ -1901,6 +1924,17 @@ after refreshing. Otherwise, try to maintain position on the current file."
         (setq dired-image-thumbnail--current-images
               (dired-image-thumbnail--sort-images filtered)))
       (dired-image-thumbnail--rebuild-image-index)
+      ;; Seed the size the cache was generated at from the first
+      ;; existing thumbnail, so opening a directory whose cache is
+      ;; already at the remembered size does not schedule a pointless
+      ;; regeneration.  When no cached thumbnail can be measured, fall
+      ;; back to the display size: an explicit resize still triggers
+      ;; regeneration because `--resize-display' treats a size change
+      ;; as a reason to rebuild.
+      (when (null dired-image-thumbnail--thumbs-generated-at)
+        (setq-local dired-image-thumbnail--thumbs-generated-at
+                    (or (dired-image-thumbnail--cached-thumb-size)
+                        dired-image-thumbnail--display-size)))
       (dired-image-thumbnail--ensure-thumb-geometry)
       (dired-image-thumbnail--apply-display-size)
       ;; Populate the buffer: queue missing thumbnails (generated
@@ -2221,11 +2255,13 @@ Choose filtering by name or size range, or clear all filters."
 If the cached thumbnails are already at the requested size a normal
 refresh is done.  Otherwise the current thumbnails stay on screen and
 are regenerated in the background, swapping in the new size only once
-the new-size thumbnails are ready."
+the new-size thumbnails are ready.  When the size the cache was
+generated at is unknown, regeneration is scheduled rather than
+skipped: doing nothing would silently ignore the resize."
   (if (or (null dired-image-thumbnail--all-images)
-          (null dired-image-thumbnail--thumbs-generated-at)
-          (= dired-image-thumbnail--display-size
-             dired-image-thumbnail--thumbs-generated-at))
+          (and (numberp dired-image-thumbnail--thumbs-generated-at)
+               (= dired-image-thumbnail--display-size
+                  dired-image-thumbnail--thumbs-generated-at)))
       (dired-image-thumbnail-refresh)
     (message "Regenerating %d thumbnails at %dpx..."
              (length dired-image-thumbnail--current-images)
@@ -2676,7 +2712,19 @@ enhanced features like sorting and filtering."
           ;; gallery that is already on screen.
           (display-buffer-overriding-action '(display-buffer-same-window))
           (dired-image-thumbnail--in-gallery-command t))
-      (image-dired source-dir))
+      ;; `image-dired-show-all-from-dir' inserts every thumbnail
+      ;; synchronously and queues missing ones at the global
+      ;; `image-dired-thumb-size' before the directory's saved display
+      ;; size is known.  Our refresh below erases the buffer and
+      ;; re-inserts everything anyway, so suppress the vanilla
+      ;; insertion and thumbnail queueing: this halves the startup work
+      ;; and ensures every generated thumbnail uses the size remembered
+      ;; for this directory instead of the global default.
+      (cl-letf (((symbol-function 'image-dired-insert-thumbnail)
+                 #'ignore)
+                ((symbol-function 'image-dired--get-create-thumbnail-file)
+                 (lambda (file) (image-dired-thumb-name file))))
+        (image-dired source-dir)))
 
     ;; Now refresh the thumbnail buffer with our enhancements
     (when-let* ((thumb-buf (get-buffer thumb-name)))
@@ -3200,7 +3248,7 @@ or partial preview is never cached."
               (when (and ok
                          (file-exists-p out-temp)
                          (ignore-errors
-                           (image-size (create-image out-temp) t)))
+                           (image-size out-temp t)))
                 (rename-file out-temp preview-path t)))
           (when (file-exists-p out-temp)
             (delete-file out-temp)))))
@@ -3267,7 +3315,7 @@ orientation into the pixels and pass no rotation."
     (if rot
         (create-image display-file nil nil
                       :max-width fit-w :max-height fit-h :rotation rot)
-      (let ((native (ignore-errors (image-size (create-image display-file) t))))
+      (let ((native (ignore-errors (image-size display-file t))))
         (if (and native
                  (consp native)
                  (numberp (car native)) (numberp (cdr native))
@@ -3589,6 +3637,22 @@ While the queue is busy the buffer is refreshed as thumbnails
 appear, and once it drains a final refresh is done, so generated
 thumbnails show up without ever blocking the display.")
 
+(defvar dired-image-thumbnail--thumb-queue-poll-interval 1.0
+  "Seconds between polls of the thumbnail creation queue.
+Polling is cheap, but the refresh done when new thumbnails appear
+rebuilds the whole grid, so it is throttled separately (see
+`dired-image-thumbnail--thumb-queue-refresh-interval').")
+
+(defvar dired-image-thumbnail--thumb-queue-refresh-interval 1.0
+  "Minimum seconds between display refreshes while thumbnails generate.
+A refresh erases and re-inserts every thumbnail, so doing one for
+each thumbnail that appears (or on every poll) keeps Emacs busy for
+the whole generation and starves the thumbnail subprocesses.  One
+refresh per second still lets thumbnails \"come in\".")
+
+(defvar-local dired-image-thumbnail--last-thumb-queue-refresh nil
+  "Time of the last refresh done by `dired-image-thumbnail--poll-thumb-queue'.")
+
 (defun dired-image-thumbnail--timer-for-buffer (buffer function interval repeat)
   "Arrange for FUNCTION to run in BUFFER every INTERVAL seconds.
 When REPEAT is nil run only once.  The returned timer cancels
@@ -3618,16 +3682,16 @@ outlive their buffer."
   (setq-local dired-image-thumbnail--thumb-queue-poll-timer
               (dired-image-thumbnail--timer-for-buffer
                (current-buffer) #'dired-image-thumbnail--poll-thumb-queue
-               0.3 t)))
+               dired-image-thumbnail--thumb-queue-poll-interval t)))
 
-(defun dired-image-thumbnail--thumb-queued-appeared-p ()
-  "Return non-nil if any queued thumbnail has appeared on disk."
-  (catch 'appeared
+(defun dired-image-thumbnail--thumb-queued-appeared-count ()
+  "Return the number of queued thumbnails that now exist on disk."
+  (let ((count 0))
     (maphash (lambda (file _)
                (when (file-exists-p (image-dired-thumb-name file))
-                 (throw 'appeared t)))
+                 (setq count (1+ count))))
              dired-image-thumbnail--thumb-queued)
-    nil))
+    count))
 
 (defun dired-image-thumbnail--prune-thumb-queued ()
   "Forget queued thumbnails that now exist on disk."
@@ -3643,16 +3707,40 @@ outlive their buffer."
   "Poll the thumbnail creation queue, refreshing as thumbnails appear.
 While jobs are running the buffer is refreshed whenever a queued
 thumbnail has appeared on disk, so thumbnails \"come in\" instead of
-leaving a grid of placeholders until the very end.  During a deferred
-resize (`dired-image-thumbnail--resize-pending') only the final
-refresh happens, so the current thumbnails stay on screen until the
-new size is ready.  Once the queue drains a final refresh is done.
+leaving a grid of placeholders until the very end.  Refreshes are
+throttled to `dired-image-thumbnail--thumb-queue-refresh-interval' so
+that rebuilding the grid cannot starve the thumbnail subprocesses;
+without the throttle a full refresh per poll keeps Emacs at 100% CPU
+for the whole generation.  During a deferred resize
+\(`dired-image-thumbnail--resize-pending') only the final refresh
+happens, so the current thumbnails stay on screen until the new size
+is ready.  Once the queue drains a final refresh is done.
 Runs in the gallery's own thumbnail buffer."
   (if (or image-dired-queue (> image-dired-queue-active-jobs 0))
-      (when (and (derived-mode-p 'image-dired-thumbnail-mode)
-                 (null dired-image-thumbnail--resize-pending)
-                 (dired-image-thumbnail--thumb-queued-appeared-p))
-        (dired-image-thumbnail-refresh))
+      (progn
+        ;; A job may have failed before it could start (the active-job
+        ;; counter is incremented before the process is created), which
+        ;; leaves the queue non-empty with nothing running.  Pump it so
+        ;; generation can never wedge permanently.
+        (when (and image-dired-queue
+                   (not (dired-image-thumbnail--thumb-processes-running-p)))
+          (setq image-dired-queue-active-jobs 0)
+          (ignore-errors (image-dired-thumb-queue-run)))
+        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                   dired-image-thumbnail--resize-pending)
+          (let ((done (dired-image-thumbnail--thumb-queued-appeared-count))
+                (total (hash-table-count dired-image-thumbnail--thumb-queued)))
+            (when (> total 0)
+              (message "Regenerating thumbnails: %d/%d..." done total))))
+        (when (and (derived-mode-p 'image-dired-thumbnail-mode)
+                   (null dired-image-thumbnail--resize-pending)
+                   (or (null dired-image-thumbnail--last-thumb-queue-refresh)
+                       (>= (- (float-time)
+                              dired-image-thumbnail--last-thumb-queue-refresh)
+                           dired-image-thumbnail--thumb-queue-refresh-interval))
+                   (> (dired-image-thumbnail--thumb-queued-appeared-count) 0))
+          (setq dired-image-thumbnail--last-thumb-queue-refresh (float-time))
+          (dired-image-thumbnail-refresh)))
     (when (timerp dired-image-thumbnail--thumb-queue-poll-timer)
       (cancel-timer dired-image-thumbnail--thumb-queue-poll-timer))
     (setq dired-image-thumbnail--thumb-queue-poll-timer nil)
@@ -3686,54 +3774,170 @@ the grid and point stay valid instead of showing a blank buffer."
         (insert "};\n")))
     file))
 
+(defun dired-image-thumbnail--thumb-size-matches-p (file target)
+  "Return non-nil if FILE's cached thumbnail is already at TARGET size.
+The expected largest side is TARGET, or the original image's largest
+side when that is smaller (image-dired only ever shrinks), so images
+smaller than the thumbnail size are not needlessly regenerated.
+A missing thumbnail never matches.  When the dimensions cannot be
+determined -- for example in a batch or terminal Emacs where
+`image-size' returns nil -- the thumbnail is treated as stale: this
+function is only consulted when the recorded cache size differs from
+the requested size, so regenerating is the only way to honour the
+request and a silent no-op is worse than one rebuild."
+  (let* ((thumb (image-dired-thumb-name file))
+         (thumb-dims (and (file-exists-p thumb)
+                          (ignore-errors (image-size thumb t)))))
+    (cond
+     ((not (file-exists-p thumb)) nil)
+     ((not (and (consp thumb-dims)
+                (> (car thumb-dims) 0) (> (cdr thumb-dims) 0)))
+      ;; Unknown size: rebuild, since the caller has asked for a size
+      ;; different from the one the cache was recorded at.
+      nil)
+     ((= (max (car thumb-dims) (cdr thumb-dims)) target) t)
+     (t
+      ;; Only read the original's header when the thumbnail is
+      ;; smaller than the target, to tell a small original that
+      ;; cannot be enlarged from a thumbnail made at a smaller
+      ;; size.
+      (let ((orig-dims (ignore-errors (image-size file t))))
+        (and (consp orig-dims)
+             (> (car orig-dims) 0) (> (cdr orig-dims) 0)
+             (= (max (car thumb-dims) (cdr thumb-dims))
+                (min target (max (car orig-dims) (cdr orig-dims))))))))))
+
+(defun dired-image-thumbnail--identify-size (file)
+  "Return FILE's pixel size as (WIDTH . HEIGHT) using ImageMagick, or nil.
+A synchronous fallback for `image-size', which returns nil in batch
+and terminal Emacs.  Used only once per gallery to seed the cached
+thumbnail size, so the one process it may start is negligible."
+  (when-let* ((cmd (dired-image-thumbnail--identify-command)))
+    (with-temp-buffer
+      (when (dired-image-thumbnail--process-succeeded-p
+             (apply #'call-process (car cmd) nil t nil
+                    (append (cdr cmd)
+                            (list "-format" "%w %h" file))))
+        (goto-char (point-min))
+        (let ((nums (split-string
+                     (buffer-substring-no-properties
+                      (point-min) (line-end-position)))))
+          (when (and (= (length nums) 2)
+                     (string-match-p "\\`[0-9]+\\'" (car nums))
+                     (string-match-p "\\`[0-9]+\\'" (cadr nums)))
+            (cons (string-to-number (car nums))
+                  (string-to-number (cadr nums)))))))))
+
+(defun dired-image-thumbnail--cached-thumb-size ()
+  "Return the largest dimension of the first cached thumbnail, or nil.
+Used to seed `dired-image-thumbnail--thumbs-generated-at' when a
+gallery is (re)built, so opening a directory whose cache is already
+at the remembered size does not regenerate it.  Falls back to
+`identify' when `image-size' cannot determine the size (batch and
+terminal Emacs).  Returns nil when no thumbnail exists or its size
+cannot be determined."
+  (when-let* ((file (seq-find (lambda (f)
+                                (file-exists-p (image-dired-thumb-name f)))
+                              dired-image-thumbnail--current-images))
+              (thumb (image-dired-thumb-name file))
+              (dims (or (ignore-errors (image-size thumb t))
+                        (dired-image-thumbnail--identify-size thumb))))
+    (and (consp dims)
+         (> (car dims) 0) (> (cdr dims) 0)
+         (max (car dims) (cdr dims)))))
+
+(defun dired-image-thumbnail--thumb-processes-running-p ()
+  "Return non-nil if any image-dired thumbnail process is alive.
+Used to recover `image-dired-queue' when its active-job counter has
+been left above zero without any process to decrement it, which
+would otherwise leave thumbnail generation wedged forever."
+  (seq-some (lambda (proc)
+              (and (process-live-p proc)
+                   (string-prefix-p "image-dired-create-thumbnail"
+                                    (process-name proc))))
+            (process-list)))
+
 (defun dired-image-thumbnail--queue-thumb-regeneration ()
   "Queue a background regeneration of thumbnails at the display size.
 The stale-sized cached thumbnails stay visible until the
 regeneration replaces them, so the thumbnail buffer is never blank
 while the new sizes are generated.  The timer belongs to the
 current gallery, so resizing one gallery does not cancel another
-gallery's pending regeneration."
-  (when dired-image-thumbnail--thumb-regen-timer
+gallery's pending regeneration.
+
+A normal one-shot timer is used deliberately instead of an idle
+timer: re-arming an idle timer from its own callback makes the new
+timer due immediately, because the idle period that triggered the
+original callback is still in effect, which spins Emacs at 100%
+CPU until it is killed."
+  (when (timerp dired-image-thumbnail--thumb-regen-timer)
     (cancel-timer dired-image-thumbnail--thumb-regen-timer))
-  (setq-local dired-image-thumbnail--thumb-regen-timer
-              (dired-image-thumbnail--timer-for-buffer
-               (current-buffer) #'dired-image-thumbnail--regenerate-thumbs
-               1.0 nil)))
+  (let ((buffer (current-buffer)))
+    (setq-local dired-image-thumbnail--thumb-regen-timer
+                (run-with-timer
+                 1.0 nil
+                 (lambda ()
+                   (when (buffer-live-p buffer)
+                     (with-current-buffer buffer
+                       (dired-image-thumbnail--regenerate-thumbs))))))))
 
 (defun dired-image-thumbnail--regenerate-thumbs ()
-  "Regenerate cached thumbnails at `dired-image-thumbnail--display-size'.
+  "Regenerate cached thumbnails not at `dired-image-thumbnail--display-size'.
 The stale-sized cached files are replaced in the background; the
 buffer keeps showing the current thumbnails until the new ones are
-ready, so no placeholder thumbnails flash up during a resize.
+ready, so no placeholder thumbnails flash up during a resize.  Only
+thumbnails whose size actually differs are regenerated, so opening
+a directory whose cache is already at the stored size costs nothing.
 Runs in the gallery's own thumbnail buffer."
   (setq dired-image-thumbnail--thumb-regen-timer nil)
   (when (and (derived-mode-p 'image-dired-thumbnail-mode)
              (numberp dired-image-thumbnail--display-size)
-             (numberp dired-image-thumbnail--thumbs-generated-at)
-             (/= dired-image-thumbnail--display-size
-                 dired-image-thumbnail--thumbs-generated-at))
+             (or (null dired-image-thumbnail--thumbs-generated-at)
+                 (/= dired-image-thumbnail--display-size
+                     dired-image-thumbnail--thumbs-generated-at)))
     (if (dired-image-thumbnail--thumbnails-busy-p)
-        (dired-image-thumbnail--queue-thumb-regeneration)
+        (progn
+          ;; Recover a queue left wedged by an error after image-dired
+          ;; incremented its active-job counter but before it managed
+          ;; to start a process.  Without this the queue never drains
+          ;; and the resize waits forever.
+          (when (and image-dired-queue
+                     (not (dired-image-thumbnail--thumb-processes-running-p)))
+            (setq image-dired-queue-active-jobs 0)
+            (ignore-errors (image-dired-thumb-queue-run)))
+          (dired-image-thumbnail--queue-thumb-regeneration))
       ;; Generate at the new size.  The old (already decoded)
       ;; thumbnails stay on screen until the queue drains, at which
       ;; point the poll refresh swaps them for the new size.
       (setq-local image-dired-thumb-size
                   dired-image-thumbnail--display-size)
-      (dolist (file dired-image-thumbnail--current-images)
-        (let ((thumb-file (image-dired-thumb-name file)))
-          (when (file-exists-p thumb-file)
-            (delete-file thumb-file)))
-        (let ((square-file (dired-image-thumbnail--square-thumb-name file)))
-          (when (file-exists-p square-file)
-            (delete-file square-file))))
-      (setq dired-image-thumbnail--thumbs-generated-at
-            dired-image-thumbnail--display-size)
-      (setq dired-image-thumbnail--resize-pending t)
-      (dolist (file dired-image-thumbnail--current-images)
-        (let ((thumb-file (image-dired-thumb-name file)))
-          (puthash file t dired-image-thumbnail--thumb-queued)
-          (image-dired-create-thumb file thumb-file)))
-      (dired-image-thumbnail--arm-queue-poll))))
+      (let ((stale nil))
+        (dolist (file dired-image-thumbnail--current-images)
+          (unless (dired-image-thumbnail--thumb-size-matches-p
+                   file dired-image-thumbnail--display-size)
+            (push file stale)))
+        (dolist (file stale)
+          (let ((thumb-file (image-dired-thumb-name file)))
+            (when (file-exists-p thumb-file)
+              (delete-file thumb-file)))
+          (let ((square-file (dired-image-thumbnail--square-thumb-name file)))
+            (when (file-exists-p square-file)
+              (delete-file square-file))))
+        (setq-local dired-image-thumbnail--thumbs-generated-at
+                    dired-image-thumbnail--display-size)
+        (if (null stale)
+            ;; Everything is already the right size; just make sure any
+            ;; square variants are derived and the display is current.
+            (when dired-image-thumbnail-square-thumbnails
+              (dired-image-thumbnail-refresh))
+          (setq-local dired-image-thumbnail--resize-pending t)
+          (dolist (file stale)
+            (let ((thumb-file (image-dired-thumb-name file)))
+              (puthash file t dired-image-thumbnail--thumb-queued)
+              (puthash file dired-image-thumbnail--display-size
+                       dired-image-thumbnail--thumb-job-sizes)
+              (image-dired-create-thumb file thumb-file)))
+          (dired-image-thumbnail--arm-queue-poll))))))
 
 (defun dired-image-thumbnail--queue-prefetch ()
   "Queue idle-time pre-generation of previews around the current image.
@@ -4174,6 +4378,10 @@ is idempotent and can be re-run to track changes to
   (advice-add 'image-dired--thumb-update-marks :after #'dired-image-thumbnail--invalidate-marked-count)
   ;; Suppress lock files on image files visited for display (read-only).
   (advice-add 'image-dired-display-image :around #'dired-image-thumbnail--display-image-no-lock)
+  ;; Make thumbnail generation use the gallery's own size even though
+  ;; image-dired starts the jobs later from a timer.
+  (advice-add 'image-dired-create-thumb-1 :around
+              #'dired-image-thumbnail--create-thumb-with-recorded-size)
   ;; Track which file the standard display buffer shows, so a crop
   ;; saved from it overwrites the original.
   (advice-add 'image-dired-display-image :after
@@ -4230,6 +4438,8 @@ Called by `unload-feature'.  Returns nil so standard unloading proceeds."
                  #'dired-image-thumbnail--display-image-no-lock)
   (advice-remove 'image-dired-display-image
                  #'dired-image-thumbnail--record-displayed-file)
+  (advice-remove 'image-dired-create-thumb-1
+                 #'dired-image-thumbnail--create-thumb-with-recorded-size)
   (when (fboundp 'image-crop)
     (advice-remove 'image-crop #'dired-image-thumbnail--crop-original-image))
   (when (fboundp 'image-crop--crop-image-update)
