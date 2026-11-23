@@ -10,7 +10,7 @@
 
 - *Sorting* - Sort thumbnails by name, date, or size
 - *Filtering* - Filter by name regexp, tags, or file size range
-- *Tagging* - Add/remove image-dired tags from the thumbnail buffer, with tag filtering and tags in the header line
+- *Tagging* - Add/remove image-dired tags from the thumbnail buffer, with tag filtering and tags in the header line; tags encoded in file names are read too
 - *Subdirectory support* - Works seamlessly with Dired's inserted subdirectories
 - *Subdirectory helpers* - Commands to quickly insert/remove subdirectories
 - *Wrap display mode* - Thumbnails flow naturally and wrap to window width
@@ -153,9 +153,20 @@ Tags are shared with =image-dired= and Dired (they live in
 =image-dired-tags-db-file=, usually =~/.emacs.d/image-dired/.image-dired_db=),
 so tags added in either place are visible everywhere.
 
+Tags are also read from the file name when it follows the
+=YYYYMMDDHHMMSS--description__tag1-tag2.ext= convention (the one used by
+=transmute=): everything after the first =__= is a tag section, tags are
+separated by =-=, and =@= marks a hierarchy.  For example,
+=20260811124422--20260811_124422__hilsea.jpg= carries the tag =hilsea=.
+Filename tags are merged with the database tags for filtering, completion and
+the header line.  They are read-only -- the =T= commands still write to
+image-dired's database -- and =C-u T= reports any filename tags it cannot
+remove.  Set =dired-image-thumbnail-read-filename-tags= to nil to ignore file
+names.
+
 - =T= adds one or more comma-separated tags to the marked images.  With no
   marks, it tags the image at point.  Completion offers tags already in the
-  database, and new tags can be typed freely.
+  database or in file names, and new tags can be typed freely.
 - =C-u T= removes a single tag from the marked images (or the image at point).
 - =/= then =tags= filters the gallery to images carrying **all** the tags you
   enter (comma separated, with completion).  The filter is combined with the

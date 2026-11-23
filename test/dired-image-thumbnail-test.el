@@ -105,6 +105,67 @@
     (should (equal (dired-image-thumbnail--format-active-filters)
                    "tags:keep+vacation"))))
 
+(ert-deftest dit-filename-tags ()
+  "Tags are read from the __ section of a transmute-style file name."
+  (let ((dired-image-thumbnail-read-filename-tags t))
+    (should (equal (dired-image-thumbnail--filename-tags
+                    "/tmp/20260811124422--20260811_124422__hilsea.jpg")
+                   '("hilsea")))
+    (should (equal (dired-image-thumbnail--filename-tags
+                    "/tmp/20260811124422--x__animals-animals@cow.jpg")
+                   '("animals" "animals@cow")))
+    (should (equal (dired-image-thumbnail--filename-tags
+                    "/tmp/20260811124422--x__hilsea-xmas.jpg")
+                   '("hilsea" "xmas")))
+    (should-not (dired-image-thumbnail--filename-tags
+                 "/tmp/20260811124422--20260811_124422.jpg"))
+    (should-not (dired-image-thumbnail--filename-tags
+                 "/tmp/20260811124422--x__.jpg"))
+    (let ((dired-image-thumbnail-read-filename-tags nil))
+      (should-not (dired-image-thumbnail--filename-tags
+                   "/tmp/20260811124422--x__hilsea.jpg")))))
+
+(ert-deftest dit-filename-tags-merge-with-database ()
+  "Filename tags and image-dired database tags are combined."
+  (let ((dired-image-thumbnail-read-filename-tags t))
+    (cl-letf (((symbol-function 'image-dired-list-tags)
+               (lambda (_file) '("keep" "hilsea" ""))))
+      (should (equal (sort (dired-image-thumbnail--file-tags
+                            "/tmp/20260811124422--x__hilsea.jpg")
+                           #'string<)
+                     '("hilsea" "keep"))))))
+
+(ert-deftest dit-filter-by-filename-tags ()
+  (let ((dired-image-thumbnail--filter-name nil)
+        (dired-image-thumbnail--filter-tags '("hilsea"))
+        (dired-image-thumbnail--filter-size-min nil)
+        (dired-image-thumbnail--filter-size-max nil)
+        (dired-image-thumbnail-read-filename-tags t))
+    (cl-letf (((symbol-function 'image-dired-list-tags)
+               (lambda (_file) '(""))))
+      (should (equal (dired-image-thumbnail--filter-images
+                      '("/tmp/20260809124627--x__hilsea.jpg"
+                        "/tmp/20260809124627--x__copnor.jpg"
+                        "/tmp/20260809124627--x.jpg"))
+                     '("/tmp/20260809124627--x__hilsea.jpg"))))))
+
+(ert-deftest dit-tags-string-includes-filename-tags ()
+  (let ((dired-image-thumbnail-read-filename-tags t))
+    (cl-letf (((symbol-function 'image-dired-list-tags)
+               (lambda (_file) '(""))))
+      (should (equal (dired-image-thumbnail--tags-string
+                      "/tmp/20260809124627--x__hilsea.jpg")
+                     "[hilsea]")))))
+
+(ert-deftest dit-known-tags-includes-filename-tags ()
+  (let ((dired-image-thumbnail-read-filename-tags t)
+        (dired-image-thumbnail--all-images
+         '("/tmp/a__hilsea.jpg" "/tmp/b__copnor.jpg")))
+    (cl-letf (((symbol-function 'image-dired-list-tags)
+               (lambda (_file) '(""))))
+      (should (equal (dired-image-thumbnail--known-tags)
+                     '("copnor" "hilsea"))))))
+
 (ert-deftest dit-filters-active-p ()
   (with-temp-buffer
     (setq dired-image-thumbnail--filter-name nil

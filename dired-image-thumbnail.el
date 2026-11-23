@@ -425,6 +425,23 @@ directory restores it."
   :safe #'dired-image-thumbnail--filter-plist-p
   :group 'dired-image-thumbnail)
 
+(defcustom dired-image-thumbnail-read-filename-tags t
+  "Whether to read tags encoded in image file names.
+When non-nil, everything after the first \"__\" in a file name is
+treated as tags, following the convention
+YYYYMMDDHHMMSS--description__tag1-tag2.ext.  Tags are separated by
+\"-\", and \"@\" marks a hierarchy (e.g. family@evie).  These tags
+are merged with image-dired's tag database for filtering, tag
+completion and the header line.
+
+Filename tags are read-only: they are not changed by
+`dired-image-thumbnail-add-tags' or `dired-image-thumbnail-remove-tags',
+which continue to use image-dired's tag database.  Set this to nil
+to use only image-dired's tags."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'dired-image-thumbnail)
+
 (defconst dired-image-thumbnail--thumbnail-size-min 32
   "Smallest thumbnail pixel size the zoom commands allow.")
 
@@ -514,7 +531,9 @@ per-directory settings in `.dir-locals.el' (see
 (defvar-local dired-image-thumbnail--filter-tags nil
   "List of tags that images must all carry, or nil.
 Tags come from image-dired's tag database (see
-`image-dired-tags-db-file').  Multiple tags use AND semantics.")
+`image-dired-tags-db-file') and, when
+`dired-image-thumbnail-read-filename-tags' is non-nil, from the
+file names themselves.  Multiple tags use AND semantics.")
 
 (defvar-local dired-image-thumbnail--display-size nil
   "Current display size for thumbnails (for zoom).
@@ -1159,14 +1178,41 @@ the `[N marked]' segment reflects the change immediately."
 
 ;;; Filtering functions
 
+(defun dired-image-thumbnail--filename-tags (file)
+  "Return the tags encoded in FILE's name, or nil.
+Follows the convention YYYYMMDDHHMMSS--description__tag1-tag2.ext:
+everything after the first \"__\" is a tag section and tags are
+separated by \"-\".  A \"@\" is kept in the tag so hierarchical
+tags stay intact (e.g. family@evie).  Returns nil when
+`dired-image-thumbnail-read-filename-tags' is nil or FILE has no
+tag section."
+  (when dired-image-thumbnail-read-filename-tags
+    (let* ((base (file-name-sans-extension (file-name-nondirectory file)))
+           (parts (split-string base "__")))
+      (when (cdr parts)
+        (delete-dups
+         (seq-filter
+          (lambda (tag) (not (string-empty-p tag)))
+          (split-string (mapconcat #'identity (cdr parts) "__") "-" t)))))))
+
+(defun dired-image-thumbnail--collect-file-tags (file)
+  "Return the merged filename and image-dired tags for FILE."
+  (seq-filter
+   (lambda (tag) (and (stringp tag) (not (string-empty-p tag))))
+   (delete-dups
+    (append (dired-image-thumbnail--filename-tags file)
+            (ignore-errors (image-dired-list-tags file))))))
+
 (defun dired-image-thumbnail--file-tags (file &optional cache)
   "Return the list of tags recorded for FILE, or nil.
-When CACHE is a hash table, use and fill it so a filter pass reads the
-tag database only once per file."
+Merges tags encoded in FILE's name (see
+`dired-image-thumbnail--filename-tags') with image-dired's tag
+database.  When CACHE is a hash table, use and fill it so a filter
+pass reads the tag database only once per file."
   (if cache
       (or (gethash file cache)
-          (puthash file (ignore-errors (image-dired-list-tags file)) cache))
-    (ignore-errors (image-dired-list-tags file))))
+          (puthash file (dired-image-thumbnail--collect-file-tags file) cache))
+    (dired-image-thumbnail--collect-file-tags file)))
 
 (defun dired-image-thumbnail--file-has-tags-p (file tags cache)
   "Return non-nil if FILE carries every tag in TAGS.
@@ -1613,8 +1659,7 @@ when neither is available."
 
 (defun dired-image-thumbnail--tags-string (file)
   "Return a header-line string for FILE's tags, or nil when it has none."
-  (let ((tags (seq-filter (lambda (tag) (not (string-empty-p tag)))
-                          (ignore-errors (image-dired-list-tags file)))))
+  (let ((tags (dired-image-thumbnail--file-tags file)))
     (when tags
       (format "[%s]" (string-join tags ", ")))))
 
@@ -2301,11 +2346,14 @@ Enter size in human-readable format (e.g., 100k, 1M)."
 (defun dired-image-thumbnail--known-tags ()
   "Return a sorted list of tags used by images in this gallery.
 Uses the whole directory's image list, not just the currently
-filtered set, so tags remain offered after a filter narrows the view."
-  (let ((tags (make-hash-table :test 'equal)))
+filtered set, so tags remain offered after a filter narrows the view.
+Includes tags encoded in file names when
+`dired-image-thumbnail-read-filename-tags' is non-nil."
+  (let ((tags (make-hash-table :test 'equal))
+        (cache (make-hash-table :test 'equal)))
     (dolist (file (or dired-image-thumbnail--all-images
                       dired-image-thumbnail--current-images))
-      (dolist (tag (ignore-errors (image-dired-list-tags file)))
+      (dolist (tag (dired-image-thumbnail--file-tags file cache))
         (when (and (stringp tag) (not (string-empty-p tag)))
           (puthash tag t tags))))
     (sort (hash-table-keys tags) #'string<)))
@@ -2569,8 +2617,18 @@ tag filter is re-applied so the visible set reflects the change."
           (when (string-empty-p tag)
             (user-error "No tag given"))
           (image-dired-remove-tag files tag)
-          (message "Removed tag %s from %d image%s"
-                   tag (length files) (if (= (length files) 1) "" "s")))
+          (let ((in-names
+                 (seq-filter
+                  (lambda (file)
+                    (member tag (dired-image-thumbnail--filename-tags file)))
+                  files)))
+            (message "Removed tag %s from %d image%s%s"
+                     tag (length files) (if (= (length files) 1) "" "s")
+                     (if in-names
+                         (format " (%d filename tag%s unchanged)"
+                                 (length in-names)
+                                 (if (= (length in-names) 1) "" "s"))
+                       ""))))
       (let* ((entered (completing-read-multiple
                        "Tags to add (comma separated): "
                        (dired-image-thumbnail--known-tags)
