@@ -166,6 +166,63 @@
       (should (equal (dired-image-thumbnail--known-tags)
                      '("copnor" "hilsea"))))))
 
+(ert-deftest dit-filter-negated-and-untagged-tags ()
+  "A !tag criterion excludes a tag; !* matches untagged images."
+  (let ((dired-image-thumbnail--filter-name nil)
+        (dired-image-thumbnail--filter-size-min nil)
+        (dired-image-thumbnail--filter-size-max nil)
+        (dired-image-thumbnail-read-filename-tags t)
+        (files '("/tmp/a__hilsea.jpg"
+                 "/tmp/b__copnor.jpg"
+                 "/tmp/c.jpg")))
+    (cl-letf (((symbol-function 'image-dired-list-tags)
+               (lambda (_file) '(""))))
+      (let ((dired-image-thumbnail--filter-tags '("!hilsea")))
+        (should (equal (dired-image-thumbnail--filter-images files)
+                       '("/tmp/b__copnor.jpg" "/tmp/c.jpg"))))
+      (let ((dired-image-thumbnail--filter-tags '("copnor" "!hilsea")))
+        (should (equal (dired-image-thumbnail--filter-images files)
+                       '("/tmp/b__copnor.jpg"))))
+      (let ((dired-image-thumbnail--filter-tags '("!*")))
+        (should (equal (dired-image-thumbnail--filter-images files)
+                       '("/tmp/c.jpg")))))))
+
+(ert-deftest dit-normalize-tag-criteria ()
+  (should (equal (dired-image-thumbnail--normalize-tag-criteria
+                  '(" keep " "" "keep" "!hilsea"))
+                 '("keep" "!hilsea")))
+  (should (equal (dired-image-thumbnail--normalize-tag-criteria '("!"))
+                 '("!*")))
+  (should-not (dired-image-thumbnail--normalize-tag-criteria '("")))
+  (should-error (dired-image-thumbnail--normalize-tag-criteria
+                 '("keep" "!keep"))
+                :type 'user-error)
+  (should-error (dired-image-thumbnail--normalize-tag-criteria
+                 '("!*" "keep"))
+                :type 'user-error))
+
+(ert-deftest dit-filter-untagged-description ()
+  (let ((dired-image-thumbnail--filter-name nil)
+        (dired-image-thumbnail--filter-tags '("!*"))
+        (dired-image-thumbnail--filter-size-min nil)
+        (dired-image-thumbnail--filter-size-max nil))
+    (should (equal (dired-image-thumbnail--format-active-filters)
+                   "tags:untagged"))))
+
+(ert-deftest dit-filter-key-untagged-entry ()
+  (with-temp-buffer
+    (setq dired-image-thumbnail--filter-name nil
+          dired-image-thumbnail--filter-tags nil
+          dired-image-thumbnail--filter-size-min nil
+          dired-image-thumbnail--filter-size-max nil)
+    (let ((untagged-called 0))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (&rest _) "untagged"))
+                ((symbol-function 'dired-image-thumbnail-filter-untagged)
+                 (lambda () (interactive) (setq untagged-called (1+ untagged-called)))))
+        (dired-image-thumbnail-filter))
+      (should (= untagged-called 1)))))
+
 (ert-deftest dit-filters-active-p ()
   (with-temp-buffer
     (setq dired-image-thumbnail--filter-name nil

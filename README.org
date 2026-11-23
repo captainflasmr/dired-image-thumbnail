@@ -169,10 +169,15 @@ names.
   database or in file names, and new tags can be typed freely.
 - =C-u T= removes a single tag from the marked images (or the image at point).
 - =/= then =tags= filters the gallery to images carrying **all** the tags you
-  enter (comma separated, with completion).  The filter is combined with the
+  enter (comma separated, with completion).  Prefix a tag with =!= to require
+  its absence instead, e.g. =!hilsea= for images without that tag; criteria
+  can be combined, e.g. =copnor, !hilsea=.  The filter is combined with the
   name and size filters, remembered per directory, and shown in the header
   line as e.g. =tags:keep+vacation=.  While any filter is active, one press
   of =/= clears it; press =/= again to choose a new filter.
+- =/= then =untagged= shows only images that carry no tags at all.  This is
+  the same as entering =!*= in the =tags= prompt, and is handy for finding
+  the next batch of photos to tag.
 - The current image's tags are shown in the header line, e.g.
   =[keep, vacation]=, next to its size and dimensions.
 
@@ -225,7 +230,7 @@ Note: When =dired-image-thumbnail-auto-display-on-navigate= is enabled (default)
 
 | Key   | Command                                    | Description                |
 |-------+--------------------------------------------+----------------------------|
-| =/=, =\= | ~dired-image-thumbnail-filter~               | Clear active filters, or choose a name/tags/size filter |
+| =/=, =\= | ~dired-image-thumbnail-filter~               | Clear active filters, or choose a name/tags/untagged/size filter |
 
 Press the filter key once while a filter is active to clear it
 immediately; press it again to open the filter menu and choose a new

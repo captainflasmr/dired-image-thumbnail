@@ -393,7 +393,9 @@ working.  Used by `dired-image-thumbnail-select-display-quality'.")
   "Return non-nil if VALUE is nil or a valid filter plist.
 A valid plist has the form (:name REGEXP :tags TAGS :size-min BYTES
 :size-max BYTES), where each value may be nil.  TAGS, when non-nil,
-is a list of non-empty strings."
+is a list of non-empty tag criteria; see
+`dired-image-thumbnail-filter-by-tags' for the \"!TAG\" and \"!*\"
+syntax."
   (or (null value)
       (and (listp value)
            (zerop (mod (length value) 2))
@@ -415,11 +417,13 @@ is a list of non-empty strings."
   "Default name/tag/size filter, as a plist or nil for no filter.
 The plist has the form (:name REGEXP :tags TAGS :size-min BYTES
 :size-max BYTES), where each value may be nil.  TAGS is a list of
-tag strings that an image must all carry.  This is normally managed
-automatically: changing the filter in a thumbnail buffer stores the
-value in that directory's `.dir-locals.el' (see
-`dired-image-thumbnail-save-dir-settings'), and opening the
-directory restores it."
+tag criteria that an image must all satisfy: a plain tag must be
+present, \"!TAG\" must be absent, and \"!*\" means the image must
+carry no tags at all (see `dired-image-thumbnail-filter-by-tags').
+This is normally managed automatically: changing the filter in a
+thumbnail buffer stores the value in that directory's
+`.dir-locals.el' (see `dired-image-thumbnail-save-dir-settings'),
+and opening the directory restores it."
   :type '(choice (const :tag "No filter" nil)
                  (sexp :tag "Filter plist (:name REGEXP :tags TAGS :size-min BYTES :size-max BYTES)"))
   :safe #'dired-image-thumbnail--filter-plist-p
@@ -529,11 +533,13 @@ per-directory settings in `.dir-locals.el' (see
   "Maximum size filter in bytes.")
 
 (defvar-local dired-image-thumbnail--filter-tags nil
-  "List of tags that images must all carry, or nil.
+  "List of tag criteria that images must all satisfy, or nil.
 Tags come from image-dired's tag database (see
 `image-dired-tags-db-file') and, when
 `dired-image-thumbnail-read-filename-tags' is non-nil, from the
-file names themselves.  Multiple tags use AND semantics.")
+file names themselves.  A plain tag must be present, \"!TAG\" must
+be absent, and \"!*\" matches only images with no tags.  Multiple
+criteria use AND semantics.")
 
 (defvar-local dired-image-thumbnail--display-size nil
   "Current display size for thumbnails (for zoom).
@@ -1215,13 +1221,23 @@ pass reads the tag database only once per file."
     (dired-image-thumbnail--collect-file-tags file)))
 
 (defun dired-image-thumbnail--file-has-tags-p (file tags cache)
-  "Return non-nil if FILE carries every tag in TAGS.
-CACHE is the per-filter-pass tag cache (see
-`dired-image-thumbnail--file-tags')."
+  "Return non-nil if FILE satisfies every criterion in TAGS.
+A criterion is either a tag that FILE must carry, or \"!TAG\",
+which FILE must not carry.  The special criterion \"!*\" matches
+only files that carry no tags at all.  CACHE is the per-filter-pass
+tag cache (see `dired-image-thumbnail--file-tags')."
   (let ((file-tags (dired-image-thumbnail--file-tags file cache)))
     (seq-every-p
      (lambda (wanted)
-       (seq-some (lambda (tag) (string-equal tag wanted)) file-tags))
+       (cond
+        ((string= wanted "!*")
+         (null file-tags))
+        ((string-prefix-p "!" wanted)
+         (not (seq-some (lambda (tag)
+                          (string-equal tag (substring wanted 1)))
+                        file-tags)))
+        (t
+         (seq-some (lambda (tag) (string-equal tag wanted)) file-tags))))
      tags)))
 
 (defun dired-image-thumbnail--filter-images (images)
@@ -1266,7 +1282,11 @@ CACHE is the per-filter-pass tag cache (see
       (push (format "name:/%s/" dired-image-thumbnail--filter-name) filters))
     (when dired-image-thumbnail--filter-tags
       (push (format "tags:%s"
-                    (string-join dired-image-thumbnail--filter-tags "+"))
+                    (string-join
+                     (mapcar (lambda (tag)
+                               (if (string= tag "!*") "untagged" tag))
+                             dired-image-thumbnail--filter-tags)
+                     "+"))
             filters))
     (when (or dired-image-thumbnail--filter-size-min
               dired-image-thumbnail--filter-size-max)
@@ -2358,28 +2378,68 @@ Includes tags encoded in file names when
           (puthash tag t tags))))
     (sort (hash-table-keys tags) #'string<)))
 
+(defun dired-image-thumbnail--tag-filter-candidates ()
+  "Return completion candidates for the interactive tag filter.
+Includes the gallery's tags, their negated forms (\"!TAG\"), and
+the special \"!*\" criterion for untagged images."
+  (let ((known (dired-image-thumbnail--known-tags)))
+    (append known
+            (mapcar (lambda (tag) (concat "!" tag)) known)
+            '("!*"))))
+
+(defun dired-image-thumbnail--normalize-tag-criteria (tags)
+  "Return normalized tag-filter criteria from TAGS, or nil.
+Trims each entry, drops empty ones, turns a lone \"!\" into \"!*\"
+and removes duplicates.  Signals `user-error' when the same tag is
+both required and excluded."
+  (let* ((cleaned
+          (delete-dups
+           (seq-filter
+            (lambda (tag) (not (string-empty-p tag)))
+            (mapcar (lambda (tag)
+                      (setq tag (string-trim tag))
+                      (if (string= tag "!") "!*" tag))
+                    tags))))
+         (required (seq-filter (lambda (tag) (not (string-prefix-p "!" tag)))
+                               cleaned))
+         (excluded (seq-filter (lambda (tag) (string-prefix-p "!" tag))
+                               cleaned)))
+    (when (and (member "!*" cleaned) (cdr cleaned))
+      (user-error "!* (untagged) cannot be combined with other tag criteria"))
+    (dolist (tag required)
+      (when (member (concat "!" tag) excluded)
+        (user-error "Cannot both require and exclude tag %s" tag)))
+    cleaned))
+
 (defun dired-image-thumbnail-filter-by-tags (tags)
-  "Filter thumbnails to images carrying all TAGS.
-TAGS is a list of tag strings.  Interactively, read a comma-separated
-list, completing from the tags already present in image-dired's tag
-database.  An empty input clears the tag filter."
+  "Filter thumbnails to images matching the tag criteria TAGS.
+TAGS is a list of tag strings.  A plain tag must be present, a
+\"!TAG\" entry must be absent, and the special \"!*\" matches only
+images that carry no tags at all.  Interactively, read a
+comma-separated list, completing from the tags already present in
+the gallery and from the negated forms.  An empty input clears the
+tag filter."
   (interactive
-   (list (let ((entered (completing-read-multiple
-                         "Tags (comma-separated, all must match): "
-                         (dired-image-thumbnail--known-tags)
-                         nil nil nil 'image-dired-tag-history)))
-           (seq-filter (lambda (tag) (not (string-empty-p tag)))
-                       (mapcar #'string-trim entered)))))
+   (list (dired-image-thumbnail--normalize-tag-criteria
+          (completing-read-multiple
+           "Tags (all must match; !tag excludes, !* untagged): "
+           (dired-image-thumbnail--tag-filter-candidates)
+           nil nil nil 'image-dired-tag-history))))
   (setq dired-image-thumbnail--filter-tags
-        (or (delete-dups
-             (seq-filter (lambda (tag) (not (string-empty-p tag)))
-                         (mapcar #'string-trim tags)))
-            nil))
+        (dired-image-thumbnail--normalize-tag-criteria tags))
   (dired-image-thumbnail--apply-filter)
   (message "Tag filter: %s"
            (if dired-image-thumbnail--filter-tags
                (string-join dired-image-thumbnail--filter-tags ", ")
              "none")))
+
+(defun dired-image-thumbnail-filter-untagged ()
+  "Show only images that carry no tags.
+This is the same as a tag filter containing \"!*\"."
+  (interactive)
+  (setq dired-image-thumbnail--filter-tags '("!*"))
+  (dired-image-thumbnail--apply-filter)
+  (message "Showing images with no tags"))
 
 (defun dired-image-thumbnail--parse-size (str)
   "Parse human-readable size STR to bytes."
@@ -2414,19 +2474,20 @@ database.  An empty input clears the tag filter."
   "Clear active filters, or open the filter menu when none are active.
 With a filter active, the filter key clears all filters at once so
 the full set is visible again; press it again to choose a new filter
-\(by name, tags or size).  This makes a double press of the filter key
-a quick way to get back to everything."
+\(by name, tags, untagged images or size).  This makes a double press
+of the filter key a quick way to get back to everything."
   (interactive)
   (if (dired-image-thumbnail--filters-active-p)
       (progn
         (dired-image-thumbnail-filter-clear)
         (message "Filters cleared (press the filter key again to filter)"))
     (let ((choice (completing-read "Filter by: "
-                                   '("name" "tags" "size" "clear")
+                                   '("name" "tags" "untagged" "size" "clear")
                                    nil t)))
       (pcase choice
         ("name" (call-interactively #'dired-image-thumbnail-filter-by-name))
         ("tags" (call-interactively #'dired-image-thumbnail-filter-by-tags))
+        ("untagged" (dired-image-thumbnail-filter-untagged))
         ("size" (call-interactively #'dired-image-thumbnail-filter-by-size))
         ("clear" (dired-image-thumbnail-filter-clear))))))
 
