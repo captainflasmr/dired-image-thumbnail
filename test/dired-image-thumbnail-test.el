@@ -823,6 +823,99 @@ programs cannot open such paths, so they must be expanded."
         (when (buffer-live-p thumb-buf)
           (kill-buffer thumb-buf))))))
 
+(ert-deftest dit-open-prompts-for-recursive-display ()
+  "Opening a directory with no images offers its image subdirectories."
+  (dit--with-temp-dir root
+    (let* ((sub (expand-file-name "sub" root))
+           (nested (expand-file-name "nested.jpg" sub))
+           (dired-image-thumbnail-minimum-file-size 0)
+           (dired-image-thumbnail-validate-headers nil)
+           (dired-buf (dired-noselect root))
+           (asked 0)
+           (refreshed 0))
+      (make-directory sub)
+      (write-region "x" nil nested nil 'silent)
+      (unwind-protect
+          (progn
+            (with-current-buffer dired-buf
+              (cl-letf (((symbol-function 'y-or-n-p)
+                         (lambda (_prompt) (setq asked (1+ asked)) t))
+                        ((symbol-function 'dired-image-thumbnail-refresh)
+                         (lambda (&optional _target)
+                           (setq refreshed (1+ refreshed))))
+                        ((symbol-function 'dired-image-thumbnail--apply-layout)
+                         (lambda (&optional _thumb _img) nil))
+                        ((symbol-function 'dired-image-thumbnail-setup-display-buffer)
+                         (lambda () nil))
+                        ((symbol-function 'dired-image-thumbnail--display-this)
+                         (lambda () nil)))
+                (dired-image-thumbnail)))
+            (should (= asked 1))
+            (should (= refreshed 1))
+            (with-current-buffer dired-buf
+              (should (= 2 (length dired-subdir-alist)))
+              (should (dired-goto-file nested)))
+            (let ((thumb (dired-image-thumbnail--find-gallery-buffer
+                          dired-buf root)))
+              (should (buffer-live-p thumb))
+              (with-current-buffer thumb
+                (should dired-image-thumbnail--recursive)
+                (should (equal dired-image-thumbnail--all-images (list nested)))
+                (should (equal dired-image-thumbnail--source-dir root)))))
+        (when-let* ((thumb (dired-image-thumbnail--find-gallery-buffer
+                            dired-buf root)))
+          (let ((img (dired-image-thumbnail--associated-display-buffer thumb)))
+            (kill-buffer thumb)
+            (when (buffer-live-p img)
+              (kill-buffer img))))
+        (when (buffer-live-p dired-buf)
+          (kill-buffer dired-buf))))))
+
+(ert-deftest dit-open-recursive-prefix-skips-prompt ()
+  "A prefix argument forces recursive display without prompting."
+  (dit--with-temp-dir root
+    (let* ((sub (expand-file-name "sub" root))
+           (nested (expand-file-name "nested.jpg" sub))
+           (dired-image-thumbnail-minimum-file-size 0)
+           (dired-image-thumbnail-validate-headers nil)
+           (dired-buf (dired-noselect root))
+           (refreshed 0))
+      (make-directory sub)
+      (write-region "x" nil nested nil 'silent)
+      (unwind-protect
+          (progn
+            (with-current-buffer dired-buf
+              (cl-letf (((symbol-function 'y-or-n-p)
+                         (lambda (&rest _) (error "Should not prompt")))
+                        ((symbol-function 'dired-image-thumbnail-refresh)
+                         (lambda (&optional _target)
+                           (setq refreshed (1+ refreshed))))
+                        ((symbol-function 'dired-image-thumbnail--apply-layout)
+                         (lambda (&optional _thumb _img) nil))
+                        ((symbol-function 'dired-image-thumbnail-setup-display-buffer)
+                         (lambda () nil))
+                        ((symbol-function 'dired-image-thumbnail--display-this)
+                         (lambda () nil)))
+                (dired-image-thumbnail t)))
+            (should (= refreshed 1))
+            (with-current-buffer dired-buf
+              (should (= 2 (length dired-subdir-alist)))
+              (should (dired-goto-file nested)))
+            (let ((thumb (dired-image-thumbnail--find-gallery-buffer
+                          dired-buf root)))
+              (should (buffer-live-p thumb))
+              (with-current-buffer thumb
+                (should dired-image-thumbnail--recursive)
+                (should (equal dired-image-thumbnail--all-images (list nested))))))
+        (when-let* ((thumb (dired-image-thumbnail--find-gallery-buffer
+                            dired-buf root)))
+          (let ((img (dired-image-thumbnail--associated-display-buffer thumb)))
+            (kill-buffer thumb)
+            (when (buffer-live-p img)
+              (kill-buffer img))))
+        (when (buffer-live-p dired-buf)
+          (kill-buffer dired-buf))))))
+
 ;;; Thumbnail generation flow
 
 (ert-deftest dit-queue-missing-once ()
