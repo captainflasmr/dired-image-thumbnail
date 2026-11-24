@@ -721,6 +721,108 @@ them (including `mode-line-inactive' in unselected windows)."
         (when (buffer-live-p dired-buf)
           (kill-buffer dired-buf))))))
 
+(ert-deftest dit-find-images-expands-abbreviated-paths ()
+  "Image scans return absolute names even from tilde-abbreviated paths.
+Dired abbreviates `default-directory', and
+`directory-files-recursively' preserves the tilde.  External thumbnail
+programs cannot open such paths, so they must be expanded."
+  (let ((dir "~/some-dir/"))
+    (cl-letf (((symbol-function 'directory-files-recursively)
+               (lambda (&rest _) (list "~/some-dir/a.jpg")))
+              ((symbol-function 'directory-files)
+               (lambda (&rest _) (list "~/some-dir/b.jpg")))
+              ((symbol-function 'dired-image-thumbnail--image-p)
+               (lambda (_file) t)))
+      (should (equal (dired-image-thumbnail--find-images dir t)
+                     (list (expand-file-name "~/some-dir/a.jpg"))))
+      (should (equal (dired-image-thumbnail--find-images dir)
+                     (list (expand-file-name "~/some-dir/b.jpg")))))))
+
+(ert-deftest dit-insert-subdirs-refreshes-gallery ()
+  "Inserting subdirectories refreshes the gallery recursively."
+  (dit--with-temp-dir root
+    (let* ((sub (expand-file-name "sub" root))
+           (top (expand-file-name "top.jpg" root))
+           (nested (expand-file-name "nested.jpg" sub))
+           (dired-image-thumbnail-minimum-file-size 0)
+           (dired-image-thumbnail-validate-headers nil)
+           (dired-buf (dired-noselect root))
+           (thumb-buf (get-buffer-create "*dit-test-subdir-thumbs*"))
+           (refresh-count 0))
+      (make-directory sub)
+      (write-region "x" nil top nil 'silent)
+      (write-region "y" nil nested nil 'silent)
+      (unwind-protect
+          (progn
+            (with-current-buffer thumb-buf
+              (image-dired-thumbnail-mode)
+              (setq dired-image-thumbnail--dired-buffer dired-buf
+                    dired-image-thumbnail--source-dir root
+                    dired-image-thumbnail--recursive nil
+                    dired-image-thumbnail--all-images (list top)
+                    dired-image-thumbnail--current-images (list top)))
+            (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
+                       (lambda (&optional _target)
+                         (setq refresh-count (1+ refresh-count)))))
+              (with-current-buffer thumb-buf
+                (dired-image-thumbnail-insert-subdir-recursive)))
+            ;; The gallery must be re-scanned and refreshed, not just
+            ;; the Dired buffer changed behind the scenes.
+            (should (= refresh-count 1))
+            (with-current-buffer thumb-buf
+              (should dired-image-thumbnail--recursive)
+              (should (equal (sort (copy-sequence
+                                    dired-image-thumbnail--all-images)
+                                   #'string<)
+                             (sort (list top nested) #'string<))))
+            (with-current-buffer dired-buf
+              (should (= 2 (length dired-subdir-alist)))))
+        (when (buffer-live-p dired-buf)
+          (kill-buffer dired-buf))
+        (when (buffer-live-p thumb-buf)
+          (kill-buffer thumb-buf))))))
+
+(ert-deftest dit-kill-all-subdirs-refreshes-gallery ()
+  "Killing inserted subdirectories returns the gallery to top level."
+  (dit--with-temp-dir root
+    (let* ((sub (expand-file-name "sub" root))
+           (top (expand-file-name "top.jpg" root))
+           (nested (expand-file-name "nested.jpg" sub))
+           (dired-image-thumbnail-minimum-file-size 0)
+           (dired-image-thumbnail-validate-headers nil)
+           (dired-buf (dired-noselect root))
+           (thumb-buf (get-buffer-create "*dit-test-kill-thumbs*"))
+           (refresh-count 0))
+      (make-directory sub)
+      (write-region "x" nil top nil 'silent)
+      (write-region "y" nil nested nil 'silent)
+      (unwind-protect
+          (progn
+            (with-current-buffer dired-buf
+              (dired-image-thumbnail--insert-subdirs (list sub)))
+            (with-current-buffer thumb-buf
+              (image-dired-thumbnail-mode)
+              (setq dired-image-thumbnail--dired-buffer dired-buf
+                    dired-image-thumbnail--source-dir root
+                    dired-image-thumbnail--recursive t
+                    dired-image-thumbnail--all-images (list top nested)
+                    dired-image-thumbnail--current-images (list top nested)))
+            (cl-letf (((symbol-function 'dired-image-thumbnail-refresh)
+                       (lambda (&optional _target)
+                         (setq refresh-count (1+ refresh-count)))))
+              (with-current-buffer thumb-buf
+                (dired-image-thumbnail-kill-all-subdirs)))
+            (should (= refresh-count 1))
+            (with-current-buffer dired-buf
+              (should (= 1 (length dired-subdir-alist))))
+            (with-current-buffer thumb-buf
+              (should-not dired-image-thumbnail--recursive)
+              (should (equal dired-image-thumbnail--all-images (list top)))))
+        (when (buffer-live-p dired-buf)
+          (kill-buffer dired-buf))
+        (when (buffer-live-p thumb-buf)
+          (kill-buffer thumb-buf))))))
+
 ;;; Thumbnail generation flow
 
 (ert-deftest dit-queue-missing-once ()

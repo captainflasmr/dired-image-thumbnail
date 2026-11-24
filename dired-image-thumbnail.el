@@ -1036,17 +1036,22 @@ Checks extension, minimum file size, and optionally magic bytes."
            (dired-image-thumbnail--valid-header-p file))))
 
 (defun dired-image-thumbnail--find-images (directory &optional recursive)
-  "Find all image files in DIRECTORY.
-If RECURSIVE is non-nil, search subdirectories as well."
-  (if recursive
-      (let ((images nil)
-            (regexp (concat "\\." (regexp-opt dired-image-thumbnail-image-extensions) "\\'")))
-        (dolist (file (directory-files-recursively directory regexp nil))
-          (when (dired-image-thumbnail--image-p file)
-            (push file images)))
-        (nreverse images))
-    (seq-filter #'dired-image-thumbnail--image-p
-                (directory-files directory t nil t))))
+  "Find all image files in DIRECTORY, returning expanded file names.
+If RECURSIVE is non-nil, search subdirectories as well.  Expanding the
+names matters because Dired abbreviates its `default-directory' to
+\"~/...\" and `directory-files-recursively' preserves that form; the
+external thumbnail program cannot open a literal tilde path."
+  (let ((directory (expand-file-name directory)))
+    (if recursive
+        (let ((images nil)
+              (regexp (concat "\\." (regexp-opt dired-image-thumbnail-image-extensions) "\\'")))
+          (dolist (file (directory-files-recursively directory regexp nil))
+            (when (dired-image-thumbnail--image-p file)
+              (push (expand-file-name file) images)))
+          (nreverse images))
+      (mapcar #'expand-file-name
+              (seq-filter #'dired-image-thumbnail--image-p
+                          (directory-files directory t nil t))))))
 
 (defun dired-image-thumbnail--get-dired-marked-set ()
   "Return a hash set of all marked files in the associated dired buffer.
@@ -1586,7 +1591,8 @@ and by `dired-image-thumbnail--display-thumbs-advice' after
         (setq dired-image-thumbnail--resize-pending nil)
         (clrhash dired-image-thumbnail--thumb-queued)
         (setq dired-image-thumbnail--dired-buffer dired-buf)
-        (setq dired-image-thumbnail--source-dir (or source-dir default-directory))
+        (setq dired-image-thumbnail--source-dir
+              (expand-file-name (or source-dir default-directory)))
         (setq dired-image-thumbnail--sort-by dired-image-thumbnail-sort-by)
         (setq dired-image-thumbnail--sort-order dired-image-thumbnail-sort-order)
         ;; Restore any quality, sort, filter and size choices
@@ -3022,7 +3028,10 @@ enhanced features like sorting and filtering."
   (unless (derived-mode-p 'dired-mode)
     (user-error "Not in a dired buffer"))
   (let* ((dired-buf (current-buffer))
-         (source-dir default-directory)
+         ;; Dired abbreviates its `default-directory' (e.g. "~/photos/");
+         ;; keep an expanded copy so paths handed to external commands
+         ;; and used for Dired lookups are always absolute.
+         (source-dir (expand-file-name default-directory))
          ;; More than one entry in `dired-subdir-alist' means subdirectories
          ;; have been inserted, so images may live below `source-dir'.
          (recursive (> (length dired-subdir-alist) 1))
@@ -3110,26 +3119,71 @@ user-error when neither is available."
          dired-image-thumbnail--dired-buffer)
         (t (user-error "Not in a dired buffer"))))
 
+(defun dired-image-thumbnail--subdir-gallery-buffer ()
+  "Return the thumbnail gallery buffer to refresh after a subdir change.
+This is the current buffer when it is a thumbnail buffer, otherwise
+the gallery associated with the current dired buffer.  Returns nil
+when there is no such gallery."
+  (cond
+   ((derived-mode-p 'image-dired-thumbnail-mode)
+    (current-buffer))
+   ((derived-mode-p 'dired-mode)
+    (dired-image-thumbnail--find-gallery-buffer
+     (current-buffer) default-directory))
+   (t nil)))
+
+(defun dired-image-thumbnail--refresh-gallery-after-subdir-change
+    (dired-buf thumb-buf)
+  "Refresh THUMB-BUF after subdirectories change in DIRED-BUF.
+Set the gallery's recursive scan state from whether DIRED-BUF has
+inserted subdirectories, re-scan the source directory, and refresh
+the thumbnails so images in newly visible directories appear (and
+images from removed directories disappear).  Do nothing unless both
+buffers are live."
+  (when (and (buffer-live-p dired-buf)
+             (buffer-live-p thumb-buf)
+             (with-current-buffer thumb-buf
+               (derived-mode-p 'image-dired-thumbnail-mode)))
+    (with-current-buffer thumb-buf
+      (setq dired-image-thumbnail--recursive
+            (with-current-buffer dired-buf
+              (> (length dired-subdir-alist) 1)))
+      (let ((current-file (ignore-errors (image-dired-original-file-name))))
+        (dired-image-thumbnail--re-scan-internal)
+        (if dired-image-thumbnail--all-images
+            (dired-image-thumbnail-refresh current-file)
+          ;; `dired-image-thumbnail-refresh' leaves an empty gallery
+          ;; untouched, so clear thumbnails from the removed dirs here.
+          (let ((inhibit-read-only t))
+            (erase-buffer))
+          (setq dired-image-thumbnail--current-images nil)
+          (setq dired-image-thumbnail--marked-count nil)
+          (dired-image-thumbnail--rebuild-image-index)
+          (image-dired--update-header-line))))))
+
 ;;;###autoload
 (defun dired-image-thumbnail-insert-subdir-recursive (&optional max-depth)
   "Insert all subdirectories recursively into the current dired buffer.
 Optional MAX-DEPTH limits recursion depth (nil means unlimited).
 This makes images in subdirectories visible to `dired-image-thumbnail'.
-When run from a thumbnail buffer, the associated dired buffer is used.
+When run from a thumbnail buffer, the associated dired buffer is used
+and the gallery is refreshed afterwards so the images appear.
 
 Note: This can be slow for directories with many subdirectories.
 Consider using `dired-image-thumbnail-insert-image-subdirs' instead,
 which only inserts subdirectories that contain images."
   (interactive "P")
-  (with-current-buffer (dired-image-thumbnail--subdir-target-buffer)
-    (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
-           (subdirs (dired-image-thumbnail--find-subdirs default-directory depth)))
-      (if subdirs
-          (progn
-            (message "Inserting %d subdirectories..." (length subdirs))
-            (message "Inserted %d subdirectories"
-                     (dired-image-thumbnail--insert-subdirs subdirs)))
-        (message "No subdirectories found")))))
+  (let ((thumb-buf (dired-image-thumbnail--subdir-gallery-buffer))
+        (dired-buf (dired-image-thumbnail--subdir-target-buffer)))
+    (with-current-buffer dired-buf
+      (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
+             (subdirs (dired-image-thumbnail--find-subdirs default-directory depth)))
+        (if subdirs
+            (let ((inserted (dired-image-thumbnail--insert-subdirs subdirs)))
+              (dired-image-thumbnail--refresh-gallery-after-subdir-change
+               dired-buf thumb-buf)
+              (message "Inserted %d subdirectories" inserted))
+          (message "No subdirectories found"))))))
 
 ;;;###autoload
 (defun dired-image-thumbnail-insert-image-subdirs (&optional max-depth)
@@ -3137,35 +3191,62 @@ which only inserts subdirectories that contain images."
 Optional MAX-DEPTH limits recursion depth (nil means unlimited).
 This is more efficient than `dired-image-thumbnail-insert-subdir-recursive'
 for directories with many non-image subdirectories.
-When run from a thumbnail buffer, the associated dired buffer is used."
+When run from a thumbnail buffer, the associated dired buffer is used
+and the gallery is refreshed afterwards so the images appear."
   (interactive "P")
-  (with-current-buffer (dired-image-thumbnail--subdir-target-buffer)
-    (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
-           (subdirs (dired-image-thumbnail--find-image-subdirs default-directory depth)))
-      (if subdirs
-          (progn
-            (message "Inserting %d subdirectories with images..." (length subdirs))
-            (message "Inserted %d subdirectories"
-                     (dired-image-thumbnail--insert-subdirs subdirs)))
-        (message "No subdirectories with images found")))))
+  (let ((thumb-buf (dired-image-thumbnail--subdir-gallery-buffer))
+        (dired-buf (dired-image-thumbnail--subdir-target-buffer)))
+    (with-current-buffer dired-buf
+      (let* ((depth (if max-depth (prefix-numeric-value max-depth) nil))
+             (subdirs (dired-image-thumbnail--find-image-subdirs default-directory depth)))
+        (if subdirs
+            (let ((inserted (dired-image-thumbnail--insert-subdirs subdirs)))
+              (dired-image-thumbnail--refresh-gallery-after-subdir-change
+               dired-buf thumb-buf)
+              (message "Inserted %d subdirectories" inserted))
+          (message "No subdirectories with images found"))))))
 
 ;;;###autoload
 (defun dired-image-thumbnail-kill-all-subdirs ()
   "Remove all inserted subdirectories from the current dired buffer.
 This returns the view to just the top-level directory.
-When run from a thumbnail buffer, the associated dired buffer is used."
+When run from a thumbnail buffer, the associated dired buffer is used
+and the gallery is refreshed afterwards so images from the removed
+subdirectories disappear."
   (interactive)
-  (with-current-buffer (dired-image-thumbnail--subdir-target-buffer)
-    (let ((count 0))
-      (save-excursion
-        (goto-char (point-max))
-        ;; Work backwards to avoid position issues
-        (while (dired-get-subdir)
-          (dired-kill-subdir)
-          (setq count (1+ count))))
-      (if (> count 0)
-          (message "Removed %d subdirectories" count)
-        (message "No subdirectories to remove")))))
+  (let ((thumb-buf (dired-image-thumbnail--subdir-gallery-buffer))
+        (dired-buf (dired-image-thumbnail--subdir-target-buffer)))
+    (with-current-buffer dired-buf
+      (let* ((count 0)
+             (top (file-name-as-directory (expand-file-name default-directory)))
+             (entries
+              (seq-filter
+               (lambda (entry)
+                 (not (equal (file-name-as-directory
+                              (expand-file-name (car entry)))
+                             top)))
+               (copy-sequence dired-subdir-alist))))
+        (save-excursion
+          ;; Kill from the last header backwards, so nested
+          ;; subdirectories are removed before their parents.
+          (dolist (entry (sort entries
+                               (lambda (a b)
+                                 (> (marker-position (cdr a))
+                                    (marker-position (cdr b))))))
+            (let ((dir (car entry)))
+              (when (and (dired-goto-subdir dir)
+                         (dired-get-subdir)
+                         (equal (file-name-as-directory
+                                 (expand-file-name (dired-get-subdir)))
+                                (file-name-as-directory (expand-file-name dir))))
+                (dired-kill-subdir)
+                (setq count (1+ count))))))
+        (if (> count 0)
+            (progn
+              (dired-image-thumbnail--refresh-gallery-after-subdir-change
+               dired-buf thumb-buf)
+              (message "Removed %d subdirectories" count))
+          (message "No subdirectories to remove"))))))
 
 ;;; Keymaps
 

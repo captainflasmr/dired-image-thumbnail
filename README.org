@@ -103,6 +103,12 @@ Use Dired's built-in =i= (=dired-maybe-insert-subdir=) on any subdirectory to ma
 - =C-t z= (=dired-image-thumbnail-insert-subdir-recursive=) - Insert all subdirectories
 - =C-t k= (=dired-image-thumbnail-kill-all-subdirs=) - Remove all inserted subdirectories
 
+The helper commands also work from the thumbnail buffer (=z= for recursive
+insertion).  When a gallery is already open, inserting or removing
+subdirectories re-scans the source directory and refreshes the gallery
+immediately, so images below the current directory appear (and disappear
+again when the subdirectories are removed) without reopening it.
+
 ** From Standard image-dired
 
 You can also use the standard =image-dired= commands (=C-t d=, =C-t a=, etc.) - =dired-image-thumbnail= automatically enhances the thumbnail buffer with new keybindings.
@@ -203,9 +209,9 @@ This makes culling large photo collections much faster than the standard workflo
 |---------+----------------------------------------------+--------------------------------------|
 | =C-t d= | ~image-dired~ + ~dired-image-thumbnail-refresh~ | Launch standard image-dired enhanced |
 | =C-t m= | ~dired-image-thumbnail~                        | Launch enhanced thumbnail viewer     |
-| =C-t s= | ~dired-image-thumbnail-insert-image-subdirs~   | Insert subdirs with images           |
-| =C-t z= | ~dired-image-thumbnail-insert-subdir-recursive~ | Insert all subdirs recursively       |
-| =C-t k= | ~dired-image-thumbnail-kill-all-subdirs~       | Remove all inserted subdirs          |
+| =C-t s= | ~dired-image-thumbnail-insert-image-subdirs~   | Insert image subdirs, refresh gallery |
+| =C-t z= | ~dired-image-thumbnail-insert-subdir-recursive~ | Insert all subdirs, refresh gallery  |
+| =C-t k= | ~dired-image-thumbnail-kill-all-subdirs~       | Remove inserted subdirs, refresh      |
 
 ** In Thumbnail Buffer
 
@@ -518,11 +524,10 @@ Add or modify recognized image file extensions:
 ** Working with Subdirectories
 
 1. Open parent directory in Dired
-2. Use =C-t s= to insert only subdirectories containing images (fast)
-3. Or use =C-t z= to insert all subdirectories (may be slow with many dirs)
-4. View thumbnails with =C-t m=
-5. Images from all visible subdirectories will be shown
-6. Use =C-t k= to remove all subdirectories and return to top-level view
+2. View thumbnails with =C-t m=
+3. In the thumbnail buffer press =z= to show every subdirectory recursively; alternatively use =C-t s= from Dired to insert only subdirectories containing images (fast)
+4. The gallery re-scans and refreshes immediately, showing images from the inserted subdirectories
+5. Use =C-t k= to remove all subdirectories; an open gallery refreshes back to the top-level images
 
 ** Organizing by Date
 
@@ -570,7 +575,7 @@ When working with large directory trees:
 - Use =dired-image-thumbnail-insert-image-subdirs= (=C-t s=) instead of =dired-image-thumbnail-insert-subdir-recursive= (=C-t z=)
 - The "smart" insertion only processes subdirectories containing images, which is much faster
 - For very large collections, manually insert specific subdirectories with =i= as needed
-- From the thumbnail buffer, =z= (or the transient menu's Other group) inserts subdirectories recursively into the associated dired buffer; the =i= / =I= / =K= variants remain available from dired via =C-t= bindings
+- From the thumbnail buffer, =z= (or the transient menu's Other group) inserts subdirectories recursively into the associated dired buffer and refreshes the gallery so their images appear immediately
 
 ** Thumbnail Generation
 
@@ -588,6 +593,7 @@ First-time thumbnail generation can be slow for large images. Thumbnails are cac
 
 - Ensure subdirectories are actually inserted in the Dired buffer (use =i= or helper commands)
 - Check that =dired-image-thumbnail-insert-image-subdirs= found subdirectories (watch for message)
+- If a gallery was opened before the subdirectories were inserted, the helper commands refresh it automatically; from Dired, =C-t z= or =C-t s= updates the open gallery, and =g= in the thumbnail buffer re-scans manually
 - Verify files in subdirectories have recognized image extensions
 
 ** Slow performance with many directories
